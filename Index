@@ -90,7 +90,7 @@
         const { useState, useEffect, useMemo, useRef } = React;
 
         // ⚠️ สำคัญมาก: ใส่ URL ของ ZoneCheck Backend (REST API) ที่ได้จาก Google Apps Script
-        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby3CKwBAOiz6dJQWI-t8nabgSv-46yTcAI8QZHR2KFWtrGJSHuKHdnm7-sCDsfL26yu/exec"; // URL ของคุณ
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxp7RJqJIajrEx8J9IVnJC75saIt_FeiQDUxNgxnP7vrYOy7xcYy77RqXljRUXv_xHm/exec"; // URL ของคุณ
 
         const HARDCODED_LOGO = "https://i.postimg.cc/wBN5btrp/rong-re-yn-kham-wng.png";
         const HARDCODED_NAME = "STUDENT COUNCIL • KHAMMUANG SCHOOL";
