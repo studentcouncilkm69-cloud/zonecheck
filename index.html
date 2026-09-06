@@ -29,7 +29,7 @@
     <style>
         html, body { 
             font-family: 'Noto Sans Thai', sans-serif !important; 
-            background-color: #E5E7EB; /* สีพื้นหลังโทนเทาแบบ Student Voice */
+            background-color: #F3F4F6; /* สีพื้นหลังโทนเทาสว่าง */
             overscroll-behavior: none; 
             -webkit-overflow-scrolling: touch;
             -webkit-tap-highlight-color: transparent;
@@ -59,7 +59,7 @@
         .checkbox-custom:checked + div { background-color: #C8102E; border-color: #C8102E; }
         .checkbox-custom:checked + div svg { display: block; }
 
-        /* PDF Export Styles - Reverted to Original Purple Theme 100% */
+        /* PDF Export Styles - คงสีม่วงต้นฉบับ 100% (ห้ามแก้ไข) */
         .pdf-export-wrapper {
             font-family: 'Sarabun', sans-serif !important;
             color: #333;
@@ -90,7 +90,7 @@
         const { useState, useEffect, useMemo, useRef } = React;
 
         // ⚠️ สำคัญมาก: ใส่ URL ของ ZoneCheck Backend (REST API) ที่ได้จาก Google Apps Script
-        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxp7RJqJIajrEx8J9IVnJC75saIt_FeiQDUxNgxnP7vrYOy7xcYy77RqXljRUXv_xHm/exec"; // URL ของคุณ
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxp7RJqJIajrEx8J9IVnJC75saIt_FeiQDUxNgxnP7vrYOy7xcYy77RqXljRUXv_xHm/exec"; 
 
         const HARDCODED_LOGO = "https://i.postimg.cc/wBN5btrp/rong-re-yn-kham-wng.png";
         const HARDCODED_NAME = "STUDENT COUNCIL • KHAMMUANG SCHOOL";
@@ -344,6 +344,7 @@
                 setShowMainBannerPopup(false);
             };
 
+            // กดโลโก้ 5 ครั้ง เพื่อเปิดหน้า Login
             const handleLogoClick = () => {
                 if (appMode !== 'guest') return; 
                 setLogoTaps(prev => {
@@ -357,7 +358,7 @@
                     return next;
                 });
                 if (tapTimeoutRef.current) clearTimeout(tapTimeoutRef.current);
-                tapTimeoutRef.current = setTimeout(() => { setLogoTaps(0); }, 3000);
+                tapTimeoutRef.current = setTimeout(() => { setLogoTaps(0); }, 3000); // หน่วง 3 วิ ให้กดติดง่ายขึ้น
             };
 
             const handleLoginSubmit = (e) => {
@@ -866,19 +867,6 @@
                 return { roomTotal, roomDone, roomPct, zoneTotal, zoneDone, zonePct, dateStr: targetDateStr };
             }, [inspections, rooms, filterDate]);
 
-            const dailyStats = useMemo(() => {
-                const todayStr = new Date().toISOString().split('T')[0];
-                const validInspections = Array.isArray(inspections) ? inspections : [];
-                const todayInsps = validInspections.filter(i => i.date && String(i.date).startsWith(todayStr));
-                
-                let roomExcellent = 0, roomNoDuty = 0; let zoneExcellent = 0, zoneNoDuty = 0;
-                todayInsps.forEach(i => {
-                    if (i.type === 'room') { if (i.totalScore === 10) roomExcellent++; if (i.scores?.status === 'ไม่ปฏิบัติหน้าที่' || i.totalScore === -5) roomNoDuty++; }
-                    if (i.type === 'zone') { if (i.totalScore === 10) zoneExcellent++; if (i.scores?.status === 'ไม่ปฏิบัติหน้าที่' || i.totalScore === -5) zoneNoDuty++; }
-                });
-                return { roomExcellent, roomNoDuty, zoneExcellent, zoneNoDuty, totalChecked: todayInsps.length };
-            }, [inspections]);
-
             const groupedRoomsForInspect = useMemo(() => {
                 const searchLower = (inspectSearchRoom || '').toLowerCase(); const groups = [];
                 const validRooms = Array.isArray(rooms) ? rooms : [];
@@ -1349,6 +1337,7 @@
             const renderExportHeader = () => (
                 <>
                     <div style={{display: 'flex', alignItems: 'center', marginBottom: '12px'}}>
+                        {/* โลโก้โรงเรียน (แบบเดิม) */}
                         <img src={settings?.school_logo_url || HARDCODED_LOGO} style={{width: '60px', height: '60px', objectFit: 'contain', marginRight: '15px'}} crossOrigin="anonymous"/>
                         <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                             <h1 style={{color: '#6d28d9', fontSize: '22px', fontWeight: 'bold', margin: '0 0 4px 0', lineHeight: '1'}}>รายงานการตรวจความเรียบร้อย</h1>
@@ -1441,10 +1430,10 @@
 
             if (showSplash) {
                 return (
-                    <div className="fixed inset-0 z-[999999] bg-[#E5E7EB] flex flex-col items-center justify-center">
+                    <div className="fixed inset-0 z-[999999] bg-[#F3F4F6] flex flex-col items-center justify-center">
                         <div className="relative w-28 h-28 flex items-center justify-center">
                             <div className="absolute inset-0 border-[4px] border-t-[#C8102E] border-r-gray-400 border-b-gray-200 border-l-gray-200 rounded-full animate-spin-slow"></div>
-                            <div className="absolute inset-2 bg-white rounded-full shadow-sm overflow-hidden flex items-center justify-center">
+                            <div className="absolute inset-2 bg-white rounded-full shadow-sm overflow-hidden flex items-center justify-center border">
                                 <img src={settings?.app_logo_url || HARDCODED_LOGO} className="w-full h-full object-cover" crossOrigin="anonymous"/>
                             </div>
                         </div>
@@ -1468,6 +1457,34 @@
                                 {settings?.maintenance_msg || '⚠️ ขออภัยในความไม่สะดวก\nระบบกำลังอยู่ระหว่างการปิดปรับปรุงชั่วคราว'}
                             </p>
                         </div>
+
+                        {/* Login Modal ภายใต้โหมดปิดปรับปรุง */}
+                        {isLoginModalOpen && (
+                            <div className="fixed inset-0 z-[9999] bg-white/60 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in zoom-in duration-200">
+                                <div className="bg-white w-full max-w-sm rounded-[2rem] p-8 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.15)] border border-gray-100 relative">
+                                    <button onClick={() => setIsLoginModalOpen(false)} className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-gray-50 text-gray-400 hover:bg-gray-100 transition-colors"><i className="ph ph-x"></i></button>
+                                    <div className="w-20 h-20 bg-white rounded-full mx-auto flex items-center justify-center mb-4 shadow-lg border border-gray-200 overflow-hidden">
+                                        <img src={settings?.app_logo_url || HARDCODED_LOGO} alt="Login Logo" className="w-full h-full object-cover" crossOrigin="anonymous"/>
+                                    </div>
+                                    <h2 className="text-2xl font-black text-center text-gray-800 mb-1">ระบบเจ้าหน้าที่</h2>
+                                    <form onSubmit={handleLoginSubmit}>
+                                        <div className="space-y-4 mt-6">
+                                            <input type="text" placeholder="ชื่อผู้ใช้งาน..." value={loginInspector} onChange={(e) => { setLoginInspector(e.target.value); setSelectedLoginName(e.target.value); setShowLoginSuggestions(true); }} className="w-full px-4 py-3 rounded-2xl border bg-gray-50 focus:outline-none focus:border-[#C8102E]" />
+                                            {showLoginSuggestions && loginInspector && (
+                                                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-100 rounded-2xl shadow-xl max-h-40 overflow-y-auto">
+                                                    {filteredLoginInspectors.length > 0 ? filteredLoginInspectors.map(u => (
+                                                        <div key={u.id} onMouseDown={(e) => { e.preventDefault(); setLoginInspector(u.name); setSelectedLoginName(u.name); setShowLoginSuggestions(false); }} className="px-4 py-3 hover:bg-red-50 cursor-pointer text-sm font-medium">{u.name}</div>
+                                                    )) : <div className="px-4 py-3 text-sm text-gray-400 text-center">ไม่พบรายชื่อ</div>}
+                                                </div>
+                                            )}
+                                            <input type="password" placeholder="••••••••" value={inputPasscode} onChange={e => setInputPasscode(e.target.value)} className="w-full px-4 py-3 rounded-2xl border text-center tracking-widest text-lg bg-gray-50 focus:outline-none focus:border-[#C8102E]" required />
+                                        </div>
+                                        {loginError && <p className="text-red-500 text-xs font-bold text-center mt-4">{loginError}</p>}
+                                        <button type="submit" className="w-full mt-6 bg-[#C8102E] text-white py-4 rounded-2xl font-bold shadow-md transition-all">เข้าสู่ระบบ</button>
+                                    </form>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 );
             }
@@ -1499,21 +1516,28 @@
                             <button onClick={()=>setCurrentRoute('dashboard')} className={`px-4 py-2 rounded-xl text-[13px] font-medium nav-item flex items-center gap-2 ${currentRoute === 'dashboard' ? 'bg-[#FFF5F6] text-[#C8102E] font-bold' : 'text-gray-600 hover:bg-gray-50'}`}><i className={`ph ${currentRoute === 'dashboard' ? 'ph-house ph-fill' : 'ph-house'} text-lg`}></i> หน้าแรก</button>
                             <button onClick={()=>setCurrentRoute('leaderboard')} className={`px-4 py-2 rounded-xl text-[13px] font-medium nav-item flex items-center gap-2 ${currentRoute === 'leaderboard' ? 'bg-[#FFF5F6] text-[#C8102E] font-bold' : 'text-gray-600 hover:bg-gray-50'}`}><i className={`ph ${currentRoute === 'leaderboard' ? 'ph-trophy ph-fill' : 'ph-trophy'} text-lg`}></i> อันดับ</button>
                             <button onClick={()=>setCurrentRoute('history')} className={`px-4 py-2 rounded-xl text-[13px] font-medium nav-item flex items-center gap-2 ${currentRoute === 'history' ? 'bg-[#FFF5F6] text-[#C8102E] font-bold' : 'text-gray-600 hover:bg-gray-50'}`}><i className={`ph ${currentRoute === 'history' ? 'ph-clock-counter-clockwise ph-fill' : 'ph-clock-counter-clockwise'} text-lg`}></i> ประวัติ</button>
-                            {(appMode === 'admin' || appMode === 'inspector') && (
-                                <button onClick={()=>setCurrentRoute('inspect')} className={`px-4 py-2 rounded-xl text-[13px] font-medium nav-item flex items-center gap-2 ${currentRoute === 'inspect' ? 'bg-[#FFF5F6] text-[#C8102E] font-bold' : 'text-gray-600 hover:bg-gray-50'}`}><i className={`ph ${currentRoute === 'inspect' ? 'ph-clipboard-text ph-fill' : 'ph-clipboard-text'} text-lg`}></i> ประเมินผล</button>
-                            )}
-                            {appMode === 'admin' && (
-                                <button onClick={()=>setCurrentRoute('settings')} className={`px-4 py-2 rounded-xl text-[13px] font-medium nav-item flex items-center gap-2 ${currentRoute === 'settings' ? 'bg-[#FFF5F6] text-[#C8102E] font-bold' : 'text-gray-600 hover:bg-gray-50'}`}><i className={`ph ${currentRoute === 'settings' ? 'ph-gear ph-fill' : 'ph-gear'} text-lg`}></i> ตั้งค่า</button>
-                            )}
+                            
+                            {/* สำหรับ Admin/Inspector เอาไว้ด้านบนฝั่งขวาหมด */}
                         </nav>
 
                         <div className="flex items-center gap-3">
-                            <button onClick={()=>setShowAnnouncement(true)} className="w-9 h-9 rounded-full bg-red-50 text-[#C8102E] hover:bg-red-100 flex items-center justify-center transition-colors shadow-sm" title="ประกาศสภาฯ"><i className="ph ph-megaphone text-lg"></i></button>
-                            <button onClick={handleSync} className="w-9 h-9 rounded-full bg-gray-50 border border-gray-200 text-gray-500 hover:bg-gray-100 flex items-center justify-center transition-colors shadow-sm" title="ซิงค์ข้อมูล"><i className={`ph ph-arrows-clockwise text-lg ${isSyncing ? "animate-spin text-[#C8102E]" : ""}`}></i></button>
-                            {appMode !== 'guest' ? (
-                                <button onClick={() => showConfirm('ต้องการออกจากระบบใช่หรือไม่?', () => { setAppMode('guest'); setInputPasscode(''); setCurrentUser(null); setCurrentRoute('dashboard'); })} className="w-9 h-9 rounded-full bg-gray-900 text-white hover:bg-black flex items-center justify-center transition-colors shadow-sm" title="ออกจากระบบ"><i className="ph ph-sign-out text-lg"></i></button>
+                            {appMode === 'guest' ? (
+                                <>
+                                    <button onClick={()=>setShowAnnouncement(true)} className="w-9 h-9 rounded-full bg-red-50 text-[#C8102E] hover:bg-red-100 flex items-center justify-center transition-colors shadow-sm" title="ประกาศสภาฯ"><i className="ph ph-megaphone text-lg"></i></button>
+                                    <button onClick={handleSync} className="w-9 h-9 rounded-full bg-gray-50 border border-gray-200 text-gray-500 hover:bg-gray-100 flex items-center justify-center transition-colors shadow-sm" title="ซิงค์ข้อมูล"><i className={`ph ph-arrows-clockwise text-lg ${isSyncing ? "animate-spin text-[#C8102E]" : ""}`}></i></button>
+                                    <button onClick={()=>setShowInfoModal(true)} className="w-9 h-9 rounded-full bg-gray-50 text-gray-500 border border-gray-200 hover:bg-gray-100 flex items-center justify-center transition-colors shadow-sm" title="ช่วยเหลือ"><i className="ph ph-question text-lg"></i></button>
+                                </>
                             ) : (
-                                <button onClick={()=>setShowInfoModal(true)} className="w-9 h-9 rounded-full bg-gray-50 text-gray-500 border border-gray-200 hover:bg-gray-100 flex items-center justify-center transition-colors shadow-sm" title="ช่วยเหลือ"><i className="ph ph-question text-lg"></i></button>
+                                <>
+                                    {(appMode === 'admin' || appMode === 'inspector') && (
+                                        <button onClick={()=>setShowAnnouncement(true)} className="w-9 h-9 rounded-full bg-red-50 text-[#C8102E] hover:bg-red-100 flex items-center justify-center transition-colors shadow-sm" title="ประกาศสภาฯ"><i className="ph ph-megaphone text-lg"></i></button>
+                                    )}
+                                    {appMode === 'admin' && (
+                                        <button onClick={()=>setCurrentRoute('settings')} className="w-9 h-9 rounded-full bg-gray-50 text-gray-500 border border-gray-200 hover:bg-gray-100 flex items-center justify-center transition-colors shadow-sm" title="ตั้งค่าระบบ"><i className="ph ph-gear text-lg"></i></button>
+                                    )}
+                                    <button onClick={handleSync} className="w-9 h-9 rounded-full bg-gray-50 border border-gray-200 text-gray-500 hover:bg-gray-100 flex items-center justify-center transition-colors shadow-sm" title="ซิงค์ข้อมูล"><i className={`ph ph-arrows-clockwise text-lg ${isSyncing ? "animate-spin text-[#C8102E]" : ""}`}></i></button>
+                                    <button onClick={() => showConfirm('ต้องการออกจากระบบใช่หรือไม่?', () => { setAppMode('guest'); setInputPasscode(''); setCurrentUser(null); setCurrentRoute('dashboard'); })} className="px-4 py-2 rounded-xl text-sm font-bold bg-red-50 text-red-600 hover:bg-red-100 transition-colors flex items-center gap-2"><i className="ph ph-sign-out"></i> ออกจากระบบ</button>
+                                </>
                             )}
                         </div>
                     </header>
@@ -1537,8 +1561,11 @@
                             </div>
                             
                             <div className="flex items-center gap-2 ml-2 flex-shrink-0">
-                                {(appMode === 'admin' || appMode === 'inspector') && (
+                                {appMode !== 'guest' && (
                                     <button onClick={() => setShowAnnouncement(true)} className="text-[#C8102E] hover:text-red-800 transition-colors w-10 h-10 flex items-center justify-center rounded-full bg-red-50 border border-red-100 shadow-sm active:scale-95"><i className="ph ph-megaphone text-xl"></i></button>
+                                )}
+                                {appMode === 'admin' && (
+                                    <button onClick={() => setCurrentRoute('settings')} className="text-gray-500 hover:text-gray-800 transition-colors w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 border border-gray-200 shadow-sm active:scale-95"><i className="ph ph-gear text-xl"></i></button>
                                 )}
                                 <button onClick={handleSync} className="text-gray-400 hover:text-[#C8102E] transition-colors w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 border border-gray-100 shadow-sm active:scale-95"><i className={`ph ph-arrows-clockwise text-xl ${isSyncing ? "animate-spin text-[#C8102E]" : ""}`}></i></button>
                                 {appMode !== 'guest' && (
@@ -1549,7 +1576,7 @@
                     </header>
 
                     {/* การแสดงผลหน้าต่างๆ */}
-                    <main className="flex-1 flex flex-col overflow-y-auto relative pb-[70px] md:pb-0 custom-scrollbar p-4 md:p-8 max-w-5xl mx-auto w-full">
+                    <main className="flex-1 flex flex-col overflow-y-auto relative pb-[90px] md:pb-0 custom-scrollbar p-4 md:p-8 max-w-5xl mx-auto w-full">
                         
                         {/* --- เส้นทาง: หน้าแรก (Dashboard) --- */}
                         {currentRoute === 'dashboard' && (
@@ -1569,50 +1596,28 @@
                                     </div>
                                 )}
 
-                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                                    {/* ความคืบหน้าการตรวจ */}
-                                    <div className="lg:col-span-2 bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 flex flex-col md:flex-row md:items-center gap-6">
-                                        <div className="flex-shrink-0">
-                                            <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2 mb-1"><i className="ph ph-check-square text-[#C8102E] text-lg"></i> ความคืบหน้าการตรวจ</h3>
-                                            <p className="text-[10px] text-gray-400 font-medium">อัปเดตข้อมูลของวันนี้</p>
-                                        </div>
-                                        <div className="flex-1 flex flex-col gap-4 w-full">
-                                            <div>
-                                                <div className="flex justify-between items-end mb-1.5">
-                                                    <span className="text-xs font-bold text-gray-600 flex items-center gap-1.5"><i className="ph ph-buildings text-blue-500"></i> ห้องเรียน</span>
-                                                    <span className="text-sm font-black text-blue-600">{inspectProgress.roomDone} <span className="text-xs text-gray-400 font-medium">/ {inspectProgress.roomTotal}</span></span>
-                                                </div>
-                                                <div className="w-full bg-gray-100 rounded-full h-2">
-                                                    <div className="bg-gradient-to-r from-blue-400 to-blue-600 h-2 rounded-full transition-all duration-1000" style={{width: `${inspectProgress.roomPct}%`}}></div>
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <div className="flex justify-between items-end mb-1.5">
-                                                    <span className="text-xs font-bold text-gray-600 flex items-center gap-1.5"><i className="ph ph-map-pin text-fuchsia-500"></i> เขตพื้นที่</span>
-                                                    <span className="text-sm font-black text-fuchsia-600">{inspectProgress.zoneDone} <span className="text-xs text-gray-400 font-medium">/ {inspectProgress.zoneTotal}</span></span>
-                                                </div>
-                                                <div className="w-full bg-gray-100 rounded-full h-2">
-                                                    <div className="bg-gradient-to-r from-fuchsia-400 to-fuchsia-600 h-2 rounded-full transition-all duration-1000" style={{width: `${inspectProgress.zonePct}%`}}></div>
-                                                </div>
-                                            </div>
-                                        </div>
+                                <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 flex flex-col md:flex-row md:items-center gap-6">
+                                    <div className="flex-shrink-0">
+                                        <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2 mb-1"><i className="ph ph-check-square text-[#C8102E] text-lg"></i> ความคืบหน้าการตรวจ</h3>
+                                        <p className="text-[10px] text-gray-400 font-medium">อัปเดตข้อมูลของวันนี้</p>
                                     </div>
-
-                                    {/* สถิติประจำวัน */}
-                                    <div className="lg:col-span-1 bg-white p-5 rounded-[2rem] shadow-sm border border-gray-100 flex flex-col gap-4">
-                                        <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2"><i className="ph ph-chart-bar text-amber-500 text-lg"></i> สถิติประเมินวันนี้</h3>
-                                        <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
-                                            <p className="text-[11px] font-bold text-gray-500 mb-2 flex items-center gap-1"><i className="ph ph-buildings text-blue-500"></i> หมวดห้องเรียน</p>
-                                            <div className="grid grid-cols-2 gap-2">
-                                                <div className="bg-emerald-50 rounded-lg p-2 border border-emerald-100/50 flex items-center gap-2"><div className="w-8 h-8 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center shrink-0"><i className="ph ph-star text-[12px] ph-fill"></i></div><div className="flex flex-col"><span className="text-[9px] font-bold text-emerald-600/80 leading-tight">ดีเยี่ยม (10)</span><span className="text-sm font-black text-emerald-600 leading-none">{dailyStats.roomExcellent}</span></div></div>
-                                                <div className="bg-red-50 rounded-lg p-2 border border-red-100/50 flex items-center gap-2"><div className="w-8 h-8 bg-red-100 text-red-600 rounded-full flex items-center justify-center shrink-0"><i className="ph ph-warning-circle text-[12px] ph-fill"></i></div><div className="flex flex-col"><span className="text-[9px] font-bold text-red-600/80 leading-tight">ไม่ทำเวร</span><span className="text-sm font-black text-red-600 leading-none">{dailyStats.roomNoDuty}</span></div></div>
+                                    <div className="flex-1 flex flex-col gap-4 w-full">
+                                        <div>
+                                            <div className="flex justify-between items-end mb-1.5">
+                                                <span className="text-xs font-bold text-gray-600 flex items-center gap-1.5"><i className="ph ph-buildings text-blue-500"></i> ห้องเรียน</span>
+                                                <span className="text-sm font-black text-blue-600">{inspectProgress.roomDone} <span className="text-xs text-gray-400 font-medium">/ {inspectProgress.roomTotal}</span></span>
+                                            </div>
+                                            <div className="w-full bg-gray-100 rounded-full h-2">
+                                                <div className="bg-gradient-to-r from-blue-400 to-blue-600 h-2 rounded-full transition-all duration-1000" style={{width: `${inspectProgress.roomPct}%`}}></div>
                                             </div>
                                         </div>
-                                        <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
-                                            <p className="text-[11px] font-bold text-gray-500 mb-2 flex items-center gap-1"><i className="ph ph-map-pin text-fuchsia-500"></i> หมวดเขตพื้นที่</p>
-                                            <div className="grid grid-cols-2 gap-2">
-                                                <div className="bg-emerald-50 rounded-lg p-2 border border-emerald-100/50 flex items-center gap-2"><div className="w-8 h-8 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center shrink-0"><i className="ph ph-star text-[12px] ph-fill"></i></div><div className="flex flex-col"><span className="text-[9px] font-bold text-emerald-600/80 leading-tight">ดีเยี่ยม (10)</span><span className="text-sm font-black text-emerald-600 leading-none">{dailyStats.zoneExcellent}</span></div></div>
-                                                <div className="bg-red-50 rounded-lg p-2 border border-red-100/50 flex items-center gap-2"><div className="w-8 h-8 bg-red-100 text-red-600 rounded-full flex items-center justify-center shrink-0"><i className="ph ph-warning-circle text-[12px] ph-fill"></i></div><div className="flex flex-col"><span className="text-[9px] font-bold text-red-600/80 leading-tight">ไม่ทำเวร</span><span className="text-sm font-black text-red-600 leading-none">{dailyStats.zoneNoDuty}</span></div></div>
+                                        <div>
+                                            <div className="flex justify-between items-end mb-1.5">
+                                                <span className="text-xs font-bold text-gray-600 flex items-center gap-1.5"><i className="ph ph-map-pin text-fuchsia-500"></i> เขตพื้นที่</span>
+                                                <span className="text-sm font-black text-fuchsia-600">{inspectProgress.zoneDone} <span className="text-xs text-gray-400 font-medium">/ {inspectProgress.zoneTotal}</span></span>
+                                            </div>
+                                            <div className="w-full bg-gray-100 rounded-full h-2">
+                                                <div className="bg-gradient-to-r from-fuchsia-400 to-fuchsia-600 h-2 rounded-full transition-all duration-1000" style={{width: `${inspectProgress.zonePct}%`}}></div>
                                             </div>
                                         </div>
                                     </div>
@@ -2168,7 +2173,7 @@
                                         <input type="password" placeholder="••••••••" value={inputPasscode} onChange={e => setInputPasscode(e.target.value)} className="w-full px-4 py-3 rounded-2xl border text-center tracking-widest text-lg bg-gray-50 focus:outline-none focus:border-[#C8102E]" required />
                                     </div>
                                     {loginError && <p className="text-red-500 text-xs font-bold text-center mt-4">{loginError}</p>}
-                                    <button type="submit" className="w-full mt-6 bg-[#C8102E] text-white py-4 rounded-2xl font-bold shadow-md transition-all">เข้าสู่ระบบ</button>
+                                    <button type="submit" className="w-full mt-6 bg-[#C8102E] text-white py-4 rounded-2xl font-bold shadow-md transition-all">ล็อกอิน</button>
                                 </form>
                             </div>
                         </div>
@@ -2364,7 +2369,7 @@
                     {showAnnouncement && canViewBanner(settings?.visibility_announce_banner) && (
                         <div className="fixed inset-0 z-[9990] bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in" onClick={()=>setShowAnnouncement(false)}>
                             <div className="bg-white rounded-[2rem] w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95" onClick={e=>e.stopPropagation()}>
-                                <div className="bg-gradient-to-r from-[#C8102E] to-red-800 p-4 flex items-center justify-between text-white">
+                                <div className="bg-[#C8102E] p-4 flex items-center justify-between text-white">
                                     <div className="flex items-center gap-2 font-bold text-lg"><i className="ph ph-megaphone text-xl"></i> ประกาศสภาฯ</div>
                                     <button onClick={()=>setShowAnnouncement(false)} className="w-8 h-8 flex items-center justify-center bg-white/20 rounded-full hover:bg-white/30 transition-colors"><i className="ph ph-x"></i></button>
                                 </div>
@@ -2420,22 +2425,25 @@
                     )}
 
                     {showInfoModal && (
-                        <div className="fixed inset-0 z-[9990] bg-gray-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4 animate-in fade-in" onClick={()=>setShowInfoModal(false)}>
-                            <div className="bg-white rounded-[2rem] p-6 w-full max-w-sm shadow-2xl animate-in slide-in-from-bottom-full sm:zoom-in-95 text-center relative" onClick={e=>e.stopPropagation()}>
-                                <div className="w-16 h-16 bg-[#00B900] rounded-[1.2rem] mx-auto flex items-center justify-center mb-4 shadow-lg shadow-green-500/30">
-                                    <i className="ph ph-chat-circle-text text-white text-3xl"></i>
+                        <div className="fixed inset-0 z-[9990] bg-gray-900/60 backdrop-blur-sm flex flex-col items-center justify-center p-4 animate-in fade-in" onClick={()=>setShowInfoModal(false)}>
+                            <div className="bg-white rounded-[2rem] p-6 w-full max-w-sm shadow-2xl relative text-left animate-in zoom-in-95" onClick={e=>e.stopPropagation()}>
+                                <h2 className="text-xl font-black text-gray-800 mb-4 text-center">ศูนย์ช่วยเหลือ</h2>
+                                <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100 mb-4 flex items-center gap-4">
+                                    <div className="w-16 h-16 rounded-full overflow-hidden bg-gray-200 shrink-0 border-2 border-white shadow-sm">
+                                        {/* รูปพี่ภีม: ใส่ URL รูปภาพตรงนี้แทน HARDCODED_LOGO ได้เลยครับ */}
+                                        <img src={HARDCODED_LOGO} className="w-full h-full object-cover" />
+                                    </div>
+                                    <div>
+                                        <h3 className="font-bold text-gray-800 text-sm">นายภูธนากร หงษ์ทอง</h3>
+                                        <p className="text-[#C8102E] text-xs font-bold">(พี่ภีม)</p>
+                                        <p className="text-[10px] text-gray-500 mt-1 leading-tight">เลขานุการสภานักเรียน<br/>โรงเรียนคำม่วง</p>
+                                    </div>
                                 </div>
-                                <h2 className="text-xl font-black text-gray-800 mb-1">ศูนย์ช่วยเหลือ</h2>
-                                <p className="text-gray-500 text-[12px] mb-6">หากลืมรหัสผ่าน หรือพบปัญหาการใช้งานระบบ<br/>สามารถกดติดต่อแอดมินผ่าน LINE ได้เลย</p>
-                                <a href="https://line.me/ti/p/~470aijh" target="_blank" className="w-full flex items-center justify-center gap-2 py-3 bg-[#00B900] hover:bg-[#009900] text-white rounded-xl font-bold transition-all active:scale-95 text-sm shadow-md shadow-green-500/20 mb-4">
-                                    <i className="ph ph-chat-circle-dots text-lg"></i> ติดต่อแอดมิน
+                                <p className="text-gray-500 text-xs mb-4 text-center">หากลืมรหัสผ่าน หรือพบปัญหาการใช้งานระบบ สามารถกดติดต่อแอดมินผ่าน LINE ได้เลยครับ</p>
+                                <a href="https://line.me/ti/p/~470aijh" target="_blank" rel="noreferrer" className="w-full flex items-center justify-center gap-2 py-3 bg-[#00B900] hover:bg-[#009900] text-white rounded-xl font-bold transition-all active:scale-95 text-sm shadow-md shadow-green-500/20">
+                                    <i className="ph ph-chat-circle-dots text-lg"></i> ทักแชท LINE
                                 </a>
-                                <div className="text-center pt-4 border-t border-gray-100">
-                                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1">ZONECHECK V2.1</p>
-                                    <p className="font-bold text-gray-700 text-[12px] mb-0.5">นายภูธนากร หงษ์ทอง (พี่ภีม)</p>
-                                    <p className="text-[10px] text-gray-500">เลขานุการสภานักเรียนโรงเรียนคำม่วง</p>
-                                </div>
-                                <button onClick={()=>setShowInfoModal(false)} className="w-full mt-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl font-bold transition-colors text-sm">ปิดหน้าต่าง</button>
+                                <button onClick={()=>setShowInfoModal(false)} className="w-full mt-3 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl font-bold transition-colors text-sm">ปิดหน้าต่าง</button>
                             </div>
                         </div>
                     )}
@@ -2448,7 +2456,7 @@
                     )}
                     
                     {toast && (
-                        <div className="fixed bottom-24 md:bottom-8 left-1/2 transform -translate-x-1/2 z-[999999] bg-gray-800 text-white px-5 py-3 rounded-xl shadow-2xl animate-in slide-in-from-bottom-4 fade-in font-medium text-sm flex items-center gap-2 whitespace-nowrap">
+                        <div className="fixed bottom-24 md:bottom-28 left-1/2 transform -translate-x-1/2 z-[999999] bg-gray-800 text-white px-5 py-3 rounded-xl shadow-2xl animate-in slide-in-from-bottom-4 fade-in font-medium text-sm flex items-center gap-2 whitespace-nowrap">
                             <i className="ph ph-info"></i> {toast}
                         </div>
                     )}
@@ -2456,32 +2464,45 @@
                     {/* Bottom Nav สำหรับ Mobile */}
                     <div className="md:hidden fixed bottom-0 w-full z-50">
                         <div className="absolute inset-0 bg-white/90 backdrop-blur-xl border-t border-gray-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]"></div>
-                        <div className="relative flex justify-around items-center p-1.5 pb-safe">
-                            <button onClick={() => setCurrentRoute('dashboard')} className={`flex flex-col items-center p-2 w-16 transition-all ${currentRoute === 'dashboard' ? 'text-[#C8102E]' : 'text-gray-500'}`}>
-                                <div className={`p-1.5 rounded-xl mb-1 flex items-center justify-center ${currentRoute === 'dashboard' ? 'bg-[#FDECEF]' : 'bg-transparent'}`}><i className={`ph ${currentRoute === 'dashboard' ? 'ph-house ph-fill' : 'ph-house'} text-[24px]`}></i></div>
-                                <span className="text-[10px] font-medium truncate w-full text-center">หน้าแรก</span>
-                            </button>
-                            <button onClick={() => setCurrentRoute('leaderboard')} className={`flex flex-col items-center p-2 w-16 transition-all ${currentRoute === 'leaderboard' ? 'text-[#C8102E]' : 'text-gray-500'}`}>
-                                <div className={`p-1.5 rounded-xl mb-1 flex items-center justify-center ${currentRoute === 'leaderboard' ? 'bg-[#FDECEF]' : 'bg-transparent'}`}><i className={`ph ${currentRoute === 'leaderboard' ? 'ph-trophy ph-fill' : 'ph-trophy'} text-[24px]`}></i></div>
-                                <span className="text-[10px] font-medium truncate w-full text-center">อันดับ</span>
-                            </button>
-                            <button onClick={() => setCurrentRoute('history')} className={`flex flex-col items-center p-2 w-16 transition-all ${currentRoute === 'history' ? 'text-[#C8102E]' : 'text-gray-500'}`}>
-                                <div className={`p-1.5 rounded-xl mb-1 flex items-center justify-center ${currentRoute === 'history' ? 'bg-[#FDECEF]' : 'bg-transparent'}`}><i className={`ph ${currentRoute === 'history' ? 'ph-clock-counter-clockwise ph-fill' : 'ph-clock-counter-clockwise'} text-[24px]`}></i></div>
-                                <span className="text-[10px] font-medium truncate w-full text-center">ประวัติ</span>
+                        <div className="relative flex justify-between px-2 sm:px-6 items-end pb-safe h-[65px]">
+                            
+                            <button onClick={() => setCurrentRoute('dashboard')} className={`flex-1 flex flex-col items-center justify-center pb-2.5 pt-3 transition-all ${currentRoute === 'dashboard' ? 'text-[#C8102E]' : 'text-gray-400 hover:text-gray-500'}`}>
+                                <i className={`ph ${currentRoute === 'dashboard' ? 'ph-house ph-fill' : 'ph-house'} text-[22px] mb-1.5`}></i>
+                                <span className={`text-[10px] font-bold ${currentRoute === 'dashboard' ? 'text-[#C8102E]' : ''}`}>หน้าแรก</span>
                             </button>
                             
-                            {(appMode === 'admin' || appMode === 'inspector') && (
-                                <button onClick={() => setCurrentRoute('inspect')} className={`flex flex-col items-center p-2 w-16 transition-all ${currentRoute === 'inspect' ? 'text-[#C8102E]' : 'text-gray-500'}`}>
-                                    <div className={`p-1.5 rounded-xl mb-1 flex items-center justify-center ${currentRoute === 'inspect' ? 'bg-[#FDECEF]' : 'bg-transparent'}`}><i className={`ph ${currentRoute === 'inspect' ? 'ph-clipboard-text ph-fill' : 'ph-clipboard-text'} text-[24px]`}></i></div>
-                                    <span className="text-[10px] font-medium truncate w-full text-center">ประเมิน</span>
+                            <button onClick={() => setCurrentRoute('leaderboard')} className={`flex-1 flex flex-col items-center justify-center pb-2.5 pt-3 transition-all ${currentRoute === 'leaderboard' ? 'text-[#C8102E]' : 'text-gray-400 hover:text-gray-500'}`}>
+                                <i className={`ph ${currentRoute === 'leaderboard' ? 'ph-trophy ph-fill' : 'ph-trophy'} text-[22px] mb-1.5`}></i>
+                                <span className={`text-[10px] font-bold ${currentRoute === 'leaderboard' ? 'text-[#C8102E]' : ''}`}>อันดับ</span>
+                            </button>
+                            
+                            {/* ปุ่มตรงกลาง (FAB) */}
+                            <div className="relative -top-5 flex justify-center flex-none w-[70px]">
+                                {appMode === 'guest' ? (
+                                    <button onClick={()=>setShowAnnouncement(true)} className="w-14 h-14 rounded-full bg-[#C8102E] text-white shadow-[0_4px_15px_rgba(200,16,46,0.4)] border-4 border-[#F3F4F6] flex items-center justify-center transition-transform active:scale-95">
+                                        <i className="ph ph-megaphone text-2xl"></i>
+                                    </button>
+                                ) : (
+                                    <button onClick={()=>setCurrentRoute('inspect')} className={`w-14 h-14 rounded-full text-white shadow-[0_4px_15px_rgba(200,16,46,0.4)] border-4 border-[#F3F4F6] flex items-center justify-center transition-transform active:scale-95 ${currentRoute === 'inspect' ? 'bg-black' : 'bg-[#C8102E]'}`}>
+                                        <i className="ph ph-clipboard-text text-2xl"></i>
+                                    </button>
+                                )}
+                            </div>
+
+                            <button onClick={() => setCurrentRoute('history')} className={`flex-1 flex flex-col items-center justify-center pb-2.5 pt-3 transition-all ${currentRoute === 'history' ? 'text-[#C8102E]' : 'text-gray-400 hover:text-gray-500'}`}>
+                                <i className={`ph ${currentRoute === 'history' ? 'ph-clock-counter-clockwise ph-fill' : 'ph-clock-counter-clockwise'} text-[22px] mb-1.5`}></i>
+                                <span className={`text-[10px] font-bold ${currentRoute === 'history' ? 'text-[#C8102E]' : ''}`}>ประวัติ</span>
+                            </button>
+                            
+                            {appMode === 'guest' ? (
+                                <button onClick={() => setShowInfoModal(true)} className={`flex-1 flex flex-col items-center justify-center pb-2.5 pt-3 transition-all text-gray-400 hover:text-gray-500`}>
+                                    <i className={`ph ph-question text-[22px] mb-1.5`}></i>
+                                    <span className={`text-[10px] font-bold`}>ช่วยเหลือ</span>
                                 </button>
+                            ) : (
+                                <div className="flex-1"></div> /* ช่องว่างเพื่อความสมดุล */
                             )}
-                            {appMode === 'admin' && (
-                                <button onClick={() => setCurrentRoute('settings')} className={`flex flex-col items-center p-2 w-16 transition-all ${currentRoute === 'settings' ? 'text-[#C8102E]' : 'text-gray-500'}`}>
-                                    <div className={`p-1.5 rounded-xl mb-1 flex items-center justify-center ${currentRoute === 'settings' ? 'bg-[#FDECEF]' : 'bg-transparent'}`}><i className={`ph ${currentRoute === 'settings' ? 'ph-gear ph-fill' : 'ph-gear'} text-[24px]`}></i></div>
-                                    <span className="text-[10px] font-medium truncate w-full text-center">ตั้งค่า</span>
-                                </button>
-                            )}
+
                         </div>
                     </div>
                 </div>
