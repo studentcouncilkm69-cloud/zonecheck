@@ -29,7 +29,7 @@
     <style>
         html, body { 
             font-family: 'Noto Sans Thai', sans-serif !important; 
-            background-color: #F3F4F6; /* สีพื้นหลังโทนเทาสว่าง */
+            background-color: #E5E7EB; /* สีพื้นหลังโทนเทาแบบ Student Voice */
             overscroll-behavior: none; 
             -webkit-overflow-scrolling: touch;
             -webkit-tap-highlight-color: transparent;
@@ -59,7 +59,7 @@
         .checkbox-custom:checked + div { background-color: #C8102E; border-color: #C8102E; }
         .checkbox-custom:checked + div svg { display: block; }
 
-        /* PDF Export Styles - คงสีม่วงต้นฉบับ 100% (ห้ามแก้ไข) */
+        /* PDF Export Styles - Reverted to Original Purple Theme 100% */
         .pdf-export-wrapper {
             font-family: 'Sarabun', sans-serif !important;
             color: #333;
@@ -90,7 +90,7 @@
         const { useState, useEffect, useMemo, useRef } = React;
 
         // ⚠️ สำคัญมาก: ใส่ URL ของ ZoneCheck Backend (REST API) ที่ได้จาก Google Apps Script
-        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxp7RJqJIajrEx8J9IVnJC75saIt_FeiQDUxNgxnP7vrYOy7xcYy77RqXljRUXv_xHm/exec"; 
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby3CKwBAOiz6dJQWI-t8nabgSv-46yTcAI8QZHR2KFWtrGJSHuKHdnm7-sCDsfL26yu/exec"; // URL ของคุณ
 
         const HARDCODED_LOGO = "https://i.postimg.cc/wBN5btrp/rong-re-yn-kham-wng.png";
         const HARDCODED_NAME = "STUDENT COUNCIL • KHAMMUANG SCHOOL";
@@ -136,9 +136,9 @@
 
         const initialSettings = { 
             passcode: "1234", master_passcode: "9999", is_maintenance: "false", 
-            app_logo_url: "", logo_url: "", school_logo_url: "", zone_map_url: "",
+            app_logo_url: "", logo_url: "", school_logo_url: "", zone_map_url: "", room_map_url: "",
             banner_url: "", main_banner_url: "", popup_banner_url: "", 
-            announcement_title: "📌 ประกาศสภาฯ", announcement_msg: defaultAnnouncement,
+            announcement_title: "", announcement_msg: "",
             visibility_main_banner: "public", visibility_popup_banner: "public", visibility_announce_banner: "public"
         };
         
@@ -248,6 +248,7 @@
             const [showInfoModal, setShowInfoModal] = useState(false);
             const [showAnnouncement, setShowAnnouncement] = useState(false);
             const [showZoneMap, setShowZoneMap] = useState(false); 
+            const [showRoomMap, setShowRoomMap] = useState(false);
             const [showMainBannerPopup, setShowMainBannerPopup] = useState(false);
             const [hideBannerFor7Days, setHideBannerFor7Days] = useState(false);
             const [printData, setPrintData] = useState({ isPreparing: false, format: null, mode: null, title: '', subtitle: '', dateText: '', data: [] });
@@ -261,6 +262,7 @@
             const [logoInput, setLogoInput] = useState('');
             const [schoolLogoInput, setSchoolLogoInput] = useState('');
             const [zoneMapInput, setZoneMapInput] = useState(''); 
+            const [roomMapInput, setRoomMapInput] = useState(''); 
             const [mainBannerInput, setMainBannerInput] = useState(''); 
             const [popupBannerInput, setPopupBannerInput] = useState(''); 
             const [announceBannerInput, setAnnounceBannerInput] = useState(''); 
@@ -280,11 +282,12 @@
                     setLogoInput(settings.logo_url || '');
                     setSchoolLogoInput(settings.school_logo_url || '');
                     setZoneMapInput(settings.zone_map_url || ''); 
+                    setRoomMapInput(settings.room_map_url || '');
                     setMainBannerInput(settings.main_banner_url || '');
                     setPopupBannerInput(settings.popup_banner_url || '');
                     setAnnounceBannerInput(settings.announce_banner_url || settings.banner_url || '');
-                    setAnnouncementTitleInput(settings.announcement_title || '📌 ประกาศสภาฯ');
-                    setAnnouncementInput(settings.announcement_msg || defaultAnnouncement);
+                    setAnnouncementTitleInput(settings.announcement_title || '');
+                    setAnnouncementInput(settings.announcement_msg || '');
                     setVisMainBanner(settings.visibility_main_banner || 'public');
                     setVisPopupBanner(settings.visibility_popup_banner || 'public');
                     setVisAnnounceBanner(settings.visibility_announce_banner || 'public');
@@ -344,7 +347,6 @@
                 setShowMainBannerPopup(false);
             };
 
-            // กดโลโก้ 5 ครั้ง เพื่อเปิดหน้า Login
             const handleLogoClick = () => {
                 if (appMode !== 'guest') return; 
                 setLogoTaps(prev => {
@@ -358,7 +360,7 @@
                     return next;
                 });
                 if (tapTimeoutRef.current) clearTimeout(tapTimeoutRef.current);
-                tapTimeoutRef.current = setTimeout(() => { setLogoTaps(0); }, 3000); // หน่วง 3 วิ ให้กดติดง่ายขึ้น
+                tapTimeoutRef.current = setTimeout(() => { setLogoTaps(0); }, 3000);
             };
 
             const handleLoginSubmit = (e) => {
@@ -422,7 +424,6 @@
                 } catch (error) { console.warn('LocalStorage Blocked'); }
             }, [rooms, inspectors, inspections, settings]);
 
-            // ฟังก์ชันกลางในการยิง POST Request
             const syncToGASAsync = async (action, data) => {
                 const payload = { action, data };
                 try {
@@ -935,7 +936,7 @@
             
             const handleSaveMegaphoneAndLogo = async () => { 
                 setSettings({ 
-                    ...settings, app_logo_url: appLogoInput, logo_url: logoInput, school_logo_url: schoolLogoInput, zone_map_url: zoneMapInput,
+                    ...settings, app_logo_url: appLogoInput, logo_url: logoInput, school_logo_url: schoolLogoInput, zone_map_url: zoneMapInput, room_map_url: roomMapInput,
                     banner_url: announceBannerInput, announce_banner_url: announceBannerInput, main_banner_url: mainBannerInput, popup_banner_url: popupBannerInput, 
                     announcement_title: announcementTitleInput, announcement_msg: announcementInput,
                     visibility_main_banner: visMainBanner, visibility_popup_banner: visPopupBanner, visibility_announce_banner: visAnnounceBanner
@@ -945,6 +946,7 @@
                     await syncToGASAsync('updateSettings', { key: 'logo_url', val: logoInput }); 
                     await syncToGASAsync('updateSettings', { key: 'school_logo_url', val: schoolLogoInput }); 
                     await syncToGASAsync('updateSettings', { key: 'zone_map_url', val: zoneMapInput }); 
+                    await syncToGASAsync('updateSettings', { key: 'room_map_url', val: roomMapInput });
                     await syncToGASAsync('updateSettings', { key: 'banner_url', val: announceBannerInput }); 
                     await syncToGASAsync('updateSettings', { key: 'announce_banner_url', val: announceBannerInput }); 
                     await syncToGASAsync('updateSettings', { key: 'main_banner_url', val: mainBannerInput }); 
@@ -1337,7 +1339,6 @@
             const renderExportHeader = () => (
                 <>
                     <div style={{display: 'flex', alignItems: 'center', marginBottom: '12px'}}>
-                        {/* โลโก้โรงเรียน (แบบเดิม) */}
                         <img src={settings?.school_logo_url || HARDCODED_LOGO} style={{width: '60px', height: '60px', objectFit: 'contain', marginRight: '15px'}} crossOrigin="anonymous"/>
                         <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                             <h1 style={{color: '#6d28d9', fontSize: '22px', fontWeight: 'bold', margin: '0 0 4px 0', lineHeight: '1'}}>รายงานการตรวจความเรียบร้อย</h1>
@@ -1369,11 +1370,11 @@
                                     let displayZoneScore = item.room?.hasZone === false ? 'ไม่มี' : item.zoneScore;
                                     let rankDisplay = exportSortOrder === 'score' ? item.trueRank : (globalIdx + 1);
                                     return(
-                                    <tr key={localIdx} className="pdf-row" style={{ pageBreakInside: 'avoid' }}>
-                                        <td><b>{rankDisplay}</b></td><td className="text-left"><b>{item.room?.name || 'ไม่ทราบ'}</b></td><td className="col-purple">{item.roomScore}</td><td className="col-purple">{displayZoneScore}</td><td><b style={{fontSize: '18px'}}>{item.score}</b></td>
-                                        {appMode !== 'guest' && (<><td style={{color: '#059669', fontWeight: 'bold'}}>{item.percentage}%</td><td>{item.medal}</td></>)}
-                                    </tr>
-                                )})}
+                                        <tr key={localIdx} className="pdf-row" style={{ pageBreakInside: 'avoid' }}>
+                                            <td><b>{rankDisplay}</b></td><td className="text-left"><b>{item.room?.name || 'ไม่ทราบ'}</b></td><td className="col-purple">{item.roomScore}</td><td className="col-purple">{displayZoneScore}</td><td><b style={{fontSize: '18px'}}>{item.score}</b></td>
+                                            {appMode !== 'guest' && (<><td style={{color: '#059669', fontWeight: 'bold'}}>{item.percentage}%</td><td>{item.medal}</td></>)}
+                                        </tr>
+                                    )})}
                             </tbody>
                         </table>
                     );
@@ -1412,16 +1413,16 @@
                                     let c5 = (guestFilterType === 'zone' || !rInsp || isSkip) ? '-' : (rInsp.scores?.c5 !== undefined ? rInsp.scores.c5 : '-');
                                     
                                     return (
-                                    <tr key={localIdx} className="pdf-row" style={{ pageBreakInside: 'avoid' }}>
-                                        <td>{exportSortOrder === 'score' ? item.trueRank : (globalIdx + 1)}</td><td className="text-left"><b>{item.room?.name || 'ไม่ระบุ'}</b></td>
-                                        {guestFilterType === 'zone' || !rInsp ? ( <td colSpan="5" style={{color: '#94a3b8', fontSize: '12px'}}>-</td> ) : isNoDuty ? ( <td colSpan="5" style={{color: '#e11d48', fontWeight: 'bold', fontSize: '13px'}}>ไม่ปฏิบัติหน้าที่ (-5)</td> ) : isSkip ? ( <td colSpan="5" style={{color: '#64748b', fontWeight: 'bold', fontSize: '13px'}}>ข้ามการตรวจ</td> ) : (
-                                            <><td style={{color: c1 === 0 ? '#e11d48' : '#16a34a'}}>{c1 > 0 ? c1 : '0'}</td><td style={{color: c2 === 0 ? '#e11d48' : '#16a34a'}}>{c2 > 0 ? c2 : '0'}</td><td style={{color: c3 === 0 ? '#e11d48' : '#16a34a'}}>{c3 > 0 ? c3 : '0'}</td><td style={{color: c4 === 0 ? '#e11d48' : '#16a34a'}}>{c4 > 0 ? c4 : '0'}</td><td style={{color: c5 === 0 ? '#e11d48' : '#16a34a'}}>{c5 > 0 ? c5 : '0'}</td></>
-                                        )}
-                                        <td className="col-purple" style={rScore==='ข้าม'?{color:'#94a3b8'}:{}}>{rScore > 0 ? `+${rScore}` : rScore}</td>
-                                        <td className="col-purple" style={zScore==='ไม่มี'||zScore==='ข้าม'?{color:'#94a3b8'}:{}}>{zScore > 0 ? `+${zScore}` : zScore}</td>
-                                        <td><b style={{fontSize: '15px'}}>{totalScore > 0 ? `+${totalScore}` : totalScore}</b></td><td className="text-left" style={{color: '#64748b', fontSize: '11px'}}>{finalComment}</td>
-                                    </tr>
-                                )})}
+                                        <tr key={localIdx} className="pdf-row" style={{ pageBreakInside: 'avoid' }}>
+                                            <td>{exportSortOrder === 'score' ? item.trueRank : (globalIdx + 1)}</td><td className="text-left"><b>{item.room?.name || 'ไม่ระบุ'}</b></td>
+                                            {guestFilterType === 'zone' || !rInsp ? ( <td colSpan="5" style={{color: '#94a3b8', fontSize: '12px'}}>-</td> ) : isNoDuty ? ( <td colSpan="5" style={{color: '#e11d48', fontWeight: 'bold', fontSize: '13px'}}>ไม่ปฏิบัติหน้าที่ (-5)</td> ) : isSkip ? ( <td colSpan="5" style={{color: '#64748b', fontWeight: 'bold', fontSize: '13px'}}>ข้ามการตรวจ</td> ) : (
+                                                <><td style={{color: c1 === 0 ? '#e11d48' : '#16a34a'}}>{c1 > 0 ? c1 : '0'}</td><td style={{color: c2 === 0 ? '#e11d48' : '#16a34a'}}>{c2 > 0 ? c2 : '0'}</td><td style={{color: c3 === 0 ? '#e11d48' : '#16a34a'}}>{c3 > 0 ? c3 : '0'}</td><td style={{color: c4 === 0 ? '#e11d48' : '#16a34a'}}>{c4 > 0 ? c4 : '0'}</td><td style={{color: c5 === 0 ? '#e11d48' : '#16a34a'}}>{c5 > 0 ? c5 : '0'}</td></>
+                                            )}
+                                            <td className="col-purple" style={rScore==='ข้าม'?{color:'#94a3b8'}:{}}>{rScore > 0 ? `+${rScore}` : rScore}</td>
+                                            <td className="col-purple" style={zScore==='ไม่มี'||zScore==='ข้าม'?{color:'#94a3b8'}:{}}>{zScore > 0 ? `+${zScore}` : zScore}</td>
+                                            <td><b style={{fontSize: '15px'}}>{totalScore > 0 ? `+${totalScore}` : totalScore}</b></td><td className="text-left" style={{color: '#64748b', fontSize: '11px'}}>{finalComment}</td>
+                                        </tr>
+                                    )})}
                             </tbody>
                         </table>
                     );
@@ -1430,10 +1431,10 @@
 
             if (showSplash) {
                 return (
-                    <div className="fixed inset-0 z-[999999] bg-[#F3F4F6] flex flex-col items-center justify-center">
+                    <div className="fixed inset-0 z-[999999] bg-[#E5E7EB] flex flex-col items-center justify-center">
                         <div className="relative w-28 h-28 flex items-center justify-center">
                             <div className="absolute inset-0 border-[4px] border-t-[#C8102E] border-r-gray-400 border-b-gray-200 border-l-gray-200 rounded-full animate-spin-slow"></div>
-                            <div className="absolute inset-2 bg-white rounded-full shadow-sm overflow-hidden flex items-center justify-center border">
+                            <div className="absolute inset-2 bg-white rounded-full shadow-sm overflow-hidden flex items-center justify-center">
                                 <img src={settings?.app_logo_url || HARDCODED_LOGO} className="w-full h-full object-cover" crossOrigin="anonymous"/>
                             </div>
                         </div>
@@ -1457,34 +1458,6 @@
                                 {settings?.maintenance_msg || '⚠️ ขออภัยในความไม่สะดวก\nระบบกำลังอยู่ระหว่างการปิดปรับปรุงชั่วคราว'}
                             </p>
                         </div>
-
-                        {/* Login Modal ภายใต้โหมดปิดปรับปรุง */}
-                        {isLoginModalOpen && (
-                            <div className="fixed inset-0 z-[9999] bg-white/60 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in zoom-in duration-200">
-                                <div className="bg-white w-full max-w-sm rounded-[2rem] p-8 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.15)] border border-gray-100 relative">
-                                    <button onClick={() => setIsLoginModalOpen(false)} className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-gray-50 text-gray-400 hover:bg-gray-100 transition-colors"><i className="ph ph-x"></i></button>
-                                    <div className="w-20 h-20 bg-white rounded-full mx-auto flex items-center justify-center mb-4 shadow-lg border border-gray-200 overflow-hidden">
-                                        <img src={settings?.app_logo_url || HARDCODED_LOGO} alt="Login Logo" className="w-full h-full object-cover" crossOrigin="anonymous"/>
-                                    </div>
-                                    <h2 className="text-2xl font-black text-center text-gray-800 mb-1">ระบบเจ้าหน้าที่</h2>
-                                    <form onSubmit={handleLoginSubmit}>
-                                        <div className="space-y-4 mt-6">
-                                            <input type="text" placeholder="ชื่อผู้ใช้งาน..." value={loginInspector} onChange={(e) => { setLoginInspector(e.target.value); setSelectedLoginName(e.target.value); setShowLoginSuggestions(true); }} className="w-full px-4 py-3 rounded-2xl border bg-gray-50 focus:outline-none focus:border-[#C8102E]" />
-                                            {showLoginSuggestions && loginInspector && (
-                                                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-100 rounded-2xl shadow-xl max-h-40 overflow-y-auto">
-                                                    {filteredLoginInspectors.length > 0 ? filteredLoginInspectors.map(u => (
-                                                        <div key={u.id} onMouseDown={(e) => { e.preventDefault(); setLoginInspector(u.name); setSelectedLoginName(u.name); setShowLoginSuggestions(false); }} className="px-4 py-3 hover:bg-red-50 cursor-pointer text-sm font-medium">{u.name}</div>
-                                                    )) : <div className="px-4 py-3 text-sm text-gray-400 text-center">ไม่พบรายชื่อ</div>}
-                                                </div>
-                                            )}
-                                            <input type="password" placeholder="••••••••" value={inputPasscode} onChange={e => setInputPasscode(e.target.value)} className="w-full px-4 py-3 rounded-2xl border text-center tracking-widest text-lg bg-gray-50 focus:outline-none focus:border-[#C8102E]" required />
-                                        </div>
-                                        {loginError && <p className="text-red-500 text-xs font-bold text-center mt-4">{loginError}</p>}
-                                        <button type="submit" className="w-full mt-6 bg-[#C8102E] text-white py-4 rounded-2xl font-bold shadow-md transition-all">เข้าสู่ระบบ</button>
-                                    </form>
-                                </div>
-                            </div>
-                        )}
                     </div>
                 );
             }
@@ -1516,28 +1489,21 @@
                             <button onClick={()=>setCurrentRoute('dashboard')} className={`px-4 py-2 rounded-xl text-[13px] font-medium nav-item flex items-center gap-2 ${currentRoute === 'dashboard' ? 'bg-[#FFF5F6] text-[#C8102E] font-bold' : 'text-gray-600 hover:bg-gray-50'}`}><i className={`ph ${currentRoute === 'dashboard' ? 'ph-house ph-fill' : 'ph-house'} text-lg`}></i> หน้าแรก</button>
                             <button onClick={()=>setCurrentRoute('leaderboard')} className={`px-4 py-2 rounded-xl text-[13px] font-medium nav-item flex items-center gap-2 ${currentRoute === 'leaderboard' ? 'bg-[#FFF5F6] text-[#C8102E] font-bold' : 'text-gray-600 hover:bg-gray-50'}`}><i className={`ph ${currentRoute === 'leaderboard' ? 'ph-trophy ph-fill' : 'ph-trophy'} text-lg`}></i> อันดับ</button>
                             <button onClick={()=>setCurrentRoute('history')} className={`px-4 py-2 rounded-xl text-[13px] font-medium nav-item flex items-center gap-2 ${currentRoute === 'history' ? 'bg-[#FFF5F6] text-[#C8102E] font-bold' : 'text-gray-600 hover:bg-gray-50'}`}><i className={`ph ${currentRoute === 'history' ? 'ph-clock-counter-clockwise ph-fill' : 'ph-clock-counter-clockwise'} text-lg`}></i> ประวัติ</button>
-                            
-                            {/* สำหรับ Admin/Inspector เอาไว้ด้านบนฝั่งขวาหมด */}
+                            {(appMode === 'admin' || appMode === 'inspector') && (
+                                <button onClick={()=>setCurrentRoute('inspect')} className={`px-4 py-2 rounded-xl text-[13px] font-medium nav-item flex items-center gap-2 ${currentRoute === 'inspect' ? 'bg-[#FFF5F6] text-[#C8102E] font-bold' : 'text-gray-600 hover:bg-gray-50'}`}><i className={`ph ${currentRoute === 'inspect' ? 'ph-clipboard-text ph-fill' : 'ph-clipboard-text'} text-lg`}></i> ประเมินผล</button>
+                            )}
+                            {appMode === 'admin' && (
+                                <button onClick={()=>setCurrentRoute('settings')} className={`px-4 py-2 rounded-xl text-[13px] font-medium nav-item flex items-center gap-2 ${currentRoute === 'settings' ? 'bg-[#FFF5F6] text-[#C8102E] font-bold' : 'text-gray-600 hover:bg-gray-50'}`}><i className={`ph ${currentRoute === 'settings' ? 'ph-gear ph-fill' : 'ph-gear'} text-lg`}></i> ตั้งค่า</button>
+                            )}
                         </nav>
 
                         <div className="flex items-center gap-3">
-                            {appMode === 'guest' ? (
-                                <>
-                                    <button onClick={()=>setShowAnnouncement(true)} className="w-9 h-9 rounded-full bg-red-50 text-[#C8102E] hover:bg-red-100 flex items-center justify-center transition-colors shadow-sm" title="ประกาศสภาฯ"><i className="ph ph-megaphone text-lg"></i></button>
-                                    <button onClick={handleSync} className="w-9 h-9 rounded-full bg-gray-50 border border-gray-200 text-gray-500 hover:bg-gray-100 flex items-center justify-center transition-colors shadow-sm" title="ซิงค์ข้อมูล"><i className={`ph ph-arrows-clockwise text-lg ${isSyncing ? "animate-spin text-[#C8102E]" : ""}`}></i></button>
-                                    <button onClick={()=>setShowInfoModal(true)} className="w-9 h-9 rounded-full bg-gray-50 text-gray-500 border border-gray-200 hover:bg-gray-100 flex items-center justify-center transition-colors shadow-sm" title="ช่วยเหลือ"><i className="ph ph-question text-lg"></i></button>
-                                </>
+                            <button onClick={()=>setShowAnnouncement(true)} className="w-9 h-9 rounded-full bg-red-50 text-[#C8102E] hover:bg-red-100 flex items-center justify-center transition-colors shadow-sm" title="ประกาศสภาฯ"><i className="ph ph-megaphone text-lg"></i></button>
+                            <button onClick={handleSync} className="w-9 h-9 rounded-full bg-gray-50 border border-gray-200 text-gray-500 hover:bg-gray-100 flex items-center justify-center transition-colors shadow-sm" title="ซิงค์ข้อมูล"><i className={`ph ph-arrows-clockwise text-lg ${isSyncing ? "animate-spin text-[#C8102E]" : ""}`}></i></button>
+                            {appMode !== 'guest' ? (
+                                <button onClick={() => showConfirm('ต้องการออกจากระบบใช่หรือไม่?', () => { setAppMode('guest'); setInputPasscode(''); setCurrentUser(null); setCurrentRoute('dashboard'); })} className="w-9 h-9 rounded-full bg-gray-900 text-white hover:bg-black flex items-center justify-center transition-colors shadow-sm" title="ออกจากระบบ"><i className="ph ph-sign-out text-lg"></i></button>
                             ) : (
-                                <>
-                                    {(appMode === 'admin' || appMode === 'inspector') && (
-                                        <button onClick={()=>setShowAnnouncement(true)} className="w-9 h-9 rounded-full bg-red-50 text-[#C8102E] hover:bg-red-100 flex items-center justify-center transition-colors shadow-sm" title="ประกาศสภาฯ"><i className="ph ph-megaphone text-lg"></i></button>
-                                    )}
-                                    {appMode === 'admin' && (
-                                        <button onClick={()=>setCurrentRoute('settings')} className="w-9 h-9 rounded-full bg-gray-50 text-gray-500 border border-gray-200 hover:bg-gray-100 flex items-center justify-center transition-colors shadow-sm" title="ตั้งค่าระบบ"><i className="ph ph-gear text-lg"></i></button>
-                                    )}
-                                    <button onClick={handleSync} className="w-9 h-9 rounded-full bg-gray-50 border border-gray-200 text-gray-500 hover:bg-gray-100 flex items-center justify-center transition-colors shadow-sm" title="ซิงค์ข้อมูล"><i className={`ph ph-arrows-clockwise text-lg ${isSyncing ? "animate-spin text-[#C8102E]" : ""}`}></i></button>
-                                    <button onClick={() => showConfirm('ต้องการออกจากระบบใช่หรือไม่?', () => { setAppMode('guest'); setInputPasscode(''); setCurrentUser(null); setCurrentRoute('dashboard'); })} className="px-4 py-2 rounded-xl text-sm font-bold bg-red-50 text-red-600 hover:bg-red-100 transition-colors flex items-center gap-2"><i className="ph ph-sign-out"></i> ออกจากระบบ</button>
-                                </>
+                                <button onClick={()=>setShowInfoModal(true)} className="w-9 h-9 rounded-full bg-gray-50 text-gray-500 border border-gray-200 hover:bg-gray-100 flex items-center justify-center transition-colors shadow-sm" title="ช่วยเหลือ"><i className="ph ph-question text-lg"></i></button>
                             )}
                         </div>
                     </header>
@@ -1561,23 +1527,21 @@
                             </div>
                             
                             <div className="flex items-center gap-2 ml-2 flex-shrink-0">
-                                {appMode !== 'guest' && (
-                                    <button onClick={() => setShowAnnouncement(true)} className="text-[#C8102E] hover:text-red-800 transition-colors w-10 h-10 flex items-center justify-center rounded-full bg-red-50 border border-red-100 shadow-sm active:scale-95"><i className="ph ph-megaphone text-xl"></i></button>
-                                )}
-                                {appMode === 'admin' && (
-                                    <button onClick={() => setCurrentRoute('settings')} className="text-gray-500 hover:text-gray-800 transition-colors w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 border border-gray-200 shadow-sm active:scale-95"><i className="ph ph-gear text-xl"></i></button>
-                                )}
+                                <button onClick={() => setShowAnnouncement(true)} className="text-[#C8102E] hover:text-red-800 transition-colors w-10 h-10 flex items-center justify-center rounded-full bg-red-50 border border-red-100 shadow-sm active:scale-95"><i className="ph ph-megaphone text-xl"></i></button>
                                 <button onClick={handleSync} className="text-gray-400 hover:text-[#C8102E] transition-colors w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 border border-gray-100 shadow-sm active:scale-95"><i className={`ph ph-arrows-clockwise text-xl ${isSyncing ? "animate-spin text-[#C8102E]" : ""}`}></i></button>
-                                {appMode !== 'guest' && (
+                                {appMode !== 'guest' ? (
                                     <button onClick={() => { showConfirm('ต้องการออกจากระบบใช่หรือไม่?', () => { setAppMode('guest'); setInputPasscode(''); setCurrentUser(null); setCurrentRoute('dashboard'); }); }} className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-900 text-white hover:bg-black transition-colors shadow-sm active:scale-95"><i className="ph ph-sign-out text-xl"></i></button>
+                                ) : (
+                                    <button onClick={()=>setShowInfoModal(true)} className="text-gray-400 hover:text-[#C8102E] transition-colors w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 border border-gray-100 shadow-sm active:scale-95"><i className="ph ph-question text-xl"></i></button>
                                 )}
                             </div>
                         </div>
                     </header>
 
                     {/* การแสดงผลหน้าต่างๆ */}
-                    <main className="flex-1 flex flex-col overflow-y-auto relative pb-[90px] md:pb-0 custom-scrollbar p-4 md:p-8 max-w-5xl mx-auto w-full">
+                    <main className="flex-1 flex flex-col overflow-y-auto relative pb-[70px] md:pb-0 custom-scrollbar p-4 md:p-8 max-w-5xl mx-auto w-full">
                         
+                        {}
                         {/* --- เส้นทาง: หน้าแรก (Dashboard) --- */}
                         {currentRoute === 'dashboard' && (
                             <div className="animate-in fade-in space-y-6">
@@ -1589,35 +1553,39 @@
                                     <div className="bg-gradient-to-br from-[#E11D48] via-[#BE123C] to-[#881337] rounded-3xl p-6 md:p-10 text-white shadow-[0_8px_30px_rgb(200,16,46,0.3)] relative overflow-hidden">
                                         <div className="absolute -right-6 top-0 text-white/10 rotate-12 transform scale-110 pointer-events-none"><i className="ph ph-clipboard-text text-[140px]"></i></div>
                                         <div className="absolute left-16 -top-12 text-white/5 rotate-45 transform scale-110 pointer-events-none"><i className="ph ph-broom text-[150px]"></i></div>
-                                        <div className="relative z-10">
-                                            <h2 className="text-2xl md:text-3xl font-bold mb-2.5">ระบบประเมินความสะอาด</h2>
-                                            <p className="text-[#FFE4E6] text-sm md:text-base max-w-md leading-relaxed opacity-95">เช็คคะแนนกันหน่อย วันนี้ห้องเรารอด หรือห้องเราร่วง?</p>
+                                        <div className="relative z-10 w-full max-w-xl">
+                                            <span className="inline-block bg-white/20 text-white text-[10px] font-bold px-3 py-1 rounded-full mb-3 border border-white/20">STUDENT COUNCIL</span>
+                                            <h2 className="text-2xl md:text-3xl font-black mb-2.5 leading-tight">เช็คคะแนนกันหน่อย!</h2>
+                                            <p className="text-[#FFE4E6] text-sm md:text-base leading-relaxed opacity-95">วันนี้ห้องเรารอด หรือห้องเราร่วง? ตรวจสอบและรายงานผลการดูแลรักษาเขตพื้นที่และห้องเรียน สนับสนุนโดยสภานักเรียนโรงเรียนคำม่วง</p>
                                         </div>
                                     </div>
                                 )}
 
-                                <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 flex flex-col md:flex-row md:items-center gap-6">
-                                    <div className="flex-shrink-0">
-                                        <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2 mb-1"><i className="ph ph-check-square text-[#C8102E] text-lg"></i> ความคืบหน้าการตรวจ</h3>
-                                        <p className="text-[10px] text-gray-400 font-medium">อัปเดตข้อมูลของวันนี้</p>
-                                    </div>
-                                    <div className="flex-1 flex flex-col gap-4 w-full">
-                                        <div>
-                                            <div className="flex justify-between items-end mb-1.5">
-                                                <span className="text-xs font-bold text-gray-600 flex items-center gap-1.5"><i className="ph ph-buildings text-blue-500"></i> ห้องเรียน</span>
-                                                <span className="text-sm font-black text-blue-600">{inspectProgress.roomDone} <span className="text-xs text-gray-400 font-medium">/ {inspectProgress.roomTotal}</span></span>
-                                            </div>
-                                            <div className="w-full bg-gray-100 rounded-full h-2">
-                                                <div className="bg-gradient-to-r from-blue-400 to-blue-600 h-2 rounded-full transition-all duration-1000" style={{width: `${inspectProgress.roomPct}%`}}></div>
-                                            </div>
+                                <div className="flex flex-col gap-6">
+                                    {/* ความคืบหน้าการตรวจ */}
+                                    <div className="col-span-full bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 flex flex-col md:flex-row md:items-center gap-6">
+                                        <div className="flex-shrink-0">
+                                            <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2 mb-1"><i className="ph ph-check-square text-[#C8102E] text-lg"></i> ความคืบหน้าการตรวจ</h3>
+                                            <p className="text-[10px] text-gray-400 font-medium">อัปเดตข้อมูลของวันนี้</p>
                                         </div>
-                                        <div>
-                                            <div className="flex justify-between items-end mb-1.5">
-                                                <span className="text-xs font-bold text-gray-600 flex items-center gap-1.5"><i className="ph ph-map-pin text-fuchsia-500"></i> เขตพื้นที่</span>
-                                                <span className="text-sm font-black text-fuchsia-600">{inspectProgress.zoneDone} <span className="text-xs text-gray-400 font-medium">/ {inspectProgress.zoneTotal}</span></span>
+                                        <div className="flex-1 flex flex-col gap-4 w-full">
+                                            <div>
+                                                <div className="flex justify-between items-end mb-1.5">
+                                                    <span className="text-xs font-bold text-gray-600 flex items-center gap-1.5"><i className="ph ph-buildings text-blue-500"></i> ห้องเรียน</span>
+                                                    <span className="text-sm font-black text-blue-600">{inspectProgress.roomDone} <span className="text-xs text-gray-400 font-medium">/ {inspectProgress.roomTotal} ห้อง</span></span>
+                                                </div>
+                                                <div className="w-full bg-gray-100 rounded-full h-3 shadow-inner">
+                                                    <div className="bg-gradient-to-r from-blue-400 to-blue-600 h-3 rounded-full transition-all duration-1000" style={{width: `${inspectProgress.roomPct}%`}}></div>
+                                                </div>
                                             </div>
-                                            <div className="w-full bg-gray-100 rounded-full h-2">
-                                                <div className="bg-gradient-to-r from-fuchsia-400 to-fuchsia-600 h-2 rounded-full transition-all duration-1000" style={{width: `${inspectProgress.zonePct}%`}}></div>
+                                            <div>
+                                                <div className="flex justify-between items-end mb-1.5">
+                                                    <span className="text-xs font-bold text-gray-600 flex items-center gap-1.5"><i className="ph ph-map-pin text-fuchsia-500"></i> เขตพื้นที่</span>
+                                                    <span className="text-sm font-black text-fuchsia-600">{inspectProgress.zoneDone} <span className="text-xs text-gray-400 font-medium">/ {inspectProgress.zoneTotal} เขต</span></span>
+                                                </div>
+                                                <div className="w-full bg-gray-100 rounded-full h-3 shadow-inner">
+                                                    <div className="bg-gradient-to-r from-fuchsia-400 to-fuchsia-600 h-3 rounded-full transition-all duration-1000" style={{width: `${inspectProgress.zonePct}%`}}></div>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -1823,9 +1791,9 @@
                                                     </div>
                                                 </div>
                                                 {dateMode === 'custom' && (
-                                                <div className="animate-in fade-in slide-in-from-top-2 bg-gray-50 p-3 rounded-2xl">
-                                                    <input type="date" value={filterDate} onChange={e=>{setFilterDate(e.target.value); setHistoryCalendarMonth(e.target.value.substring(0,7));}} className="w-full bg-white border border-gray-200 p-3 rounded-xl font-bold text-gray-700 outline-none focus:border-[#C8102E] cursor-pointer" />
-                                                </div>
+                                                    <div className="animate-in fade-in slide-in-from-top-2 bg-gray-50 p-3 rounded-2xl">
+                                                        <input type="date" value={filterDate} onChange={e=>{setFilterDate(e.target.value); setHistoryCalendarMonth(e.target.value.substring(0,7));}} className="w-full bg-white border border-gray-200 p-3 rounded-xl font-bold text-gray-700 outline-none focus:border-[#C8102E] cursor-pointer" />
+                                                    </div>
                                                 )}
                                             </div>
                                             
@@ -1865,23 +1833,23 @@
                                                             let zScore = guestFilterType === 'room' ? '-' : (item.room?.hasZone === false ? 'ไม่มี' : (item.zoneInsp ? (item.zoneInsp.totalScore === null ? 'ข้าม' : item.zoneInsp.totalScore) : '-'));
                                                             
                                                             return ( 
-                                                            <tr key={item.key} className="hover:bg-gray-50/50 transition-colors">
-                                                                <td className="px-3 py-3 font-bold text-gray-800 whitespace-nowrap">{item.room?.name || 'ไม่ระบุ'}</td>
-                                                                <td className="px-3 py-3 text-center">
-                                                                    {rScore !== '-' ? ( <span className={`font-bold px-2 py-1 rounded-lg text-xs ${rScore === 'ข้าม' ? 'bg-gray-100 text-gray-500' : (rScore <= 0 ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-600')}`}>{rScore > 0 && rScore !== 'ข้าม' ? `+${rScore}` : rScore}</span> ) : <span className="text-gray-300">-</span>}
-                                                                </td>
-                                                                <td className="px-3 py-3 text-center">
-                                                                    {zScore === 'ไม่มี' ? ( <span className="text-[10px] text-gray-400">ไม่มี</span> ) : zScore !== '-' ? ( <span className={`font-bold px-2 py-1 rounded-lg text-xs ${zScore === 'ข้าม' ? 'bg-gray-100 text-gray-500' : (zScore < 0 ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-600')}`}>{zScore > 0 && zScore !== 'ข้าม' ? `+${zScore}` : zScore}</span> ) : <span className="text-gray-300">-</span>}
-                                                                </td>
-                                                                <td className="px-3 py-3 text-center">
-                                                                    <div className="flex justify-center">
-                                                                        <button onClick={() => {if(item.roomInsp || item.zoneInsp) setViewDetailModal(item)}} className={`w-8 h-8 rounded-full shadow-sm border flex items-center justify-center transition-all relative ${item.roomInsp || item.zoneInsp ? 'bg-white text-gray-600 hover:text-[#C8102E] border-gray-200' : 'bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed'}`} disabled={!item.roomInsp && !item.zoneInsp}>
-                                                                            <i className="ph ph-receipt text-xs"></i>
-                                                                            {(item.roomInsp?.photoUrl || item.zoneInsp?.photoUrl) && ( <span className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full border border-white"></span> )}
-                                                                        </button>
-                                                                    </div>
-                                                                </td>
-                                                            </tr> 
+                                                                <tr key={item.key} className="hover:bg-gray-50/50 transition-colors">
+                                                                    <td className="px-3 py-3 font-bold text-gray-800 whitespace-nowrap">{item.room?.name || 'ไม่ระบุ'}</td>
+                                                                    <td className="px-3 py-3 text-center">
+                                                                        {rScore !== '-' ? ( <span className={`font-bold px-2 py-1 rounded-lg text-xs ${rScore === 'ข้าม' ? 'bg-gray-100 text-gray-500' : (rScore <= 0 ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-600')}`}>{rScore > 0 && rScore !== 'ข้าม' ? `+${rScore}` : rScore}</span> ) : <span className="text-gray-300">-</span>}
+                                                                    </td>
+                                                                    <td className="px-3 py-3 text-center">
+                                                                        {zScore === 'ไม่มี' ? ( <span className="text-[10px] text-gray-400">ไม่มี</span> ) : zScore !== '-' ? ( <span className={`font-bold px-2 py-1 rounded-lg text-xs ${zScore === 'ข้าม' ? 'bg-gray-100 text-gray-500' : (zScore < 0 ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-600')}`}>{zScore > 0 && zScore !== 'ข้าม' ? `+${zScore}` : zScore}</span> ) : <span className="text-gray-300">-</span>}
+                                                                    </td>
+                                                                    <td className="px-3 py-3 text-center">
+                                                                        <div className="flex justify-center">
+                                                                            <button onClick={() => {if(item.roomInsp || item.zoneInsp) setViewDetailModal(item)}} className={`w-8 h-8 rounded-full shadow-sm border flex items-center justify-center transition-all relative ${item.roomInsp || item.zoneInsp ? 'bg-white text-gray-600 hover:text-[#C8102E] border-gray-200' : 'bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed'}`} disabled={!item.roomInsp && !item.zoneInsp}>
+                                                                                <i className="ph ph-receipt text-xs"></i>
+                                                                                {(item.roomInsp?.photoUrl || item.zoneInsp?.photoUrl) && ( <span className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full border border-white"></span> )}
+                                                                            </button>
+                                                                        </div>
+                                                                    </td>
+                                                                </tr> 
                                                             )
                                                         })}
                                                     </tbody>
@@ -1933,15 +1901,22 @@
                                 )}
                              </div>
                         )}
-
+                        
                         {/* --- เส้นทาง: ประเมินผล (Inspect) --- */}
                         {(appMode === 'admin' || appMode === 'inspector') && currentRoute === 'inspect' && (
                              <div className="animate-in fade-in space-y-4 pb-12">
-                                {settings?.zone_map_url && (
+                                {(settings?.zone_map_url || settings?.room_map_url) && (
                                     <div className="flex gap-3 mb-4">
-                                        <button onClick={() => setShowZoneMap(true)} className="w-full bg-white border border-[#C8102E]/20 text-[#C8102E] font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-sm hover:bg-red-50 active:scale-95 transition-all text-sm">
-                                            <i className="ph ph-map-pin text-lg"></i> แผนผังเขตพื้นที่
-                                        </button>
+                                        {settings?.zone_map_url && (
+                                            <button onClick={() => setShowZoneMap(true)} className="flex-1 bg-white border border-[#C8102E]/20 text-[#C8102E] font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-sm hover:bg-red-50 active:scale-95 transition-all text-sm">
+                                                <i className="ph ph-map-pin text-lg"></i> แผนผังเขตพื้นที่
+                                            </button>
+                                        )}
+                                        {settings?.room_map_url && (
+                                            <button onClick={() => setShowRoomMap(true)} className="flex-1 bg-white border border-blue-200 text-blue-600 font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-sm hover:bg-blue-50 active:scale-95 transition-all text-sm">
+                                                <i className="ph ph-buildings text-lg"></i> แผนผังห้องเรียน
+                                            </button>
+                                        )}
                                     </div>
                                 )}
 
@@ -1988,23 +1963,23 @@
                                               const isCompleted = hasZoneCheck ? (hasRoom && hasZone) : hasRoom; 
                                               
                                               return (
-                                              <div key={room.id} className={`rounded-[1.5rem] shadow-sm border-2 overflow-hidden flex flex-col transition-all active:scale-95 ${isCompleted ? 'border-emerald-400 bg-emerald-50' : 'border-transparent bg-white'}`}>
-                                                 <div className={`relative flex-1 py-5 flex flex-col items-center justify-center transition-colors ${isCompleted ? 'bg-gradient-to-br from-emerald-400 to-emerald-500 text-white' : 'bg-white text-gray-800'}`}>
-                                                     {(hasRoom || hasZone) && ( <button onClick={() => handleResetTodayInspection(room.id, room.name)} className={`absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-full transition-colors ${isCompleted ? 'bg-black/10 text-white hover:bg-black/20' : 'bg-red-50 text-red-500 hover:bg-red-100'}`}><i className="ph ph-arrow-u-up-left text-[12px]" ></i></button> )}
-                                                     <span className="text-3xl md:text-4xl font-black">{(room.name || '').replace('ม.', '')}</span>
-                                                 </div>
-                                                 <div className="flex border-t border-gray-100 bg-white p-1 gap-1">
-                                                     <button onClick={() => handleOpenInspect(room, 'room')} className={`py-3 rounded-xl text-xs font-bold flex flex-col items-center justify-center gap-1 transition-all ${hasRoom ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-50 text-gray-500 hover:bg-gray-100'} ${hasZoneCheck ? 'flex-1' : 'w-full'}`}>
-                                                         <div className="flex items-center gap-1.5">{hasRoom ? <i className="ph ph-check-circle text-sm ph-fill"></i> : <i className="ph ph-buildings text-sm"></i>} ห้อง</div>
-                                                     </button>
-                                                     {hasZoneCheck && (
-                                                        <button onClick={() => handleOpenInspect(room, 'zone')} className={`flex-1 py-3 rounded-xl text-xs font-bold flex flex-col items-center justify-center gap-1 transition-all ${hasZone ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-50 text-gray-500 hover:bg-gray-100'}`}>
-                                                            <div className="flex items-center gap-1.5">{hasZone ? <i className="ph ph-check-circle text-sm ph-fill"></i> : <i className="ph ph-map-pin text-sm"></i>} เขต</div>
-                                                        </button>
-                                                     )}
-                                                 </div>
-                                              </div>
-                                            )})}
+                                                  <div key={room.id} className={`rounded-[1.5rem] shadow-sm border-2 overflow-hidden flex flex-col transition-all active:scale-95 ${isCompleted ? 'border-emerald-400 bg-emerald-50' : 'border-transparent bg-white'}`}>
+                                                     <div className={`relative flex-1 py-5 flex flex-col items-center justify-center transition-colors ${isCompleted ? 'bg-gradient-to-br from-emerald-400 to-emerald-500 text-white' : 'bg-white text-gray-800'}`}>
+                                                         {(hasRoom || hasZone) && ( <button onClick={() => handleResetTodayInspection(room.id, room.name)} className={`absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-full transition-colors ${isCompleted ? 'bg-black/10 text-white hover:bg-black/20' : 'bg-red-50 text-red-500 hover:bg-red-100'}`}><i className="ph ph-arrow-u-up-left text-[12px]" ></i></button> )}
+                                                         <span className="text-3xl md:text-4xl font-black">{(room.name || '').replace('ม.', '')}</span>
+                                                     </div>
+                                                     <div className="flex border-t border-gray-100 bg-white p-1 gap-1">
+                                                         <button onClick={() => handleOpenInspect(room, 'room')} className={`py-3 rounded-xl text-xs font-bold flex flex-col items-center justify-center gap-1 transition-all ${hasRoom ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-50 text-gray-500 hover:bg-gray-100'} ${hasZoneCheck ? 'flex-1' : 'w-full'}`}>
+                                                             <div className="flex items-center gap-1.5">{hasRoom ? <i className="ph ph-check-circle text-sm ph-fill"></i> : <i className="ph ph-buildings text-sm"></i>} ห้อง</div>
+                                                         </button>
+                                                         {hasZoneCheck && (
+                                                             <button onClick={() => handleOpenInspect(room, 'zone')} className={`flex-1 py-3 rounded-xl text-xs font-bold flex flex-col items-center justify-center gap-1 transition-all ${hasZone ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-50 text-gray-500 hover:bg-gray-100'}`}>
+                                                                 <div className="flex items-center gap-1.5">{hasZone ? <i className="ph ph-check-circle text-sm ph-fill"></i> : <i className="ph ph-map-pin text-sm"></i>} เขต</div>
+                                                             </button>
+                                                         )}
+                                                     </div>
+                                                  </div>
+                                              )})}
                                         </div>
                                     </div>
                                 ))}
@@ -2051,9 +2026,15 @@
                                             <label className="text-[10px] font-bold text-gray-500 mb-1 block uppercase">ลิงก์โลโก้สภาฯ (อื่นๆ)</label>
                                             <input type="text" value={logoInput} onChange={e => setLogoInput(e.target.value)} placeholder="https://..." className="w-full p-3 rounded-xl border border-gray-200 outline-none font-medium text-sm focus:border-[#C8102E] bg-gray-50"/>
                                          </div>
-                                         <div className="col-span-full pt-2">
-                                            <label className="text-[10px] font-bold text-blue-600 mb-1 block uppercase">🗺️ ลิงก์แผนผังเขตพื้นที่ (โชว์ในหน้าประเมินผล)</label>
-                                            <input type="text" value={zoneMapInput} onChange={e => setZoneMapInput(e.target.value)} placeholder="https://..." className="w-full p-3 rounded-xl border border-blue-200 outline-none font-medium text-sm focus:border-blue-500 bg-blue-50/30"/>
+                                         
+                                         {/* แผนผังคู่ซ้ายขวา */}
+                                         <div className="col-span-1 pt-2">
+                                            <label className="text-[10px] font-bold text-fuchsia-600 mb-1 block uppercase">🗺️ ลิงก์แผนผังเขตพื้นที่</label>
+                                            <input type="text" value={zoneMapInput} onChange={e => setZoneMapInput(e.target.value)} placeholder="https://..." className="w-full p-3 rounded-xl border border-fuchsia-200 outline-none font-medium text-sm focus:border-fuchsia-500 bg-fuchsia-50/30"/>
+                                         </div>
+                                         <div className="col-span-1 pt-2">
+                                            <label className="text-[10px] font-bold text-blue-600 mb-1 block uppercase">🗺️ ลิงก์แผนผังห้องเรียน</label>
+                                            <input type="text" value={roomMapInput} onChange={e => setRoomMapInput(e.target.value)} placeholder="https://..." className="w-full p-3 rounded-xl border border-blue-200 outline-none font-medium text-sm focus:border-blue-500 bg-blue-50/30"/>
                                          </div>
                                       </div>
                                       <div className="border border-gray-200 p-4 rounded-2xl bg-white">
@@ -2173,7 +2154,7 @@
                                         <input type="password" placeholder="••••••••" value={inputPasscode} onChange={e => setInputPasscode(e.target.value)} className="w-full px-4 py-3 rounded-2xl border text-center tracking-widest text-lg bg-gray-50 focus:outline-none focus:border-[#C8102E]" required />
                                     </div>
                                     {loginError && <p className="text-red-500 text-xs font-bold text-center mt-4">{loginError}</p>}
-                                    <button type="submit" className="w-full mt-6 bg-[#C8102E] text-white py-4 rounded-2xl font-bold shadow-md transition-all">ล็อกอิน</button>
+                                    <button type="submit" className="w-full mt-6 bg-[#C8102E] text-white py-4 rounded-2xl font-bold shadow-md transition-all">เข้าสู่ระบบ</button>
                                 </form>
                             </div>
                         </div>
@@ -2369,7 +2350,7 @@
                     {showAnnouncement && canViewBanner(settings?.visibility_announce_banner) && (
                         <div className="fixed inset-0 z-[9990] bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in" onClick={()=>setShowAnnouncement(false)}>
                             <div className="bg-white rounded-[2rem] w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95" onClick={e=>e.stopPropagation()}>
-                                <div className="bg-[#C8102E] p-4 flex items-center justify-between text-white">
+                                <div className="bg-gradient-to-r from-[#C8102E] to-red-800 p-4 flex items-center justify-between text-white">
                                     <div className="flex items-center gap-2 font-bold text-lg"><i className="ph ph-megaphone text-xl"></i> ประกาศสภาฯ</div>
                                     <button onClick={()=>setShowAnnouncement(false)} className="w-8 h-8 flex items-center justify-center bg-white/20 rounded-full hover:bg-white/30 transition-colors"><i className="ph ph-x"></i></button>
                                 </div>
@@ -2377,7 +2358,7 @@
                                     {settings?.announce_banner_url && <div className="w-full aspect-[16/9] rounded-xl overflow-hidden shadow-sm border border-gray-100 bg-gray-50"><img src={settings.announce_banner_url} alt="Announcement Banner" className="w-full h-full object-cover" /></div>}
                                     <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
                                         <h3 className="font-bold text-[#C8102E] mb-2">{settings?.announcement_title || '📌 ประกาศจากระบบ'}</h3>
-                                        <div className="whitespace-pre-line text-gray-700 text-sm font-medium leading-relaxed">{settings?.announcement_msg || defaultAnnouncement}</div>
+                                        <div className="whitespace-pre-line text-gray-700 text-sm font-medium leading-relaxed">{settings?.announcement_msg || 'ยังไม่มีประกาศในขณะนี้'}</div>
                                     </div>
                                 </div>
                             </div>
@@ -2394,6 +2375,24 @@
                                 <div className="flex-1 overflow-auto bg-gray-50 p-2 custom-scrollbar flex items-center justify-center">
                                     {settings?.zone_map_url ? (
                                         <img src={settings.zone_map_url} alt="Zone Map" className="w-full h-auto object-contain rounded-xl" crossOrigin="anonymous"/>
+                                    ) : (
+                                        <p className="text-gray-400 text-sm font-medium py-10">ยังไม่มีข้อมูลรูปภาพแผนผัง</p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    
+                    {showRoomMap && (
+                        <div className="fixed inset-0 z-[9999] bg-gray-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in" onClick={()=>setShowRoomMap(false)}>
+                            <div className="bg-white rounded-[2rem] w-full max-w-2xl max-h-[85vh] shadow-2xl overflow-hidden animate-in zoom-in-95 flex flex-col" onClick={e=>e.stopPropagation()}>
+                                <div className="p-4 flex items-center justify-between border-b border-gray-100 bg-white">
+                                    <h3 className="font-bold text-gray-800 flex items-center gap-2"><i className="ph ph-buildings text-blue-500"></i> แผนผังห้องเรียน</h3>
+                                    <button onClick={()=>setShowRoomMap(false)} className="w-8 h-8 flex items-center justify-center bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"><i className="ph ph-x"></i></button>
+                                </div>
+                                <div className="flex-1 overflow-auto bg-gray-50 p-2 custom-scrollbar flex items-center justify-center">
+                                    {settings?.room_map_url ? (
+                                        <img src={settings.room_map_url} alt="Room Map" className="w-full h-auto object-contain rounded-xl" crossOrigin="anonymous"/>
                                     ) : (
                                         <p className="text-gray-400 text-sm font-medium py-10">ยังไม่มีข้อมูลรูปภาพแผนผัง</p>
                                     )}
@@ -2425,25 +2424,22 @@
                     )}
 
                     {showInfoModal && (
-                        <div className="fixed inset-0 z-[9990] bg-gray-900/60 backdrop-blur-sm flex flex-col items-center justify-center p-4 animate-in fade-in" onClick={()=>setShowInfoModal(false)}>
-                            <div className="bg-white rounded-[2rem] p-6 w-full max-w-sm shadow-2xl relative text-left animate-in zoom-in-95" onClick={e=>e.stopPropagation()}>
-                                <h2 className="text-xl font-black text-gray-800 mb-4 text-center">ศูนย์ช่วยเหลือ</h2>
-                                <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100 mb-4 flex items-center gap-4">
-                                    <div className="w-16 h-16 rounded-full overflow-hidden bg-gray-200 shrink-0 border-2 border-white shadow-sm">
-                                        {/* รูปพี่ภีม: ใส่ URL รูปภาพตรงนี้แทน HARDCODED_LOGO ได้เลยครับ */}
-                                        <img src={HARDCODED_LOGO} className="w-full h-full object-cover" />
-                                    </div>
-                                    <div>
-                                        <h3 className="font-bold text-gray-800 text-sm">นายภูธนากร หงษ์ทอง</h3>
-                                        <p className="text-[#C8102E] text-xs font-bold">(พี่ภีม)</p>
-                                        <p className="text-[10px] text-gray-500 mt-1 leading-tight">เลขานุการสภานักเรียน<br/>โรงเรียนคำม่วง</p>
+                        <div className="fixed inset-0 z-[9990] bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in" onClick={()=>setShowInfoModal(false)}>
+                            <div className="bg-white rounded-[2rem] w-full max-w-sm shadow-2xl relative animate-in zoom-in-95 overflow-hidden flex flex-col" onClick={e=>e.stopPropagation()}>
+                                <button onClick={()=>setShowInfoModal(false)} className="absolute top-3 right-3 w-8 h-8 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-500 flex items-center justify-center transition-colors"><i className="ph ph-x"></i></button>
+                                <div className="flex flex-row p-6 gap-5 items-center border-b border-gray-100 mt-2">
+                                    <img src="https://placehold.co/200x200/e2e8f0/64748b?text=Profile" className="w-20 h-20 rounded-full object-cover border-2 border-gray-100 shrink-0" crossOrigin="anonymous"/>
+                                    <div className="text-left">
+                                        <h3 className="font-black text-gray-800 text-lg leading-tight mb-1">นายภูธนากร หงษ์ทอง</h3>
+                                        <p className="text-[#C8102E] text-sm font-bold mb-2">(พี่ภีม)</p>
+                                        <span className="text-[10px] text-gray-600 bg-gray-100 px-2.5 py-1 rounded-md font-medium">เลขานุการสภานักเรียน</span>
                                     </div>
                                 </div>
-                                <p className="text-gray-500 text-xs mb-4 text-center">หากลืมรหัสผ่าน หรือพบปัญหาการใช้งานระบบ สามารถกดติดต่อแอดมินผ่าน LINE ได้เลยครับ</p>
-                                <a href="https://line.me/ti/p/~470aijh" target="_blank" rel="noreferrer" className="w-full flex items-center justify-center gap-2 py-3 bg-[#00B900] hover:bg-[#009900] text-white rounded-xl font-bold transition-all active:scale-95 text-sm shadow-md shadow-green-500/20">
-                                    <i className="ph ph-chat-circle-dots text-lg"></i> ทักแชท LINE
-                                </a>
-                                <button onClick={()=>setShowInfoModal(false)} className="w-full mt-3 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl font-bold transition-colors text-sm">ปิดหน้าต่าง</button>
+                                <div className="p-5 bg-gray-50">
+                                    <a href="https://line.me/ti/p/~470aijh" target="_blank" className="w-full flex items-center justify-center gap-2 py-3 bg-[#00B900] hover:bg-[#009900] text-white rounded-xl font-bold shadow-md transition-all active:scale-95 text-sm">
+                                        <i className="ph ph-chat-circle-dots text-lg"></i> คุยผ่าน LINE
+                                    </a>
+                                </div>
                             </div>
                         </div>
                     )}
@@ -2456,7 +2452,7 @@
                     )}
                     
                     {toast && (
-                        <div className="fixed bottom-24 md:bottom-28 left-1/2 transform -translate-x-1/2 z-[999999] bg-gray-800 text-white px-5 py-3 rounded-xl shadow-2xl animate-in slide-in-from-bottom-4 fade-in font-medium text-sm flex items-center gap-2 whitespace-nowrap">
+                        <div className="fixed bottom-24 md:bottom-8 left-1/2 transform -translate-x-1/2 z-[999999] bg-gray-800 text-white px-5 py-3 rounded-xl shadow-2xl animate-in slide-in-from-bottom-4 fade-in font-medium text-sm flex items-center gap-2 whitespace-nowrap">
                             <i className="ph ph-info"></i> {toast}
                         </div>
                     )}
@@ -2464,45 +2460,32 @@
                     {/* Bottom Nav สำหรับ Mobile */}
                     <div className="md:hidden fixed bottom-0 w-full z-50">
                         <div className="absolute inset-0 bg-white/90 backdrop-blur-xl border-t border-gray-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]"></div>
-                        <div className="relative flex justify-between px-2 sm:px-6 items-end pb-safe h-[65px]">
-                            
-                            <button onClick={() => setCurrentRoute('dashboard')} className={`flex-1 flex flex-col items-center justify-center pb-2.5 pt-3 transition-all ${currentRoute === 'dashboard' ? 'text-[#C8102E]' : 'text-gray-400 hover:text-gray-500'}`}>
-                                <i className={`ph ${currentRoute === 'dashboard' ? 'ph-house ph-fill' : 'ph-house'} text-[22px] mb-1.5`}></i>
-                                <span className={`text-[10px] font-bold ${currentRoute === 'dashboard' ? 'text-[#C8102E]' : ''}`}>หน้าแรก</span>
+                        <div className="relative flex justify-around items-center p-1.5 pb-safe">
+                            <button onClick={() => setCurrentRoute('dashboard')} className={`flex flex-col items-center p-2 w-16 transition-all ${currentRoute === 'dashboard' ? 'text-[#C8102E]' : 'text-gray-500'}`}>
+                                <div className={`p-1.5 rounded-xl mb-1 flex items-center justify-center ${currentRoute === 'dashboard' ? 'bg-[#FDECEF]' : 'bg-transparent'}`}><i className={`ph ${currentRoute === 'dashboard' ? 'ph-house ph-fill' : 'ph-house'} text-[24px]`}></i></div>
+                                <span className="text-[10px] font-medium truncate w-full text-center">หน้าแรก</span>
+                            </button>
+                            <button onClick={() => setCurrentRoute('leaderboard')} className={`flex flex-col items-center p-2 w-16 transition-all ${currentRoute === 'leaderboard' ? 'text-[#C8102E]' : 'text-gray-500'}`}>
+                                <div className={`p-1.5 rounded-xl mb-1 flex items-center justify-center ${currentRoute === 'leaderboard' ? 'bg-[#FDECEF]' : 'bg-transparent'}`}><i className={`ph ${currentRoute === 'leaderboard' ? 'ph-trophy ph-fill' : 'ph-trophy'} text-[24px]`}></i></div>
+                                <span className="text-[10px] font-medium truncate w-full text-center">อันดับ</span>
+                            </button>
+                            <button onClick={() => setCurrentRoute('history')} className={`flex flex-col items-center p-2 w-16 transition-all ${currentRoute === 'history' ? 'text-[#C8102E]' : 'text-gray-500'}`}>
+                                <div className={`p-1.5 rounded-xl mb-1 flex items-center justify-center ${currentRoute === 'history' ? 'bg-[#FDECEF]' : 'bg-transparent'}`}><i className={`ph ${currentRoute === 'history' ? 'ph-clock-counter-clockwise ph-fill' : 'ph-clock-counter-clockwise'} text-[24px]`}></i></div>
+                                <span className="text-[10px] font-medium truncate w-full text-center">ประวัติ</span>
                             </button>
                             
-                            <button onClick={() => setCurrentRoute('leaderboard')} className={`flex-1 flex flex-col items-center justify-center pb-2.5 pt-3 transition-all ${currentRoute === 'leaderboard' ? 'text-[#C8102E]' : 'text-gray-400 hover:text-gray-500'}`}>
-                                <i className={`ph ${currentRoute === 'leaderboard' ? 'ph-trophy ph-fill' : 'ph-trophy'} text-[22px] mb-1.5`}></i>
-                                <span className={`text-[10px] font-bold ${currentRoute === 'leaderboard' ? 'text-[#C8102E]' : ''}`}>อันดับ</span>
-                            </button>
-                            
-                            {/* ปุ่มตรงกลาง (FAB) */}
-                            <div className="relative -top-5 flex justify-center flex-none w-[70px]">
-                                {appMode === 'guest' ? (
-                                    <button onClick={()=>setShowAnnouncement(true)} className="w-14 h-14 rounded-full bg-[#C8102E] text-white shadow-[0_4px_15px_rgba(200,16,46,0.4)] border-4 border-[#F3F4F6] flex items-center justify-center transition-transform active:scale-95">
-                                        <i className="ph ph-megaphone text-2xl"></i>
-                                    </button>
-                                ) : (
-                                    <button onClick={()=>setCurrentRoute('inspect')} className={`w-14 h-14 rounded-full text-white shadow-[0_4px_15px_rgba(200,16,46,0.4)] border-4 border-[#F3F4F6] flex items-center justify-center transition-transform active:scale-95 ${currentRoute === 'inspect' ? 'bg-black' : 'bg-[#C8102E]'}`}>
-                                        <i className="ph ph-clipboard-text text-2xl"></i>
-                                    </button>
-                                )}
-                            </div>
-
-                            <button onClick={() => setCurrentRoute('history')} className={`flex-1 flex flex-col items-center justify-center pb-2.5 pt-3 transition-all ${currentRoute === 'history' ? 'text-[#C8102E]' : 'text-gray-400 hover:text-gray-500'}`}>
-                                <i className={`ph ${currentRoute === 'history' ? 'ph-clock-counter-clockwise ph-fill' : 'ph-clock-counter-clockwise'} text-[22px] mb-1.5`}></i>
-                                <span className={`text-[10px] font-bold ${currentRoute === 'history' ? 'text-[#C8102E]' : ''}`}>ประวัติ</span>
-                            </button>
-                            
-                            {appMode === 'guest' ? (
-                                <button onClick={() => setShowInfoModal(true)} className={`flex-1 flex flex-col items-center justify-center pb-2.5 pt-3 transition-all text-gray-400 hover:text-gray-500`}>
-                                    <i className={`ph ph-question text-[22px] mb-1.5`}></i>
-                                    <span className={`text-[10px] font-bold`}>ช่วยเหลือ</span>
+                            {(appMode === 'admin' || appMode === 'inspector') && (
+                                <button onClick={() => setCurrentRoute('inspect')} className={`flex flex-col items-center p-2 w-16 transition-all ${currentRoute === 'inspect' ? 'text-[#C8102E]' : 'text-gray-500'}`}>
+                                    <div className={`p-1.5 rounded-xl mb-1 flex items-center justify-center ${currentRoute === 'inspect' ? 'bg-[#FDECEF]' : 'bg-transparent'}`}><i className={`ph ${currentRoute === 'inspect' ? 'ph-clipboard-text ph-fill' : 'ph-clipboard-text'} text-[24px]`}></i></div>
+                                    <span className="text-[10px] font-medium truncate w-full text-center">ประเมิน</span>
                                 </button>
-                            ) : (
-                                <div className="flex-1"></div> /* ช่องว่างเพื่อความสมดุล */
                             )}
-
+                            {appMode === 'admin' && (
+                                <button onClick={() => setCurrentRoute('settings')} className={`flex flex-col items-center p-2 w-16 transition-all ${currentRoute === 'settings' ? 'text-[#C8102E]' : 'text-gray-500'}`}>
+                                    <div className={`p-1.5 rounded-xl mb-1 flex items-center justify-center ${currentRoute === 'settings' ? 'bg-[#FDECEF]' : 'bg-transparent'}`}><i className={`ph ${currentRoute === 'settings' ? 'ph-gear ph-fill' : 'ph-gear'} text-[24px]`}></i></div>
+                                    <span className="text-[10px] font-medium truncate w-full text-center">ตั้งค่า</span>
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
