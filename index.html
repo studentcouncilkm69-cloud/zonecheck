@@ -15,7 +15,7 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
-    <!-- Phosphor Icons -->
+    <!-- Phosphor Icons (Theme เดียวกับ Student Voice) -->
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
     
     <!-- PDF & Excel Export -->
@@ -23,13 +23,13 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
     
-    <!-- Fonts -->
+    <!-- Fonts (Noto Sans Thai แบบ Student Voice) -->
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700;900&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
     
     <style>
         html, body { 
             font-family: 'Noto Sans Thai', sans-serif !important; 
-            background-color: #E5E7EB;
+            background-color: #E5E7EB; /* สีพื้นหลังโทนเทาแบบ Student Voice */
             overscroll-behavior: none; 
             -webkit-overflow-scrolling: touch;
             -webkit-tap-highlight-color: transparent;
@@ -55,10 +55,11 @@
         
         .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
         
+        /* Checkbox Custom Theme สีแดง #C8102E */
         .checkbox-custom:checked + div { background-color: #C8102E; border-color: #C8102E; }
         .checkbox-custom:checked + div svg { display: block; }
 
-        /* PDF Export Styles */
+        /* PDF Export Styles - Reverted to Original Purple Theme 100% */
         .pdf-export-wrapper {
             font-family: 'Sarabun', sans-serif !important;
             color: #333;
@@ -78,6 +79,8 @@
         .pdf-table.detailed-table { font-size: 12px; }
         .pdf-table.detailed-table th { font-size: 12px; padding: 6px 2px; }
         .col-purple { color: #7c3aed !important; font-weight: bold; }
+
+        .nav-item { transition: all 0.2s ease; position: relative; }
     </style>
 </head>
 <body>
@@ -86,12 +89,13 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo, useRef } = React;
 
-        // ⚠️ สำคัญมาก: ใส่ URL ของ ZoneCheck Backend (REST API)
-        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxp7RJqJIajrEx8J9IVnJC75saIt_FeiQDUxNgxnP7vrYOy7xcYy77RqXljRUXv_xHm/exec"; 
+        // ⚠️ สำคัญมาก: ใส่ URL ของ ZoneCheck Backend (REST API) ที่ได้จาก Google Apps Script
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby3CKwBAOiz6dJQWI-t8nabgSv-46yTcAI8QZHR2KFWtrGJSHuKHdnm7-sCDsfL26yu/exec"; 
 
         const HARDCODED_LOGO = "https://i.postimg.cc/wBN5btrp/rong-re-yn-kham-wng.png";
         const HARDCODED_NAME = "STUDENT COUNCIL • KHAMMUANG SCHOOL";
 
+        // ฟังก์ชันจัดการ LocalStorage ป้องกัน Error
         const safeGetItem = (key) => { try { return localStorage.getItem(key); } catch(e) { return null; } };
         const safeSetItem = (key, val) => { try { localStorage.setItem(key, val); } catch(e) {} };
         const safeRemoveItem = (key) => { try { localStorage.removeItem(key); } catch(e) {} };
@@ -115,7 +119,7 @@
                         <div className="h-[100dvh] bg-red-50 p-8 flex flex-col items-center justify-center text-center">
                             <i className="ph ph-warning-circle text-red-500 mb-4 text-6xl"></i>
                             <h1 className="text-3xl font-bold text-red-600 mb-2">⚠️ ระบบขัดข้อง</h1>
-                            <p className="text-red-500 mb-4 text-sm font-medium">ตรวจพบข้อผิดพลาด กรุณากดปุ่มด้านล่างเพื่อเริ่มใหม่</p>
+                            <p className="text-red-500 mb-4 text-sm font-medium">ตรวจพบข้อผิดพลาด หรืออินเทอร์เน็ตไม่เสถียร<br/>กรุณากดปุ่มด้านล่างเพื่อเริ่มใหม่</p>
                             <button onClick={() => { 
                                 safeRemoveItem('zc26_rooms'); safeRemoveItem('zc26_inspectors'); 
                                 safeRemoveItem('zc26_inspections'); safeRemoveItem('zc26_settings'); 
@@ -250,7 +254,7 @@
             const [logoInput, setLogoInput] = useState('');
             const [schoolLogoInput, setSchoolLogoInput] = useState('');
             const [zoneMapInput, setZoneMapInput] = useState(''); 
-            const [roomMapInput, setRoomMapInput] = useState(''); 
+            const [roomMapInput, setRoomMapInput] = useState('');
             const [mainBannerInput, setMainBannerInput] = useState(''); 
             const [popupBannerInput, setPopupBannerInput] = useState(''); 
             const [announceBannerInput, setAnnounceBannerInput] = useState(''); 
@@ -270,7 +274,7 @@
                     setLogoInput(settings.logo_url || '');
                     setSchoolLogoInput(settings.school_logo_url || '');
                     setZoneMapInput(settings.zone_map_url || ''); 
-                    setRoomMapInput(settings.room_map_url || ''); 
+                    setRoomMapInput(settings.room_map_url || '');
                     setMainBannerInput(settings.main_banner_url || '');
                     setPopupBannerInput(settings.popup_banner_url || '');
                     setAnnounceBannerInput(settings.announce_banner_url || settings.banner_url || '');
@@ -509,6 +513,7 @@
                             const ctx = canvas.getContext('2d');
                             ctx.drawImage(img, 0, 0, width, height);
                             
+                            // วาดลายน้ำ
                             const roomName = inspectModal.room ? (inspectModal.room.name || '').replace('ม.', '') : 'ไม่ระบุ';
                             const now = new Date();
                             const months = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
@@ -529,6 +534,7 @@
                             
                             const boxX = 20; const boxY = height - boxHeight - 20;
 
+                            // กรอบโปร่งแสงสีแดง #C8102E
                             ctx.fillStyle = "rgba(200, 16, 46, 0.75)";
                             ctx.beginPath();
                             if(ctx.roundRect) ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 14); 
@@ -1513,19 +1519,21 @@
                             </div>
                             
                             <div className="flex items-center gap-2 ml-2 flex-shrink-0">
-                                <button onClick={() => setShowAnnouncement(true)} className="text-[#C8102E] hover:text-red-800 transition-colors w-10 h-10 flex items-center justify-center rounded-full bg-red-50 border border-red-100 shadow-sm active:scale-95"><i className="ph ph-megaphone text-xl"></i></button>
                                 {appMode === 'guest' && (
-                                    <button onClick={()=>setShowInfoModal(true)} className="text-gray-500 hover:text-gray-700 transition-colors w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 border border-gray-200 shadow-sm active:scale-95"><i className="ph ph-question text-xl"></i></button>
+                                    <button onClick={() => setShowAnnouncement(true)} className="text-[#C8102E] hover:text-red-800 transition-colors w-10 h-10 flex items-center justify-center rounded-full bg-red-50 border border-red-100 shadow-sm active:scale-95"><i className="ph ph-megaphone text-xl"></i></button>
                                 )}
-                                {appMode !== 'guest' && (
+                                <button onClick={handleSync} className="text-gray-400 hover:text-[#C8102E] transition-colors w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 border border-gray-100 shadow-sm active:scale-95"><i className={`ph ph-arrows-clockwise text-xl ${isSyncing ? "animate-spin text-[#C8102E]" : ""}`}></i></button>
+                                {appMode === 'guest' ? (
+                                    <button onClick={()=>setShowInfoModal(true)} className="text-gray-500 hover:text-gray-700 transition-colors w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 border border-gray-200 shadow-sm active:scale-95"><i className="ph ph-question text-xl"></i></button>
+                                ) : (
                                     <button onClick={() => { showConfirm('ต้องการออกจากระบบใช่หรือไม่?', () => { setAppMode('guest'); setInputPasscode(''); setCurrentUser(null); setCurrentRoute('dashboard'); }); }} className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-900 text-white hover:bg-black transition-colors shadow-sm active:scale-95"><i className="ph ph-sign-out text-xl"></i></button>
                                 )}
                             </div>
                         </div>
                     </header>
 
-                    {/* การแสดงผลหน้าต่างๆ (เพิ่ม pb ให้เลื่อนลงได้สุดบนมือถือ) */}
-                    <main className="flex-1 flex flex-col overflow-y-auto relative pb-[90px] md:pb-8 custom-scrollbar p-4 md:p-8 max-w-5xl mx-auto w-full">
+                    {/* การแสดงผลหน้าต่างๆ (เพิ่ม pb-28 เพื่อให้เลื่อนสุดทางได้บน iPad และมือถือ) */}
+                    <main className="flex-1 flex flex-col overflow-y-auto relative pb-28 md:pb-12 custom-scrollbar p-4 md:p-8 max-w-5xl mx-auto w-full">
                         
                         {/* --- เส้นทาง: หน้าแรก (Dashboard) --- */}
                         {currentRoute === 'dashboard' && (
@@ -1546,30 +1554,66 @@
                                     </div>
                                 )}
 
-                                {/* ความคืบหน้าการตรวจ */}
-                                <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 flex flex-col md:flex-row md:items-center gap-6">
-                                    <div className="flex-shrink-0">
-                                        <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2 mb-1"><i className="ph ph-check-square text-[#C8102E] text-lg"></i> ความคืบหน้าการตรวจ</h3>
-                                        <p className="text-[10px] text-gray-400 font-medium">อัปเดตข้อมูลของวันนี้</p>
-                                    </div>
-                                    <div className="flex-1 flex flex-col gap-4 w-full">
-                                        <div>
-                                            <div className="flex justify-between items-end mb-1.5">
-                                                <span className="text-xs font-bold text-gray-600 flex items-center gap-1.5"><i className="ph ph-buildings text-blue-500"></i> ห้องเรียน</span>
-                                                <span className="text-sm font-black text-blue-600">{inspectProgress.roomDone} <span className="text-xs text-gray-400 font-medium">/ {inspectProgress.roomTotal}</span></span>
+                                <div>
+                                    {/* ความคืบหน้าการตรวจ */}
+                                    <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 flex flex-col md:flex-row md:items-center gap-6">
+                                        <div className="flex-shrink-0">
+                                            <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2 mb-1"><i className="ph ph-check-square text-[#C8102E] text-lg"></i> ความคืบหน้าการตรวจ</h3>
+                                            <p className="text-[10px] text-gray-400 font-medium">อัปเดตข้อมูลของวันนี้</p>
+                                        </div>
+                                        <div className="flex-1 flex flex-col gap-4 w-full">
+                                            <div>
+                                                <div className="flex justify-between items-end mb-1.5">
+                                                    <span className="text-xs font-bold text-gray-600 flex items-center gap-1.5"><i className="ph ph-buildings text-blue-500"></i> ห้องเรียน</span>
+                                                    <span className="text-sm font-black text-blue-600">{inspectProgress.roomDone} <span className="text-xs text-gray-400 font-medium">/ {inspectProgress.roomTotal}</span></span>
+                                                </div>
+                                                <div className="w-full bg-gray-100 rounded-full h-2">
+                                                    <div className="bg-gradient-to-r from-blue-400 to-blue-600 h-2 rounded-full transition-all duration-1000" style={{width: `${inspectProgress.roomPct}%`}}></div>
+                                                </div>
                                             </div>
-                                            <div className="w-full bg-gray-100 rounded-full h-2">
-                                                <div className="bg-gradient-to-r from-blue-400 to-blue-600 h-2 rounded-full transition-all duration-1000" style={{width: `${inspectProgress.roomPct}%`}}></div>
+                                            <div>
+                                                <div className="flex justify-between items-end mb-1.5">
+                                                    <span className="text-xs font-bold text-gray-600 flex items-center gap-1.5"><i className="ph ph-map-pin text-fuchsia-500"></i> เขตพื้นที่</span>
+                                                    <span className="text-sm font-black text-fuchsia-600">{inspectProgress.zoneDone} <span className="text-xs text-gray-400 font-medium">/ {inspectProgress.zoneTotal}</span></span>
+                                                </div>
+                                                <div className="w-full bg-gray-100 rounded-full h-2">
+                                                    <div className="bg-gradient-to-r from-fuchsia-400 to-fuchsia-600 h-2 rounded-full transition-all duration-1000" style={{width: `${inspectProgress.zonePct}%`}}></div>
+                                                </div>
                                             </div>
                                         </div>
-                                        <div>
-                                            <div className="flex justify-between items-end mb-1.5">
-                                                <span className="text-xs font-bold text-gray-600 flex items-center gap-1.5"><i className="ph ph-map-pin text-fuchsia-500"></i> เขตพื้นที่</span>
-                                                <span className="text-sm font-black text-fuchsia-600">{inspectProgress.zoneDone} <span className="text-xs text-gray-400 font-medium">/ {inspectProgress.zoneTotal}</span></span>
-                                            </div>
-                                            <div className="w-full bg-gray-100 rounded-full h-2">
-                                                <div className="bg-gradient-to-r from-fuchsia-400 to-fuchsia-600 h-2 rounded-full transition-all duration-1000" style={{width: `${inspectProgress.zonePct}%`}}></div>
-                                            </div>
+                                    </div>
+                                </div>
+                                
+                                {/* ตารางอันดับ Top 5 ในหน้า Dashboard (เอากลับมาให้ครบถ้วน) */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+                                    <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 flex flex-col">
+                                        <div className="flex justify-between items-center mb-4">
+                                            <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2"><i className="ph ph-trophy text-amber-500 text-lg ph-fill"></i> อันดับคะแนนรวมทั้งหมด</h3>
+                                            <button onClick={() => { setLeaderboardTab('all'); setCurrentRoute('leaderboard'); }} className="text-[10px] font-bold text-[#C8102E] hover:text-red-800">ดูทั้งหมด</button>
+                                        </div>
+                                        <div className="flex-1 flex flex-col justify-center space-y-2">
+                                            {top5AllTime.length === 0 ? <p className="text-center text-gray-400 font-medium text-xs py-4">ยังไม่มีข้อมูล</p> : top5AllTime.map((item, idx) => (
+                                                <div key={idx} className="flex items-center gap-3 p-2 bg-gray-50 rounded-xl border border-gray-100/50">
+                                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${idx === 0 ? 'bg-amber-100 text-amber-600' : idx === 1 ? 'bg-gray-200 text-gray-600' : idx === 2 ? 'bg-orange-100 text-orange-600' : 'bg-white text-gray-400 border border-gray-200'}`}>{idx+1}</div>
+                                                    <div className="flex-1"><p className="font-bold text-gray-700 text-sm">{item.room?.name || 'ไม่ทราบ'}</p></div>
+                                                    <div className="text-right"><span className="font-black text-[#C8102E] text-xs">{item.score} <span className="text-[8px] font-normal text-gray-400">pts</span></span></div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 flex flex-col">
+                                        <div className="flex justify-between items-center mb-4">
+                                            <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2"><i className="ph ph-calendar text-blue-500 text-lg ph-fill"></i> อันดับประจำเดือน</h3>
+                                            <button onClick={() => { setLeaderboardTab('monthly'); setCurrentRoute('leaderboard'); }} className="text-[10px] font-bold text-[#C8102E] hover:text-red-800">ดูทั้งหมด</button>
+                                        </div>
+                                        <div className="flex-1 flex flex-col justify-center space-y-2">
+                                            {top5Monthly.length === 0 ? <p className="text-center text-gray-400 font-medium text-xs py-4">ยังไม่มีข้อมูล</p> : top5Monthly.map((item, idx) => (
+                                                <div key={idx} className="flex items-center gap-3 p-2 bg-gray-50 rounded-xl border border-gray-100/50">
+                                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${idx === 0 ? 'bg-amber-100 text-amber-600' : idx === 1 ? 'bg-gray-200 text-gray-600' : idx === 2 ? 'bg-orange-100 text-orange-600' : 'bg-white text-gray-400 border border-gray-200'}`}>{idx+1}</div>
+                                                    <div className="flex-1"><p className="font-bold text-gray-700 text-sm">{item.room?.name || 'ไม่ทราบ'}</p></div>
+                                                    <div className="text-right"><span className="font-black text-blue-600 text-xs">{item.score} <span className="text-[8px] font-normal text-gray-400">pts</span></span></div>
+                                                </div>
+                                            ))}
                                         </div>
                                     </div>
                                 </div>
@@ -1631,7 +1675,8 @@
                                                 </div> 
                                             )}
                                         </div>
-                                        <div className="bg-white rounded-[2.5rem] p-4 pb-12 shadow-[0_-15px_40px_-15px_rgba(0,0,0,0.4)] relative z-20 md:p-8">
+                                        {/* เพิ่ม pb-24 เพื่อให้แน่ใจว่าเลื่อนหน้าจอลงไปดูอันดับสุดท้ายได้สุดทาง */}
+                                        <div className="bg-white rounded-[2.5rem] p-4 pb-24 shadow-[0_-15px_40px_-15px_rgba(0,0,0,0.4)] relative z-20 md:p-8">
                                             <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-4 md:mb-8"></div>
                                             {currentLeaderboardView.length <= 3 && exportSortOrder === 'score' ? ( <p className="text-center text-gray-400 font-medium py-4">สิ้นสุดรายชื่อ</p> ) : (
                                                 <div className="space-y-3 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-4 md:space-y-0">
@@ -1652,7 +1697,7 @@
                                                 </div>
                                             )}
                                             
-                                            {/* ปุ่มดาวน์โหลดในหน้า Leaderboard (แสดงเฉพาะ Admin/Inspector) */}
+                                            {/* ปุ่มดาวน์โหลดในหน้า Leaderboard แสดงเฉพาะแอดมิน/ผู้ตรวจ (นักเรียนไม่เห็น) */}
                                             {appMode !== 'guest' && (
                                                 <div className="mt-8 flex justify-end gap-2 border-t pt-4 flex-wrap">
                                                     <select value={exportSortOrder} onChange={e => setExportSortOrder(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-lg p-2 text-xs font-bold text-gray-600 outline-none">
@@ -1749,7 +1794,7 @@
                                                 )}
                                             </div>
                                             
-                                            {/* ปุ่มดาวน์โหลด Export History (แสดงเฉพาะ Admin/Inspector) */}
+                                            {/* ปุ่มดาวน์โหลด Export History แสดงเฉพาะแอดมิน/ผู้ตรวจ (นักเรียนไม่เห็น) */}
                                             {appMode !== 'guest' && (
                                                 <div className="mt-6 flex justify-end gap-2 border-t pt-4 flex-wrap">
                                                     <select value={exportDestination} onChange={e => setExportDestination(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-lg p-2 text-xs font-bold text-gray-600 outline-none hidden md:block">
@@ -1860,14 +1905,15 @@
                         {/* --- เส้นทาง: ประเมินผล (Inspect) --- */}
                         {(appMode === 'admin' || appMode === 'inspector') && currentRoute === 'inspect' && (
                              <div className="animate-in fade-in space-y-4 pb-12">
-                                {/* สลับปุ่มแผนผัง: ห้องเรียน (ซ้าย) / เขตพื้นที่ (ขวา) */}
                                 {(settings?.room_map_url || settings?.zone_map_url) && (
                                     <div className="flex gap-3 mb-4">
+                                        {/* แผนผังห้องเรียน ซ้ายมือ */}
                                         {settings?.room_map_url && (
                                             <button onClick={() => setShowRoomMap(true)} className="flex-1 bg-white border border-blue-200 text-blue-600 font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-sm hover:bg-blue-50 active:scale-95 transition-all text-sm">
                                                 <i className="ph ph-buildings text-lg"></i> แผนผังห้องเรียน
                                             </button>
                                         )}
+                                        {/* แผนผังเขตพื้นที่ ขวามือ */}
                                         {settings?.zone_map_url && (
                                             <button onClick={() => setShowZoneMap(true)} className="flex-1 bg-white border border-[#C8102E]/20 text-[#C8102E] font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-sm hover:bg-red-50 active:scale-95 transition-all text-sm">
                                                 <i className="ph ph-map-pin text-lg"></i> แผนผังเขตพื้นที่
@@ -1983,11 +2029,11 @@
                                             <input type="text" value={logoInput} onChange={e => setLogoInput(e.target.value)} placeholder="https://..." className="w-full p-3 rounded-xl border border-gray-200 outline-none font-medium text-sm focus:border-[#C8102E] bg-gray-50"/>
                                          </div>
                                          <div className="pt-2">
-                                            <label className="text-[10px] font-bold text-blue-600 mb-1 block uppercase">🗺️ แผนผังห้องเรียน</label>
+                                            <label className="text-[10px] font-bold text-blue-600 mb-1 block uppercase">🗺️ ลิงก์แผนผังห้องเรียน (โชว์ในหน้าประเมินผล)</label>
                                             <input type="text" value={roomMapInput} onChange={e => setRoomMapInput(e.target.value)} placeholder="https://..." className="w-full p-3 rounded-xl border border-blue-200 outline-none font-medium text-sm focus:border-blue-500 bg-blue-50/30"/>
                                          </div>
                                          <div className="pt-2">
-                                            <label className="text-[10px] font-bold text-fuchsia-600 mb-1 block uppercase">🗺️ แผนผังเขตพื้นที่</label>
+                                            <label className="text-[10px] font-bold text-fuchsia-600 mb-1 block uppercase">🗺️ ลิงก์แผนผังเขตพื้นที่ (โชว์ในหน้าประเมินผล)</label>
                                             <input type="text" value={zoneMapInput} onChange={e => setZoneMapInput(e.target.value)} placeholder="https://..." className="w-full p-3 rounded-xl border border-fuchsia-200 outline-none font-medium text-sm focus:border-fuchsia-500 bg-fuchsia-50/30"/>
                                          </div>
                                       </div>
@@ -2311,9 +2357,8 @@
                                 <div className="max-h-[60vh] overflow-y-auto p-6 space-y-4 custom-scrollbar">
                                     {settings?.announce_banner_url && <div className="w-full aspect-[16/9] rounded-xl overflow-hidden shadow-sm border border-gray-100 bg-gray-50"><img src={settings.announce_banner_url} alt="Announcement Banner" className="w-full h-full object-cover" /></div>}
                                     <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
-                                        {settings?.announcement_title && <h3 className="font-bold text-[#C8102E] mb-2">{settings?.announcement_title}</h3>}
-                                        <div className="whitespace-pre-line text-gray-700 text-sm font-medium leading-relaxed">{settings?.announcement_msg}</div>
-                                        {(!settings?.announcement_title && !settings?.announcement_msg) && <p className="text-gray-400 text-center text-sm font-medium">ยังไม่มีประกาศใหม่</p>}
+                                        <h3 className="font-bold text-[#C8102E] mb-2">{settings?.announcement_title || '📌 ประกาศจากระบบ'}</h3>
+                                        <div className="whitespace-pre-line text-gray-700 text-sm font-medium leading-relaxed">{settings?.announcement_msg || 'ยังไม่มีประกาศใหม่'}</div>
                                     </div>
                                 </div>
                             </div>
@@ -2378,24 +2423,25 @@
                         </div>
                     )}
 
+                    {/* หน้าต่างช่วยเหลือโฉมใหม่ (นามบัตรแนวนอน) */}
                     {showInfoModal && (
-                        <div className="fixed inset-0 z-[9990] bg-gray-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4 animate-in fade-in" onClick={()=>setShowInfoModal(false)}>
-                            <div className="bg-white rounded-[2rem] p-6 w-full max-w-sm shadow-2xl animate-in slide-in-from-bottom-full sm:zoom-in-95 text-center relative" onClick={e=>e.stopPropagation()}>
-                                <h2 className="text-xl font-black text-gray-800 mb-1 border-b border-gray-100 pb-3">ศูนย์ช่วยเหลือ</h2>
-                                <p className="text-gray-500 text-[12px] mb-6 mt-3">หากลืมรหัสผ่าน หรือพบปัญหาการใช้งานระบบ สามารถกดติดต่อแอดมินผ่าน LINE ได้เลยครับ</p>
+                        <div className="fixed inset-0 z-[9990] bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in" onClick={()=>setShowInfoModal(false)}>
+                            <div className="bg-white rounded-[2rem] p-6 w-full max-w-sm shadow-2xl animate-in zoom-in-95 relative" onClick={e=>e.stopPropagation()}>
+                                <h2 className="text-xl font-black text-gray-800 mb-1 border-b border-gray-100 pb-3 text-center">ศูนย์ช่วยเหลือ</h2>
+                                <p className="text-gray-500 text-[12px] mb-6 mt-3 text-center">หากลืมรหัสผ่าน หรือพบปัญหาการใช้งานระบบ<br/>สามารถกดติดต่อแอดมินผ่าน LINE ได้เลยครับ</p>
                                 
-                                <div className="flex flex-row items-center gap-4 text-left mb-6">
-                                    <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-gray-200 shadow-sm shrink-0 bg-gray-100 flex items-center justify-center">
-                                        <i className="ph ph-user text-4xl text-gray-400"></i>
+                                <div className="flex flex-row items-center gap-4 text-left mb-6 bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                                    <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-white shadow-md shrink-0 bg-gray-200 flex items-center justify-center">
+                                        <i className="ph ph-user text-3xl text-gray-400"></i>
                                     </div>
                                     <div>
-                                        <p className="font-bold text-gray-800 text-sm mb-1">นายภูธนากร หงษ์ทอง (พี่ภีม)</p>
-                                        <p className="text-[11px] text-gray-500">เลขานุการสภานักเรียนโรงเรียนคำม่วง</p>
+                                        <p className="font-bold text-gray-800 text-sm mb-0.5">นายภูธนากร หงษ์ทอง (พี่ภีม)</p>
+                                        <p className="text-[10px] text-gray-500 font-medium">เลขานุการสภานักเรียนโรงเรียนคำม่วง</p>
                                     </div>
                                 </div>
 
                                 <a href="https://line.me/ti/p/~470aijh" target="_blank" className="w-full flex items-center justify-center gap-2 py-3 bg-[#00B900] hover:bg-[#009900] text-white rounded-xl font-bold transition-all active:scale-95 text-sm shadow-md shadow-green-500/20 mb-4">
-                                    <i className="ph ph-chat-circle-dots text-lg"></i> คุยผ่าน LINE
+                                    <i className="ph ph-chat-circle-dots text-lg"></i> ติดต่อผ่าน LINE
                                 </a>
 
                                 <button onClick={()=>setShowInfoModal(false)} className="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl font-bold transition-colors text-sm">ปิดหน้าต่าง</button>
@@ -2411,7 +2457,7 @@
                     )}
                     
                     {toast && (
-                        <div className="fixed bottom-28 md:bottom-8 left-1/2 transform -translate-x-1/2 z-[999999] bg-gray-800 text-white px-5 py-3 rounded-xl shadow-2xl animate-in slide-in-from-bottom-4 fade-in font-medium text-sm flex items-center gap-2 whitespace-nowrap">
+                        <div className="fixed bottom-24 md:bottom-8 left-1/2 transform -translate-x-1/2 z-[999999] bg-gray-800 text-white px-5 py-3 rounded-xl shadow-2xl animate-in slide-in-from-bottom-4 fade-in font-medium text-sm flex items-center gap-2 whitespace-nowrap">
                             <i className="ph ph-info"></i> {toast}
                         </div>
                     )}
@@ -2428,23 +2474,42 @@
                                 <div className={`p-1.5 rounded-xl mb-1 flex items-center justify-center ${currentRoute === 'leaderboard' ? 'bg-[#FDECEF]' : 'bg-transparent'}`}><i className={`ph ${currentRoute === 'leaderboard' ? 'ph-trophy ph-fill' : 'ph-trophy'} text-[24px]`}></i></div>
                                 <span className="text-[10px] font-medium truncate w-full text-center">อันดับ</span>
                             </button>
+                            
+                            {/* ปุ่มตรงกลางลอยนูน (ประกาศ / ประเมินผล) */}
+                            {appMode === 'guest' ? (
+                                <button onClick={() => setShowAnnouncement(true)} className="flex flex-col items-center p-0 w-16 transition-all relative -top-5">
+                                    <div className="w-14 h-14 bg-gradient-to-tr from-[#C8102E] to-red-600 text-white rounded-full flex items-center justify-center shadow-lg shadow-red-500/40 active:scale-95 transition-transform border-4 border-[#F3F4F6]">
+                                        <i className="ph ph-megaphone text-2xl"></i>
+                                    </div>
+                                    <span className="text-[10px] font-bold text-gray-500 mt-1 truncate w-full text-center">ประกาศ</span>
+                                </button>
+                            ) : (
+                                <button onClick={() => setCurrentRoute('inspect')} className="flex flex-col items-center p-0 w-16 transition-all relative -top-5">
+                                    <div className="w-14 h-14 bg-gray-900 text-white rounded-full flex items-center justify-center shadow-lg shadow-gray-900/40 active:scale-95 transition-transform border-4 border-[#F3F4F6]">
+                                        <i className="ph ph-clipboard-text text-2xl ph-fill"></i>
+                                    </div>
+                                    <span className={`text-[10px] font-bold mt-1 truncate w-full text-center ${currentRoute === 'inspect' ? 'text-[#C8102E]' : 'text-gray-500'}`}>ประเมินผล</span>
+                                </button>
+                            )}
+
                             <button onClick={() => setCurrentRoute('history')} className={`flex flex-col items-center p-2 w-16 transition-all ${currentRoute === 'history' ? 'text-[#C8102E]' : 'text-gray-500'}`}>
                                 <div className={`p-1.5 rounded-xl mb-1 flex items-center justify-center ${currentRoute === 'history' ? 'bg-[#FDECEF]' : 'bg-transparent'}`}><i className={`ph ${currentRoute === 'history' ? 'ph-clock-counter-clockwise ph-fill' : 'ph-clock-counter-clockwise'} text-[24px]`}></i></div>
                                 <span className="text-[10px] font-medium truncate w-full text-center">ประวัติ</span>
                             </button>
                             
-                            {(appMode === 'admin' || appMode === 'inspector') && (
-                                <button onClick={() => setCurrentRoute('inspect')} className={`flex flex-col items-center p-2 w-16 transition-all ${currentRoute === 'inspect' ? 'text-[#C8102E]' : 'text-gray-500'}`}>
-                                    <div className={`p-1.5 rounded-xl mb-1 flex items-center justify-center ${currentRoute === 'inspect' ? 'bg-[#FDECEF]' : 'bg-transparent'}`}><i className={`ph ${currentRoute === 'inspect' ? 'ph-clipboard-text ph-fill' : 'ph-clipboard-text'} text-[24px]`}></i></div>
-                                    <span className="text-[10px] font-medium truncate w-full text-center">ประเมิน</span>
+                            {appMode === 'guest' ? (
+                                <button onClick={() => setShowInfoModal(true)} className="flex flex-col items-center p-2 w-16 transition-all text-gray-500">
+                                    <div className="p-1.5 rounded-xl mb-1 flex items-center justify-center bg-transparent"><i className="ph ph-question text-[24px]"></i></div>
+                                    <span className="text-[10px] font-medium truncate w-full text-center">ช่วยเหลือ</span>
                                 </button>
-                            )}
-                            {appMode === 'admin' && (
+                            ) : (appMode === 'admin' ? (
                                 <button onClick={() => setCurrentRoute('settings')} className={`flex flex-col items-center p-2 w-16 transition-all ${currentRoute === 'settings' ? 'text-[#C8102E]' : 'text-gray-500'}`}>
                                     <div className={`p-1.5 rounded-xl mb-1 flex items-center justify-center ${currentRoute === 'settings' ? 'bg-[#FDECEF]' : 'bg-transparent'}`}><i className={`ph ${currentRoute === 'settings' ? 'ph-gear ph-fill' : 'ph-gear'} text-[24px]`}></i></div>
                                     <span className="text-[10px] font-medium truncate w-full text-center">ตั้งค่า</span>
                                 </button>
-                            )}
+                            ) : (
+                                <div className="w-16"></div>
+                            ))}
                         </div>
                     </div>
                 </div>
