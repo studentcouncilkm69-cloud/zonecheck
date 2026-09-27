@@ -90,8 +90,8 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo, useRef } = React;
 
-        // ⚠️ สำคัญมาก: ใส่ URL ของ ZoneCheck Backend (REST API) ที่เพิ่ง Deploy ใหม่
-        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxp7RJqJIajrEx8J9IVnJC75saIt_FeiQDUxNgxnP7vrYOy7xcYy77RqXljRUXv_xHm/exec"; 
+        // ⚠️ ลิงก์หลังบ้านที่เชื่อมต่อถูกต้องแล้ว
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby3CKwBAOiz6dJQWI-t8nabgSv-46yTcAI8QZHR2KFWtrGJSHuKHdnm7-sCDsfL26yu/exec"; 
 
         const HARDCODED_LOGO = "https://i.postimg.cc/wBN5btrp/rong-re-yn-kham-wng.png";
         const HARDCODED_NAME = "STUDENT COUNCIL • KHAMMUANG SCHOOL";
@@ -131,8 +131,6 @@
                 return this.props.children;
             }
         }
-
-        const defaultAnnouncement = `📌 เกณฑ์การให้คะแนนความสะอาด\n\n1. ห้องเรียน (เต็ม 10 คะแนน)\nทำครบรับข้อละ 2 คะแนน:\n• จัดโต๊ะเก้าอี้\n• นำขยะไปเท\n• ปิดหน้าต่างและปิดไฟ\n• กวาดถูพื้น\n• ลบกระดานดำ\n\n2. เขตพื้นที่ (เต็ม 10 คะแนน)\n• ดีเยี่ยม: +10\n• ดี: +8\n• พอใช้: +5\n• ปรับปรุง: +2\n\n⚠️ ข้ามการตรวจ = ไม่ได้คะแนน`;
 
         const initialSettings = { 
             passcode: "1234", master_passcode: "9999", is_maintenance: "false", visitor_count: "0",
@@ -184,7 +182,7 @@
             const [appMode, setAppMode] = useState('guest'); 
             const [currentRoute, setCurrentRoute] = useState('dashboard'); 
             const [showSplash, setShowSplash] = useState(true); 
-            // Toast โฉมใหม่ มุมขวาบน
+            // Toast Notification โฉมใหม่
             const [toast, setToast] = useState({ visible: false, message: '', type: 'info' });
             const toastTimeoutRef = useRef(null);
             const [isSyncing, setIsSyncing] = useState(false);
@@ -239,7 +237,7 @@
             const [evalComment, setEvalComment] = useState('');
             const [isSkipped, setIsSkipped] = useState(false); 
             const [inspectImage, setInspectImage] = useState(null); 
-            const [coInspectors, setCoInspectors] = useState([]); // รายชื่อผู้ตรวจร่วม
+            const [coInspectors, setCoInspectors] = useState([]); // รายชื่อเพื่อนร่วมตรวจ
             const fileInputRef = useRef(null);
 
             const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, message: '', onConfirm: null, isAlert: false });
@@ -361,6 +359,7 @@
                 tapTimeoutRef.current = setTimeout(() => { setLogoTaps(0); }, 3000);
             };
 
+            // ฟังก์ชันโชว์แจ้งเตือนโฉมใหม่
             const showToastMsg = (msg, type = 'info') => { 
                 if(toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
                 setToast({ visible: true, message: msg, type }); 
@@ -453,10 +452,10 @@
                 const d = new Date();
                 const currentMonthYear = `${thaiMonths[d.getMonth()]} ${d.getFullYear() + 543}`;
                 
-                showToastMsg(`☁️ กำลังส่งไฟล์เข้า Drive...`, 'info');
+                showToastMsg(`☁️ กำลังเริ่มส่งไฟล์เข้า Drive...`, 'info');
                 
                 if (base64Data.length > 6000000) { 
-                    showAlertMsg("❌ ไฟล์มีขนาดใหญ่เกินระบบจะรับได้อัตโนมัติ\nกรุณาเลือกดาวน์โหลด 'ลงเครื่อง' แทนครับ");
+                    showAlertMsg("❌ ไฟล์มีขนาดใหญ่เกินไป\nกรุณาเลือกดาวน์โหลด 'ลงเครื่อง' แทนครับ");
                     return Promise.reject('File too large');
                 }
 
@@ -484,7 +483,7 @@
                 const existInsp = validInspections.find(i => i.roomId === room.id && i.type === type && i.date && String(i.date).startsWith(targetDateStr));
                 
                 if(existInsp) { 
-                    showToastMsg(`มีผลประเมินของวันนี้อยู่แล้วครับ`, 'warning'); 
+                    showToastMsg(`ห้องนี้มีผลตรวจของวันนี้อยู่แล้วครับ`, 'warning'); 
                 } else {
                     setEvalComment('');
                     setInspectImage(null);
@@ -512,7 +511,7 @@
                 if(!file) return;
                 
                 setIsImageProcessing(true);
-                showToastMsg("📸 กำลังวาดลายน้ำ...", 'info');
+                showToastMsg("📸 กำลังประมวลผลรูปลายน้ำ...", 'info');
 
                 const reader = new FileReader();
                 reader.onload = (event) => {
@@ -569,12 +568,12 @@
                             setInspectImage({ fileName: file.name, base64: base64Only, mimeType: 'image/jpeg', dataUrl: dataUrl });
                             showToastMsg("✅ สร้างลายน้ำสำเร็จ", 'success');
                         } catch (err) {
-                            showAlertMsg("❌ สร้างลายน้ำไม่สำเร็จ: " + err.message);
+                            showAlertMsg("❌ เกิดข้อผิดพลาดในการสร้างลายน้ำ: " + err.message);
                         } finally {
                             setIsImageProcessing(false);
                         }
                     };
-                    img.onerror = () => { setIsImageProcessing(false); showAlertMsg("❌ ไม่สามารถโหลดรูปนี้ได้"); };
+                    img.onerror = () => { setIsImageProcessing(false); showAlertMsg("❌ ไม่สามารถโหลดรูปภาพนี้ได้"); };
                     img.src = event.target.result;
                 };
                 reader.readAsDataURL(file);
@@ -583,10 +582,10 @@
             const removeImage = () => { setInspectImage(null); if(fileInputRef.current) fileInputRef.current.value = ''; };
 
             const handleSubmitInspection = async () => {
-                if (isImageProcessing) return showToastMsg('⏳ กำลังประมวลผลลายน้ำ...', 'warning');
+                if (isImageProcessing) return showToastMsg('⏳ กรุณารอสักครู่ กำลังวาดลายน้ำ...', 'warning');
                 const loc = inspectModal.room; const type = inspectModal.type; if(!loc) return;
                 
-                if (isSkipped && (!evalComment || !evalComment.trim())) return showToastMsg('⚠️ กรุณาระบุ "หมายเหตุ" ด้วยครับ', 'warning');
+                if (isSkipped && (!evalComment || !evalComment.trim())) return showToastMsg('⚠️ กรุณาระบุ "หมายเหตุ" เมื่อเลือกข้ามการตรวจด้วยครับ', 'warning');
 
                 let totalScore = 0; let breakdown = {};
                 
@@ -613,7 +612,7 @@
                     finalDateISO = `${inspectModal.date}T${timePart}`;
                 }
 
-                // รวมชื่อผู้ตรวจ (หลัก + ร่วม)
+                // รวมชื่อผู้ตรวจและเพื่อน
                 const finalInspectorName = coInspectors.length > 0 
                     ? `${currentUser?.name}, ${coInspectors.join(', ')}` 
                     : (currentUser?.name || 'ไม่ระบุ');
@@ -622,7 +621,7 @@
                 try {
                     let photoUrl = '';
                     if (inspectImage && inspectImage.base64) {
-                        showToastMsg('📸 กำลังอัปโหลดรูปลง Drive...', 'info');
+                        showToastMsg('📸 กำลังอัปโหลดรูปภาพหลักฐานลง Drive...', 'info');
                         const targetMonthYear = formatMonthYearThai(inspectModal.date); 
                         const roomFileName = `${(loc.name||'').replace(/\//g,'-')}_${inspectModal.date}.jpg`;
                         
@@ -632,7 +631,7 @@
                             });
                             photoUrl = uploadRes.url;
                         } catch (err) {
-                            showAlertMsg('❌ อัปโหลดรูปไม่สำเร็จ (แต่คะแนนบันทึกแล้ว):\n' + err.message);
+                            showAlertMsg('❌ อัปโหลดรูปภาพไม่สำเร็จ (แต่จะบันทึกคะแนนให้ปกติ):\n' + err.message);
                         }
                     }
 
@@ -647,7 +646,7 @@
                     showToastMsg(`บันทึกผลสำเร็จ!`, 'success'); 
                     setInspectModal({ isOpen: false, room: null, type: 'room', date: new Date().toISOString().split('T')[0] });
                 } catch(e) { 
-                    showToastMsg('บันทึกล้มเหลว กรุณาลองใหม่', 'error'); 
+                    showToastMsg('บันทึกไม่สำเร็จ กรุณาลองใหม่', 'error'); 
                 } finally { 
                     setIsSavingData(false); 
                 }
@@ -655,7 +654,7 @@
 
             const handleResetTodayInspection = (roomId, roomName) => {
                 const targetDateStr = filterDate || new Date().toISOString().split('T')[0];
-                showConfirm(`ต้องการลบผลตรวจของห้อง ${roomName.replace('ม.', '')} ใช่หรือไม่?`, async () => {
+                showConfirm(`ต้องการลบผลตรวจของห้อง ${roomName.replace('ม.', '')} (ของวันที่ ${formatDateObj(targetDateStr)}) ทิ้งใช่หรือไม่?`, async () => {
                     const validInspections = Array.isArray(inspections) ? inspections : [];
                     const toDelete = validInspections.filter(i => i.roomId === roomId && i.date && String(i.date).startsWith(targetDateStr));
                     setInspections(validInspections.filter(i => !(i.roomId === roomId && i.date && String(i.date).startsWith(targetDateStr))));
@@ -664,21 +663,21 @@
                         for (const record of toDelete) { await syncToGASAsync('deleteInspection', record.id); }
                         showToastMsg(`ลบผลการประเมินแล้ว`, 'success');
                     } catch(e) {
-                        showToastMsg(`ลบประวัติล้มเหลว`, 'error');
+                        showToastMsg(`เกิดข้อผิดพลาดในการลบประวัติบน Server`, 'error');
                     }
                 });
             };
 
             const handleDeleteInspection = (id, fromModal = 'viewDetail') => {
-                showConfirm('ต้องการลบผลการตรวจนี้ใช่หรือไม่?', async () => {
+                showConfirm('คุณต้องการลบผลการตรวจนี้ใช่หรือไม่?', async () => {
                     try {
                         const validInspections = Array.isArray(inspections) ? inspections : [];
                         setInspections(validInspections.filter(i => i.id !== id)); 
                         await syncToGASAsync('deleteInspection', id); 
-                        showToastMsg('ลบสำเร็จ', 'success');
+                        showToastMsg('ลบประวัติสำเร็จ', 'success');
                         if (fromModal === 'viewDetail') setViewDetailModal(null);
                     } catch(e) {
-                        showToastMsg('ลบไม่สำเร็จ', 'error');
+                        showToastMsg('ลบไม่สำเร็จ กรุณาลองใหม่', 'error');
                     }
                 });
             };
@@ -946,7 +945,7 @@
                 try {
                     await syncToGASAsync('updateMultipleSettings', updates); 
                     showToastMsg('บันทึกความปลอดภัยสำเร็จ', 'success'); 
-                } catch(e) { showToastMsg('บันทึกล้มเหลว', 'error'); }
+                } catch(e) { showToastMsg('บันทึกล้มเหลว กรุณาลองใหม่', 'error'); }
             };
             
             const handleSaveMegaphoneAndLogo = async () => { 
@@ -976,7 +975,7 @@
                     await syncToGASAsync('updateMultipleSettings', updates);
                     if(!popupBannerInput) { safeRemoveItem('zc26_hide_banner_until'); }
                     showToastMsg('อัปเดตข้อมูลสำเร็จ', 'success'); 
-                } catch(e) { showToastMsg('อัปเดตล้มเหลว', 'error'); }
+                } catch(e) { showToastMsg('บันทึกล้มเหลว กรุณาลองใหม่', 'error'); }
             };
 
             const handleAddBulkInspectors = async () => {
@@ -989,8 +988,8 @@
                 try {
                     await syncToGASAsync('updateInspectors', newInspecs); 
                     setBulkInspectors(''); 
-                    showToastMsg('เพิ่มผู้ตรวจสำเร็จ', 'success');
-                } catch(e) { showToastMsg('เพิ่มล้มเหลว', 'error'); }
+                    showToastMsg('เพิ่มรายชื่อสำเร็จ', 'success');
+                } catch(e) { showToastMsg('เพิ่มรายชื่อล้มเหลว', 'error'); }
             };
 
             const handleDeleteInspector = (id) => { 
@@ -1000,7 +999,7 @@
                     setInspectors(newInspecs); 
                     try {
                         await syncToGASAsync('updateInspectors', newInspecs); 
-                        showToastMsg('ลบสำเร็จ', 'success'); 
+                        showToastMsg('ลบรายชื่อสำเร็จ', 'success'); 
                     } catch(e) { showToastMsg('ลบล้มเหลว', 'error'); }
                 }); 
             };
@@ -1016,7 +1015,7 @@
                     await syncToGASAsync('updateRooms', newRooms); 
                     setBulkRooms(''); 
                     showToastMsg('เพิ่มห้องเรียนสำเร็จ', 'success');
-                } catch(e) { showToastMsg('เพิ่มล้มเหลว', 'error'); }
+                } catch(e) { showToastMsg('เพิ่มห้องล้มเหลว', 'error'); }
             };
 
             const handleDeleteRoom = (id) => { 
@@ -1037,7 +1036,7 @@
                 setRooms(newRooms); 
                 try {
                     await syncToGASAsync('updateRooms', newRooms); 
-                    showToastMsg(`อัปเดตสิทธิ์ห้อง ${name} แล้ว`, 'success'); 
+                    showToastMsg(`อัปเดตสิทธิ์เขตของห้อง ${name} แล้ว`, 'success'); 
                 } catch(e) { showToastMsg('อัปเดตล้มเหลว', 'error'); }
             };
             
@@ -1060,7 +1059,7 @@
             };
 
             const exportExcel = (mode) => {
-                if (typeof XLSX === 'undefined') return showToastMsg("⏳ กำลังโหลดระบบส่งออก...", 'info');
+                if (typeof XLSX === 'undefined') return showToastMsg("⏳ กำลังโหลดเครื่องมือสร้าง Excel กรุณารอสักครู่...", "info");
 
                 setPrintData(prev => ({ ...prev, isPreparing: true, format: 'excel' }));
                 
@@ -1258,7 +1257,7 @@
                             await uploadFileToGoogleDrive(fileName, base64Str, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
                         } else {
                             XLSX.writeFile(wb, fileName);
-                            showToastMsg('ดาวน์โหลด Excel สำเร็จ', 'success');
+                            showToastMsg('ดาวน์โหลดไฟล์ Excel สำเร็จ', 'success');
                         }
                     } catch (error) {
                         console.error(error);
@@ -1270,7 +1269,7 @@
 
             const executeDirectExport = async (mode, format) => {
                 if (typeof window.html2canvas === 'undefined' || (format === 'pdf' && typeof window.html2pdf === 'undefined')) {
-                    return showToastMsg("⏳ กำลังโหลดเครื่องมือ...", 'info');
+                    return showToastMsg("⏳ กำลังโหลดเครื่องมือสร้างเอกสาร กรุณารอสักครู่...", "info");
                 }
                 let title = 'รายงานการตรวจความเรียบร้อย';
                 let dateText = ''; let typeName = guestFilterType === 'all' ? 'รวมทุกหมวด' : guestFilterType === 'room' ? 'เฉพาะห้องเรียน' : 'เฉพาะเขตพื้นที่';
@@ -1307,7 +1306,7 @@
 
                 setPrintData({ isPreparing: true, format: format, mode, title, dateText, typeName, groupName, data: dataToPrint });
                 
-                if (exportDestination === 'local') showToastMsg(`เตรียมไฟล์ ${format.toUpperCase()}...`, 'info');
+                if (exportDestination === 'local') showToastMsg(`กำลังเตรียมไฟล์ ${format.toUpperCase()}...`, "info");
 
                 setTimeout(async () => {
                     const element = document.getElementById('pdf-export-container');
@@ -1324,7 +1323,7 @@
                             } else {
                                 const link = document.createElement('a');
                                 link.download = fileName; link.href = dataUrl; link.click();
-                                showToastMsg("ดาวน์โหลดรูปภาพสำเร็จ", 'success');
+                                showToastMsg("ดาวน์โหลดรูปภาพสำเร็จ", "success");
                             }
                         } else if (format === 'pdf') {
                             const opt = {
@@ -1342,11 +1341,11 @@
                                 await uploadFileToGoogleDrive(fileName, pdfBase64, 'application/pdf');
                             } else {
                                 await window.html2pdf().set(opt).from(element).save();
-                                showToastMsg("ดาวน์โหลด PDF สำเร็จ", 'success');
+                                showToastMsg("ดาวน์โหลด PDF สำเร็จ", "success");
                             }
                         }
                     } catch(e) {
-                        if (exportDestination === 'local') showToastMsg(`เกิดข้อผิดพลาดในการโหลดไฟล์`, 'error');
+                        if (exportDestination === 'local') showToastMsg(`เกิดข้อผิดพลาดในการสร้างไฟล์ ${format.toUpperCase()}`, "error");
                     } finally {
                         setPrintData(prev => ({ ...prev, isPreparing: false, format: null }));
                     }
@@ -1482,7 +1481,7 @@
             return (
                 <div className="flex flex-col bg-[#F3F4F6] h-[100dvh] overflow-hidden relative">
                     
-                    {/* ส่วน Export PDF ซ่อนไว้ */}
+                    {/* ส่วน Export PDF ซ่อนไว้และเป็นสีม่วงแบบดั้งเดิม */}
                     <div style={{ position: 'absolute', top: '0', left: '0', zIndex: '-1000', opacity: '0', pointerEvents: 'none' }}>
                         <div id="pdf-export-container" className="pdf-export-wrapper">
                             {renderExportHeader()}
@@ -1527,33 +1526,29 @@
 
                     {/* Header สำหรับ Mobile */}
                     <header className="md:hidden bg-white/90 backdrop-blur-xl sticky top-0 z-30 border-b border-gray-100/80 shrink-0">
-                        <div className="max-w-[480px] mx-auto px-4 h-[72px] flex justify-between items-center">
-                            <div className="flex items-center gap-3.5 cursor-pointer no-select relative overflow-visible" onClick={handleLogoClick}>
-                                <div className={`w-[46px] h-[46px] rounded-full flex items-center justify-center shadow-sm flex-shrink-0 transition-transform duration-150 overflow-hidden bg-white border border-gray-200`}>
+                        <div className="max-w-[480px] mx-auto px-4 h-[65px] sm:h-[72px] flex justify-between items-center">
+                            <div className="flex items-center gap-2 sm:gap-3.5 cursor-pointer no-select relative overflow-visible" onClick={handleLogoClick}>
+                                <div className={`w-[36px] h-[36px] sm:w-[46px] sm:h-[46px] rounded-full flex items-center justify-center shadow-sm flex-shrink-0 transition-transform duration-150 overflow-hidden bg-white border border-gray-200`}>
                                     <img src={settings?.app_logo_url || HARDCODED_LOGO} className="w-full h-full object-cover" crossOrigin="anonymous"/>
                                 </div>
                                 {logoTaps > 0 && appMode === 'guest' && (
-                                    <div className="absolute -bottom-2 left-[23px] transform -translate-x-1/2 bg-gray-800 text-white text-[10px] px-1.5 py-0.5 rounded-md shadow-sm z-50 pointer-events-none animate-in fade-in zoom-in font-bold">
+                                    <div className="absolute -bottom-2 left-[18px] sm:left-[23px] transform -translate-x-1/2 bg-gray-800 text-white text-[9px] px-1.5 py-0.5 rounded-md shadow-sm z-50 pointer-events-none animate-in fade-in zoom-in font-bold">
                                         {logoTaps}/5
                                     </div>
                                 )}
                                 <div className="flex flex-col flex-1 min-w-0 justify-center h-[46px]">
-                                    <span className="font-black text-[15px] sm:text-[17px] text-gray-800 tracking-tight leading-tight truncate">ZoneCheck V2.1</span>
-                                    <span className="text-[10px] sm:text-[11px] text-gray-400 font-bold leading-none truncate mt-0.5 tracking-wider">{HARDCODED_NAME}</span>
+                                    <span className="font-black text-[13px] sm:text-[17px] text-gray-800 tracking-tight leading-tight truncate">ZoneCheck V2.1</span>
+                                    <span className="text-[8px] sm:text-[11px] text-gray-400 font-bold leading-none truncate mt-0.5 tracking-wider">{HARDCODED_NAME}</span>
                                 </div>
                             </div>
                             
-                            {/* เมนูขวาบนของ Mobile ลดขนาดกันตกขอบ */}
                             <div className="flex items-center gap-1.5 sm:gap-2 ml-1 flex-shrink-0">
                                 {(appMode === 'admin' || appMode === 'inspector') && (
-                                    <button onClick={() => setShowAnnouncement(true)} className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full bg-red-50 text-[#C8102E] border border-red-100 shadow-sm active:scale-95 transition-colors"><i className="ph ph-megaphone text-lg"></i></button>
+                                    <button onClick={() => setShowAnnouncement(true)} className="w-7 h-7 sm:w-9 sm:h-9 flex items-center justify-center rounded-full bg-red-50 text-[#C8102E] border border-red-100 shadow-sm active:scale-95 transition-colors"><i className="ph ph-megaphone text-[15px] sm:text-lg"></i></button>
                                 )}
-                                <button onClick={handleSync} className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full bg-gray-50 text-gray-400 border border-gray-100 shadow-sm active:scale-95 transition-colors hover:text-[#C8102E]"><i className={`ph ph-arrows-clockwise text-lg ${isSyncing ? "animate-spin text-[#C8102E]" : ""}`}></i></button>
-                                {appMode === 'admin' && (
-                                    <button onClick={() => setCurrentRoute('settings')} className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full bg-gray-100 text-gray-600 shadow-sm active:scale-95 transition-colors hover:bg-gray-200"><i className="ph ph-gear text-lg"></i></button>
-                                )}
+                                <button onClick={handleSync} className="w-7 h-7 sm:w-9 sm:h-9 flex items-center justify-center rounded-full bg-gray-50 text-gray-400 border border-gray-100 shadow-sm active:scale-95 transition-colors hover:text-[#C8102E]"><i className={`ph ph-arrows-clockwise text-[15px] sm:text-lg ${isSyncing ? "animate-spin text-[#C8102E]" : ""}`}></i></button>
                                 {appMode !== 'guest' && (
-                                    <button onClick={() => { showConfirm('ต้องการออกจากระบบใช่หรือไม่?', () => { setAppMode('guest'); setInputPasscode(''); setCurrentUser(null); setCurrentRoute('dashboard'); }); }} className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full bg-gray-900 text-white shadow-sm active:scale-95 transition-colors hover:bg-black"><i className="ph ph-sign-out text-lg"></i></button>
+                                    <button onClick={() => { showConfirm('ต้องการออกจากระบบใช่หรือไม่?', () => { setAppMode('guest'); setInputPasscode(''); setCurrentUser(null); setCurrentRoute('dashboard'); }); }} className="w-7 h-7 sm:w-9 sm:h-9 flex items-center justify-center rounded-full bg-gray-900 text-white shadow-sm active:scale-95 transition-colors hover:bg-black"><i className="ph ph-sign-out text-[15px] sm:text-lg"></i></button>
                                 )}
                             </div>
                         </div>
@@ -1576,7 +1571,7 @@
                                         <div className="relative z-10">
                                             <span className="inline-block bg-white/20 backdrop-blur-md px-3 py-1 rounded-full text-[10px] font-bold tracking-widest mb-3 border border-white/20">STUDENT COUNCIL</span>
                                             <h2 className="text-2xl md:text-3xl font-bold mb-2.5">เช็คคะแนนกันหน่อย!</h2>
-                                            <p className="text-[#FFE4E6] text-xs md:text-sm max-w-md leading-relaxed opacity-95">วันนี้ห้องเรารอด หรือห้องเราร่วง? ตรวจสอบและรายงานผลการดูแลรักษาเขตพื้นที่และห้องเรียน สนับสนุนโดยสภานักเรียนโรงเรียนคำม่วง</p>
+                                            <p className="text-[#FFE4E6] text-xs md:text-sm max-w-md leading-relaxed opacity-95">วันนี้ห้องเรารอด หรือห้องเราร่วง? ตรวจสอบและรายงานผลการดูแลรักษาเขตพื้นที่และห้องเรียน จัดทำโดยสภานักเรียนโรงเรียนคำม่วง</p>
                                         </div>
                                     </div>
                                 )}
@@ -2171,7 +2166,7 @@
                                 <div className="w-20 h-20 bg-white rounded-full mx-auto flex items-center justify-center mb-4 shadow-lg border border-gray-200 overflow-hidden">
                                     <img src={settings?.app_logo_url || HARDCODED_LOGO} alt="Login Logo" className="w-full h-full object-cover" crossOrigin="anonymous"/>
                                 </div>
-                                <h2 className="text-2xl font-black text-center text-gray-800 mb-1">ระบบเจ้าหน้าที่</h2>
+                                <h2 className="text-2xl font-black text-center text-gray-800 mb-1">ระบบผู้ตรวจ</h2>
                                 <form onSubmit={handleLoginSubmit}>
                                     <div className="space-y-4 mt-6">
                                         <input type="text" placeholder="ชื่อผู้ใช้งาน..." value={loginInspector} onChange={(e) => { setLoginInspector(e.target.value); setSelectedLoginName(e.target.value); setShowLoginSuggestions(true); }} className="w-full px-4 py-3 rounded-2xl border bg-gray-50 focus:outline-none focus:border-[#C8102E]" />
@@ -2322,7 +2317,7 @@
                                     {/* ผู้ตรวจร่วม */}
                                     {!isSkipped && (
                                         <div className="mt-4 bg-gray-50 p-3 rounded-xl border border-gray-200">
-                                            <label className="text-[10px] font-bold text-gray-500 mb-2 flex items-center gap-1.5 uppercase"><i className="ph ph-users text-sm"></i> ผู้ตรวจร่วม (ถ้ามี)</label>
+                                            <label className="text-[10px] font-bold text-gray-500 mb-2 flex items-center gap-1.5 uppercase"><i className="ph ph-users text-sm"></i> 👥 เพิ่มรายชื่อเพื่อนที่เดินตรวจด้วยกัน (ถ้ามี)</label>
                                             <div className="flex flex-wrap gap-2">
                                                 {inspectors.filter(u => u.name !== currentUser?.name).map(u => {
                                                     const isSelected = coInspectors.includes(u.name);
@@ -2472,7 +2467,6 @@
                         </div>
                     )}
 
-                    {/* นามบัตรช่วยเหลือ */}
                     {showInfoModal && (
                         <div className="fixed inset-0 z-[9990] bg-gray-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4 animate-in fade-in" onClick={()=>setShowInfoModal(false)}>
                             <div className="bg-white rounded-[2rem] p-6 w-full max-w-sm shadow-2xl animate-in slide-in-from-bottom-full sm:zoom-in-95 relative" onClick={e=>e.stopPropagation()}>
@@ -2530,41 +2524,36 @@
                         </div>
                     )}
 
-                    {/* Bottom Nav สำหรับ Mobile (โฉมใหม่ มีปุ่มแดงตรงกลาง) */}
+                    {/* Bottom Nav สำหรับ Mobile */}
                     <div className="md:hidden fixed bottom-0 w-full z-50">
                         <div className="absolute inset-0 bg-white/95 backdrop-blur-xl border-t border-gray-200 shadow-[0_-10px_20px_rgba(0,0,0,0.05)]"></div>
-                        <div className="relative flex justify-between items-end px-4 sm:px-6 pb-safe pt-2">
+                        <div className="relative flex justify-around items-end px-2 sm:px-6 pb-safe pt-2">
                             
-                            {/* ปุ่มที่ 1: หน้าแรก */}
                             <button onClick={() => setCurrentRoute('dashboard')} className={`flex flex-col items-center justify-center w-14 transition-all pb-1.5 ${currentRoute === 'dashboard' ? 'text-[#C8102E]' : 'text-gray-400'}`}>
                                 <i className={`ph ${currentRoute === 'dashboard' ? 'ph-house ph-fill' : 'ph-house'} text-[24px]`}></i>
                                 <span className="text-[10px] font-bold mt-1">หน้าแรก</span>
                             </button>
                             
-                            {/* ปุ่มที่ 2: อันดับ */}
                             <button onClick={() => setCurrentRoute('leaderboard')} className={`flex flex-col items-center justify-center w-14 transition-all pb-1.5 ${currentRoute === 'leaderboard' ? 'text-[#C8102E]' : 'text-gray-400'}`}>
                                 <i className={`ph ${currentRoute === 'leaderboard' ? 'ph-trophy ph-fill' : 'ph-trophy'} text-[24px]`}></i>
                                 <span className="text-[10px] font-bold mt-1">อันดับ</span>
                             </button>
 
-                            {/* ปุ่มที่ 3 (ตรงกลาง): ประเมินผล (สีแดงกลมๆ) หรือ ปุ่มหลอกถ้าเป็น Guest */}
-                            <div className="relative flex justify-center w-20">
-                                {(appMode === 'admin' || appMode === 'inspector') ? (
-                                    <button onClick={() => setCurrentRoute('inspect')} className={`absolute -top-7 flex flex-col items-center justify-center w-16 h-16 rounded-full bg-gradient-to-tr from-[#C8102E] to-red-600 text-white shadow-[0_4px_15px_rgba(200,16,46,0.4)] border-4 border-white transition-transform active:scale-95 z-50 ${currentRoute === 'inspect' ? 'scale-110' : ''}`}>
-                                        <i className="ph ph-scan text-3xl"></i>
-                                    </button>
-                                ) : (
-                                    <div className="w-16 h-12"></div> // ดันให้เว้นที่ว่างให้สมดุล
-                                )}
-                            </div>
+                            {/* ปุ่มที่ 3: ประเมินผล (จะเรียงต่อกันเป็นแนวนอนสวยงาม ไม่โดดแหว่งตรงกลางเวลาไม่ได้ล็อกอิน) */}
+                            {(appMode === 'admin' || appMode === 'inspector') && (
+                                <button onClick={() => setCurrentRoute('inspect')} className={`flex flex-col items-center justify-center transition-all pb-1.5 ${currentRoute === 'inspect' ? 'text-[#C8102E]' : 'text-gray-400'}`}>
+                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center mb-0.5 shadow-sm transition-transform ${currentRoute === 'inspect' ? 'bg-[#C8102E] text-white scale-110' : 'bg-transparent'}`}>
+                                        <i className={`ph ${currentRoute === 'inspect' ? 'ph-scan' : 'ph-clipboard-text'} text-[24px]`}></i>
+                                    </div>
+                                    <span className="text-[10px] font-bold">ประเมิน</span>
+                                </button>
+                            )}
 
-                            {/* ปุ่มที่ 4: ประวัติ */}
                             <button onClick={() => setCurrentRoute('history')} className={`flex flex-col items-center justify-center w-14 transition-all pb-1.5 ${currentRoute === 'history' ? 'text-[#C8102E]' : 'text-gray-400'}`}>
                                 <i className={`ph ${currentRoute === 'history' ? 'ph-clock-counter-clockwise ph-fill' : 'ph-clock-counter-clockwise'} text-[24px]`}></i>
                                 <span className="text-[10px] font-bold mt-1">ประวัติ</span>
                             </button>
                             
-                            {/* ปุ่มที่ 5 (ขวาสุด): ช่วยเหลือ */}
                             <button onClick={() => setShowInfoModal(true)} className={`flex flex-col items-center justify-center w-14 transition-all pb-1.5 text-gray-400 hover:text-[#C8102E]`}>
                                 <i className="ph ph-question text-[24px]"></i>
                                 <span className="text-[10px] font-bold mt-1">ช่วยเหลือ</span>
