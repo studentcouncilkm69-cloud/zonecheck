@@ -15,7 +15,7 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
-    <!-- ⚠️ สำคัญมาก: สคริปต์แก้บั๊กจอขาว regeneratorRuntime -->
+    <!-- สคริปต์กันจอขาว (Regenerator Runtime) -->
     <script src="https://unpkg.com/regenerator-runtime@0.14.1/runtime.js"></script>
     
     <!-- Phosphor Icons -->
@@ -32,7 +32,7 @@
     <style>
         html, body { 
             font-family: 'Noto Sans Thai', sans-serif !important; 
-            background-color: #E5E7EB; /* สีพื้นหลังโทนเทาแบบ Student Voice */
+            background-color: #E5E7EB; 
             overscroll-behavior: none; 
             -webkit-overflow-scrolling: touch;
             -webkit-tap-highlight-color: transparent;
@@ -58,11 +58,9 @@
         
         .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
         
-        /* Checkbox Custom Theme สีแดง #C8102E */
         .checkbox-custom:checked + div { background-color: #C8102E; border-color: #C8102E; }
         .checkbox-custom:checked + div svg { display: block; }
 
-        /* PDF Export Styles - Reverted to Original Purple Theme 100% */
         .pdf-export-wrapper {
             font-family: 'Sarabun', sans-serif !important;
             color: #333;
@@ -92,8 +90,8 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo, useRef } = React;
 
-        // ⚠️ ลิงก์ใหม่ล่าสุดที่คุณให้มา
-        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby3CKwBAOiz6dJQWI-t8nabgSv-46yTcAI8QZHR2KFWtrGJSHuKHdnm7-sCDsfL26yu/exec"; 
+        // ⚠️ สำคัญมาก: ใส่ URL ของ ZoneCheck Backend (REST API) ที่ได้มาใหม่ตรงนี้
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxp7RJqJIajrEx8J9IVnJC75saIt_FeiQDUxNgxnP7vrYOy7xcYy77RqXljRUXv_xHm/exec"; 
 
         const HARDCODED_LOGO = "https://i.postimg.cc/wBN5btrp/rong-re-yn-kham-wng.png";
         const HARDCODED_NAME = "STUDENT COUNCIL • KHAMMUANG SCHOOL";
@@ -141,7 +139,8 @@
             app_logo_url: "", logo_url: "", school_logo_url: "", zone_map_url: "", room_map_url: "",
             banner_url: "", main_banner_url: "", popup_banner_url: "", 
             announcement_title: "", announcement_msg: "",
-            visibility_main_banner: "public", visibility_popup_banner: "public", visibility_announce_banner: "public"
+            visibility_main_banner: "public", visibility_popup_banner: "public", visibility_announce_banner: "public",
+            visitor_count: "0"
         };
         
         const ROOM_CRITERIA = [
@@ -186,10 +185,9 @@
             const [appMode, setAppMode] = useState('guest'); 
             const [currentRoute, setCurrentRoute] = useState('dashboard'); 
             const [showSplash, setShowSplash] = useState(true); 
-            // ระบบ Toast ใหม่ (สวยงามมุมขวาบน)
-            const [toast, setToast] = useState({ message: '', type: 'info', visible: false });
+            // Toast โฉมใหม่สวยงาม มุมขวาบน
+            const [toast, setToast] = useState({ visible: false, message: '', type: 'info' });
             const toastTimeoutRef = useRef(null);
-            
             const [isSyncing, setIsSyncing] = useState(false);
 
             // States ล็อกอิน
@@ -286,8 +284,8 @@
                     setMainBannerInput(settings.main_banner_url || '');
                     setPopupBannerInput(settings.popup_banner_url || '');
                     setAnnounceBannerInput(settings.announce_banner_url || settings.banner_url || '');
-                    setAnnouncementTitleInput(settings.announcement_title || ''); // ให้เป็นค่าว่าง
-                    setAnnouncementInput(settings.announcement_msg || ''); // ให้เป็นค่าว่าง
+                    setAnnouncementTitleInput(settings.announcement_title || ''); 
+                    setAnnouncementInput(settings.announcement_msg || '');
                     setVisMainBanner(settings.visibility_main_banner || 'public');
                     setVisPopupBanner(settings.visibility_popup_banner || 'public');
                     setVisAnnounceBanner(settings.visibility_announce_banner || 'public');
@@ -363,14 +361,14 @@
                 tapTimeoutRef.current = setTimeout(() => { setLogoTaps(0); }, 3000);
             };
 
-            // ฟังก์ชันโชว์ Toast สวยๆ ขวาบน
-            const showToast = (message, type = 'info') => {
-                if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
-                setToast({ message, type, visible: true });
-                toastTimeoutRef.current = setTimeout(() => {
-                    setToast(prev => ({ ...prev, visible: false }));
-                }, 4000);
+            const showToastMsg = (msg, type = 'info') => { 
+                if(toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+                setToast({ visible: true, message: msg, type }); 
+                toastTimeoutRef.current = setTimeout(() => setToast(prev => ({ ...prev, visible: false })), 4000); 
             };
+
+            const showConfirm = (msg, onConfirmFn) => { setConfirmDialog({ isOpen: true, message: msg, onConfirm: onConfirmFn, isAlert: false }); };
+            const showAlertMsg = (msg) => { setConfirmDialog({ isOpen: true, message: msg, onConfirm: () => {}, isAlert: true }); };
 
             const handleLoginSubmit = (e) => {
                 e.preventDefault(); 
@@ -392,7 +390,7 @@
                     setCurrentRoute('dashboard'); 
                     safeSetItem('zc26_last_user', selectedLoginName);
                     handleSync(); 
-                    showToast(`ยินดีต้อนรับ, ${selectedLoginName}`, 'success');
+                    showToastMsg(`ยินดีต้อนรับ, ${selectedLoginName}`, 'success');
                 } else { setLoginError('รหัสผ่านไม่ถูกต้อง'); }
             };
 
@@ -404,7 +402,8 @@
             const handleSync = async () => {
                 setIsSyncing(true);
                 try {
-                    const res = await fetch(`${GOOGLE_SCRIPT_URL}?action=getInitialData`);
+                    const cacheBuster = new Date().getTime();
+                    const res = await fetch(`${GOOGLE_SCRIPT_URL}?action=getInitialData&t=${cacheBuster}`);
                     const json = await res.json();
                     
                     if (json && json.status === 'Success') {
@@ -412,10 +411,10 @@
                         setInspectors(Array.isArray(json.inspectors) ? json.inspectors : []);
                         setInspections(Array.isArray(json.inspections) ? json.inspections : []);
                         setSettings(json.settings || initialSettings);
-                        if(json.settings && String(json.settings.is_maintenance).toLowerCase() !== 'true' && !showSplash) showToast('อัปเดตข้อมูลล่าสุดแล้ว', 'success');
+                        if(json.settings && String(json.settings.is_maintenance).toLowerCase() !== 'true' && !showSplash) showToastMsg('อัปเดตข้อมูลล่าสุดแล้ว', 'success');
                     }
                 } catch (err) {
-                    if (!showSplash) showToast('เชื่อมต่อฐานข้อมูลล้มเหลว ตรวจสอบอินเทอร์เน็ต', 'error');
+                    if (!showSplash) showToastMsg('เชื่อมต่อฐานข้อมูลล้มเหลว', 'error');
                 } finally {
                     setIsSyncing(false);
                     setTimeout(() => setShowSplash(false), 800);
@@ -454,10 +453,10 @@
                 const d = new Date();
                 const currentMonthYear = `${thaiMonths[d.getMonth()]} ${d.getFullYear() + 543}`;
                 
-                showToast(`☁️ กำลังเริ่มส่งไฟล์เข้า Google Drive...`, 'info');
+                showToastMsg(`☁️ กำลังส่งไฟล์เข้า Drive...`, 'info');
                 
                 if (base64Data.length > 6000000) { 
-                    showAlertMsg("❌ ไฟล์มีขนาดใหญ่เกินกว่าที่ระบบ Google Drive จะรับได้อัตโนมัติ\nกรุณาเลือกดาวน์โหลด 'ลงเครื่อง' แทนครับ");
+                    showAlertMsg("❌ ไฟล์มีขนาดใหญ่เกินระบบจะรับได้อัตโนมัติ\nกรุณาเลือกดาวน์โหลด 'ลงเครื่อง' แทนครับ");
                     return Promise.reject('File too large');
                 }
 
@@ -468,19 +467,16 @@
                     });
 
                     if(res && res.status === 'Success') {
-                        showToast('✅ บันทึกไฟล์ลง Google Drive สำเร็จ!', 'success');
+                        showToastMsg('✅ บันทึกไฟล์ลง Drive สำเร็จ!', 'success');
                         return res.url;
                     } else {
                         throw new Error(res.message || 'Unknown Server Error');
                     }
                 } catch (error) {
-                    showAlertMsg('❌ การเชื่อมต่อล้มเหลว!\nไม่สามารถส่งไฟล์ไปที่ Google Drive ได้\nError: ' + error.message);
+                    showAlertMsg('❌ ไม่สามารถส่งไฟล์ไปที่ Drive ได้\nError: ' + error.message);
                     throw error;
                 }
             };
-
-            const showConfirm = (msg, onConfirmFn) => { setConfirmDialog({ isOpen: true, message: msg, onConfirm: onConfirmFn, isAlert: false }); };
-            const showAlertMsg = (msg) => { setConfirmDialog({ isOpen: true, message: msg, onConfirm: () => {}, isAlert: true }); };
 
             const handleOpenInspect = (room, type) => {
                 const targetDateStr = filterDate || new Date().toISOString().split('T')[0];
@@ -488,7 +484,7 @@
                 const existInsp = validInspections.find(i => i.roomId === room.id && i.type === type && i.date && String(i.date).startsWith(targetDateStr));
                 
                 if(existInsp) { 
-                    showToast(`ห้องนี้มีผลตรวจของวันที่ ${formatDateObj(targetDateStr)} อยู่แล้วครับ`, 'warning'); 
+                    showToastMsg(`มีผลประเมินของวันนี้อยู่แล้วครับ`, 'warning'); 
                 } else {
                     setEvalComment('');
                     setInspectImage(null);
@@ -511,7 +507,7 @@
                 if(!file) return;
                 
                 setIsImageProcessing(true);
-                showToast("📸 กำลังประมวลผลรูปลายน้ำ...", 'info');
+                showToastMsg("📸 กำลังวาดลายน้ำ...", 'info');
 
                 const reader = new FileReader();
                 reader.onload = (event) => {
@@ -529,7 +525,6 @@
                             const ctx = canvas.getContext('2d');
                             ctx.drawImage(img, 0, 0, width, height);
                             
-                            // วาดลายน้ำ
                             const roomName = inspectModal.room ? (inspectModal.room.name || '').replace('ม.', '') : 'ไม่ระบุ';
                             const now = new Date();
                             const months = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
@@ -550,7 +545,6 @@
                             
                             const boxX = 20; const boxY = height - boxHeight - 20;
 
-                            // กรอบโปร่งแสงสีแดง #C8102E
                             ctx.fillStyle = "rgba(200, 16, 46, 0.75)";
                             ctx.beginPath();
                             if(ctx.roundRect) ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 14); 
@@ -568,14 +562,14 @@
                             let base64Only = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
                             
                             setInspectImage({ fileName: file.name, base64: base64Only, mimeType: 'image/jpeg', dataUrl: dataUrl });
-                            showToast("✅ สร้างลายน้ำสำเร็จ", 'success');
+                            showToastMsg("✅ สร้างลายน้ำสำเร็จ", 'success');
                         } catch (err) {
-                            showAlertMsg("❌ เกิดข้อผิดพลาดในการสร้างลายน้ำ: " + err.message);
+                            showAlertMsg("❌ สร้างลายน้ำไม่สำเร็จ: " + err.message);
                         } finally {
                             setIsImageProcessing(false);
                         }
                     };
-                    img.onerror = () => { setIsImageProcessing(false); showAlertMsg("❌ ไม่สามารถโหลดรูปภาพนี้ได้"); };
+                    img.onerror = () => { setIsImageProcessing(false); showAlertMsg("❌ ไม่สามารถโหลดรูปนี้ได้"); };
                     img.src = event.target.result;
                 };
                 reader.readAsDataURL(file);
@@ -584,10 +578,10 @@
             const removeImage = () => { setInspectImage(null); if(fileInputRef.current) fileInputRef.current.value = ''; };
 
             const handleSubmitInspection = async () => {
-                if (isImageProcessing) return showToast('⏳ กรุณารอสักครู่ กำลังวาดลายน้ำ...', 'warning');
+                if (isImageProcessing) return showToastMsg('⏳ กำลังประมวลผลลายน้ำ...', 'warning');
                 const loc = inspectModal.room; const type = inspectModal.type; if(!loc) return;
                 
-                if (isSkipped && (!evalComment || !evalComment.trim())) return showToast('⚠️ กรุณาระบุ "หมายเหตุ" เมื่อเลือกข้ามการตรวจด้วยครับ', 'warning');
+                if (isSkipped && (!evalComment || !evalComment.trim())) return showToastMsg('⚠️ กรุณาระบุ "หมายเหตุ" ด้วยครับ', 'warning');
 
                 let totalScore = 0; let breakdown = {};
                 
@@ -618,7 +612,7 @@
                 try {
                     let photoUrl = '';
                     if (inspectImage && inspectImage.base64) {
-                        showToast('📸 กำลังอัปโหลดรูปภาพหลักฐานลง Google Drive...', 'info');
+                        showToastMsg('📸 กำลังอัปโหลดรูปลง Drive...', 'info');
                         const targetMonthYear = formatMonthYearThai(inspectModal.date); 
                         const roomFileName = `${(loc.name||'').replace(/\//g,'-')}_${inspectModal.date}.jpg`;
                         
@@ -628,7 +622,7 @@
                             });
                             photoUrl = uploadRes.url;
                         } catch (err) {
-                            showAlertMsg('❌ อัปโหลดรูปภาพไม่สำเร็จ (แต่จะบันทึกคะแนนให้ปกติ):\n' + err.message);
+                            showAlertMsg('❌ อัปโหลดรูปไม่สำเร็จ (แต่คะแนนบันทึกแล้ว):\n' + err.message);
                         }
                     }
 
@@ -640,10 +634,10 @@
                     await syncToGASAsync('saveInspection', newInsp);
                     const validInspections = Array.isArray(inspections) ? inspections : [];
                     setInspections([...validInspections, newInsp]); 
-                    showToast(`บันทึกผลของวันที่ ${formatDateObj(inspectModal.date)} สำเร็จ!`, 'success'); 
+                    showToastMsg(`บันทึกผลสำเร็จ!`, 'success'); 
                     setInspectModal({ isOpen: false, room: null, type: 'room', date: new Date().toISOString().split('T')[0] });
                 } catch(e) { 
-                    showToast('บันทึกไม่สำเร็จ กรุณาลองใหม่', 'error'); 
+                    showToastMsg('บันทึกล้มเหลว กรุณาลองใหม่', 'error'); 
                 } finally { 
                     setIsSavingData(false); 
                 }
@@ -651,30 +645,30 @@
 
             const handleResetTodayInspection = (roomId, roomName) => {
                 const targetDateStr = filterDate || new Date().toISOString().split('T')[0];
-                showConfirm(`ต้องการลบผลตรวจของห้อง ${roomName.replace('ม.', '')} (ของวันที่ ${formatDateObj(targetDateStr)}) ทิ้งใช่หรือไม่?`, async () => {
+                showConfirm(`ต้องการลบผลตรวจของห้อง ${roomName.replace('ม.', '')} ใช่หรือไม่?`, async () => {
                     const validInspections = Array.isArray(inspections) ? inspections : [];
                     const toDelete = validInspections.filter(i => i.roomId === roomId && i.date && String(i.date).startsWith(targetDateStr));
                     setInspections(validInspections.filter(i => !(i.roomId === roomId && i.date && String(i.date).startsWith(targetDateStr))));
                     
                     try {
                         for (const record of toDelete) { await syncToGASAsync('deleteInspection', record.id); }
-                        showToast(`ลบผลการประเมินแล้ว`, 'success');
+                        showToastMsg(`ลบผลการประเมินแล้ว`, 'success');
                     } catch(e) {
-                        showToast(`เกิดข้อผิดพลาดในการลบประวัติบน Server`, 'error');
+                        showToastMsg(`ลบประวัติล้มเหลว`, 'error');
                     }
                 });
             };
 
             const handleDeleteInspection = (id, fromModal = 'viewDetail') => {
-                showConfirm('คุณต้องการลบผลการตรวจนี้ใช่หรือไม่?', async () => {
+                showConfirm('ต้องการลบผลการตรวจนี้ใช่หรือไม่?', async () => {
                     try {
                         const validInspections = Array.isArray(inspections) ? inspections : [];
                         setInspections(validInspections.filter(i => i.id !== id)); 
                         await syncToGASAsync('deleteInspection', id); 
-                        showToast('ลบประวัติสำเร็จ', 'success');
+                        showToastMsg('ลบสำเร็จ', 'success');
                         if (fromModal === 'viewDetail') setViewDetailModal(null);
                     } catch(e) {
-                        showToast('ลบไม่สำเร็จ กรุณาลองใหม่', 'error');
+                        showToastMsg('ลบไม่สำเร็จ', 'error');
                     }
                 });
             };
@@ -938,8 +932,8 @@
                     await syncToGASAsync('updateSettings', { key: 'maintenance_msg', val: maintenanceMsg }); 
                     await syncToGASAsync('updateSettings', { key: 'passcode', val: sysPasscode }); 
                     await syncToGASAsync('updateSettings', { key: 'master_passcode', val: sysMasterPasscode }); 
-                    showToast('บันทึกตั้งค่าเรียบร้อย', 'success'); 
-                } catch(e) { showToast('บันทึกล้มเหลว', 'error'); }
+                    showToastMsg('บันทึกตั้งค่าสำเร็จ', 'success'); 
+                } catch(e) { showToastMsg('บันทึกล้มเหลว', 'error'); }
             };
             
             const handleSaveMegaphoneAndLogo = async () => { 
@@ -966,8 +960,8 @@
                     await syncToGASAsync('updateSettings', { key: 'visibility_announce_banner', val: visAnnounceBanner }); 
                     
                     if(!popupBannerInput) { safeRemoveItem('zc26_hide_banner_until'); }
-                    showToast('บันทึกข้อมูลเรียบร้อย', 'success'); 
-                } catch(e) { showToast('บันทึกล้มเหลว', 'error'); }
+                    showToastMsg('อัปเดตข้อมูลสำเร็จ', 'success'); 
+                } catch(e) { showToastMsg('อัปเดตล้มเหลว', 'error'); }
             };
 
             const handleAddBulkInspectors = async () => {
@@ -980,8 +974,8 @@
                 try {
                     await syncToGASAsync('updateInspectors', newInspecs); 
                     setBulkInspectors(''); 
-                    showToast('เพิ่มรายชื่อสำเร็จ', 'success');
-                } catch(e) { showToast('เพิ่มรายชื่อล้มเหลว', 'error'); }
+                    showToastMsg('เพิ่มผู้ตรวจสำเร็จ', 'success');
+                } catch(e) { showToastMsg('เพิ่มล้มเหลว', 'error'); }
             };
 
             const handleDeleteInspector = (id) => { 
@@ -991,8 +985,8 @@
                     setInspectors(newInspecs); 
                     try {
                         await syncToGASAsync('updateInspectors', newInspecs); 
-                        showToast('ลบรายชื่อสำเร็จ', 'success'); 
-                    } catch(e) { showToast('ลบล้มเหลว', 'error'); }
+                        showToastMsg('ลบสำเร็จ', 'success'); 
+                    } catch(e) { showToastMsg('ลบล้มเหลว', 'error'); }
                 }); 
             };
 
@@ -1006,8 +1000,8 @@
                 try {
                     await syncToGASAsync('updateRooms', newRooms); 
                     setBulkRooms(''); 
-                    showToast('เพิ่มห้องเรียนสำเร็จ', 'success');
-                } catch(e) { showToast('เพิ่มห้องล้มเหลว', 'error'); }
+                    showToastMsg('เพิ่มห้องเรียนสำเร็จ', 'success');
+                } catch(e) { showToastMsg('เพิ่มล้มเหลว', 'error'); }
             };
 
             const handleDeleteRoom = (id) => { 
@@ -1017,8 +1011,8 @@
                     setRooms(newRooms); 
                     try {
                         await syncToGASAsync('updateRooms', newRooms); 
-                        showToast('ลบห้องสำเร็จ', 'success'); 
-                    } catch(e) { showToast('ลบล้มเหลว', 'error'); }
+                        showToastMsg('ลบห้องสำเร็จ', 'success'); 
+                    } catch(e) { showToastMsg('ลบล้มเหลว', 'error'); }
                 }); 
             };
             
@@ -1028,8 +1022,8 @@
                 setRooms(newRooms); 
                 try {
                     await syncToGASAsync('updateRooms', newRooms); 
-                    showToast(`อัปเดตสิทธิ์เขตของห้อง ${name} แล้ว`, 'success'); 
-                } catch(e) { showToast('อัปเดตล้มเหลว', 'error'); }
+                    showToastMsg(`อัปเดตสิทธิ์ห้อง ${name} แล้ว`, 'success'); 
+                } catch(e) { showToastMsg('อัปเดตล้มเหลว', 'error'); }
             };
             
             const moveRoomUp = async (index) => {
@@ -1051,7 +1045,7 @@
             };
 
             const exportExcel = (mode) => {
-                if (typeof XLSX === 'undefined') return showToast("กำลังโหลดเครื่องมือสร้าง Excel กรุณารอสักครู่...", 'info');
+                if (typeof XLSX === 'undefined') return showToastMsg("⏳ กำลังโหลดระบบส่งออก...", 'info');
 
                 setPrintData(prev => ({ ...prev, isPreparing: true, format: 'excel' }));
                 
@@ -1075,7 +1069,7 @@
 
                             const sortedMonths = Array.from(uniqueMonths).sort();
                             if (sortedMonths.length === 0) {
-                                showToast('ไม่มีข้อมูลสำหรับการส่งออก', 'warning');
+                                showToastMsg('ไม่มีข้อมูลสำหรับการส่งออก', 'warning');
                                 setPrintData(prev => ({ ...prev, isPreparing: false, format: null }));
                                 return;
                             }
@@ -1207,7 +1201,7 @@
                             }
 
                             if(formattedData.length === 0) { 
-                                showToast('ไม่มีข้อมูลสำหรับส่งออก', 'warning'); 
+                                showToastMsg('ไม่มีข้อมูลสำหรับส่งออก', 'warning'); 
                                 setPrintData(prev => ({ ...prev, isPreparing: false, format: null }));
                                 return; 
                             }
@@ -1249,7 +1243,7 @@
                             await uploadFileToGoogleDrive(fileName, base64Str, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
                         } else {
                             XLSX.writeFile(wb, fileName);
-                            showToast('ดาวน์โหลดไฟล์ Excel สำเร็จ', 'success');
+                            showToastMsg('ดาวน์โหลด Excel สำเร็จ', 'success');
                         }
                     } catch (error) {
                         console.error(error);
@@ -1261,7 +1255,7 @@
 
             const executeDirectExport = async (mode, format) => {
                 if (typeof window.html2canvas === 'undefined' || (format === 'pdf' && typeof window.html2pdf === 'undefined')) {
-                    return showToast("กำลังโหลดเครื่องมือสร้างเอกสาร กรุณารอสักครู่...", 'info');
+                    return showToastMsg("⏳ กำลังโหลดเครื่องมือ...", 'info');
                 }
                 let title = 'รายงานการตรวจความเรียบร้อย';
                 let dateText = ''; let typeName = guestFilterType === 'all' ? 'รวมทุกหมวด' : guestFilterType === 'room' ? 'เฉพาะห้องเรียน' : 'เฉพาะเขตพื้นที่';
@@ -1298,7 +1292,7 @@
 
                 setPrintData({ isPreparing: true, format: format, mode, title, dateText, typeName, groupName, data: dataToPrint });
                 
-                if (exportDestination === 'local') showToast(`กำลังเตรียมไฟล์ ${format.toUpperCase()}...`, 'info');
+                if (exportDestination === 'local') showToastMsg(`เตรียมไฟล์ ${format.toUpperCase()}...`, 'info');
 
                 setTimeout(async () => {
                     const element = document.getElementById('pdf-export-container');
@@ -1315,7 +1309,7 @@
                             } else {
                                 const link = document.createElement('a');
                                 link.download = fileName; link.href = dataUrl; link.click();
-                                showToast("ดาวน์โหลด PNG สำเร็จ", 'success');
+                                showToastMsg("ดาวน์โหลดรูปภาพสำเร็จ", 'success');
                             }
                         } else if (format === 'pdf') {
                             const opt = {
@@ -1333,11 +1327,11 @@
                                 await uploadFileToGoogleDrive(fileName, pdfBase64, 'application/pdf');
                             } else {
                                 await window.html2pdf().set(opt).from(element).save();
-                                showToast("ดาวน์โหลด PDF สำเร็จ", 'success');
+                                showToastMsg("ดาวน์โหลด PDF สำเร็จ", 'success');
                             }
                         }
                     } catch(e) {
-                        if (exportDestination === 'local') showToast(`เกิดข้อผิดพลาดในการสร้างไฟล์ ${format.toUpperCase()}`, 'error');
+                        if (exportDestination === 'local') showToastMsg(`เกิดข้อผิดพลาดในการโหลดไฟล์`, 'error');
                     } finally {
                         setPrintData(prev => ({ ...prev, isPreparing: false, format: null }));
                     }
@@ -1473,7 +1467,7 @@
             return (
                 <div className="flex flex-col bg-[#F3F4F6] h-[100dvh] overflow-hidden relative">
                     
-                    {/* ส่วน Export PDF ซ่อนไว้และเป็นสีม่วงแบบดั้งเดิม */}
+                    {/* ส่วน Export PDF ซ่อนไว้ */}
                     <div style={{ position: 'absolute', top: '0', left: '0', zIndex: '-1000', opacity: '0', pointerEvents: 'none' }}>
                         <div id="pdf-export-container" className="pdf-export-wrapper">
                             {renderExportHeader()}
@@ -1535,11 +1529,8 @@
                             </div>
                             
                             <div className="flex items-center gap-2 ml-2 flex-shrink-0">
-                                {appMode === 'guest' && (
-                                    <>
-                                        <button onClick={() => setShowAnnouncement(true)} className="text-[#C8102E] hover:text-red-800 transition-colors w-10 h-10 flex items-center justify-center rounded-full bg-red-50 border border-red-100 shadow-sm active:scale-95"><i className="ph ph-megaphone text-xl"></i></button>
-                                        <button onClick={()=>setShowInfoModal(true)} className="text-gray-500 hover:text-gray-700 transition-colors w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 border border-gray-200 shadow-sm active:scale-95"><i className="ph ph-question text-xl"></i></button>
-                                    </>
+                                {(appMode === 'admin' || appMode === 'inspector') && (
+                                    <button onClick={() => setShowAnnouncement(true)} className="text-[#C8102E] hover:text-red-800 transition-colors w-10 h-10 flex items-center justify-center rounded-full bg-red-50 border border-red-100 shadow-sm active:scale-95"><i className="ph ph-megaphone text-xl"></i></button>
                                 )}
                                 <button onClick={handleSync} className="text-gray-400 hover:text-[#C8102E] transition-colors w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 border border-gray-100 shadow-sm active:scale-95"><i className={`ph ph-arrows-clockwise text-xl ${isSyncing ? "animate-spin text-[#C8102E]" : ""}`}></i></button>
                                 {appMode !== 'guest' && (
@@ -1571,9 +1562,13 @@
                                     </div>
                                 )}
 
-                                {/* ป้ายสถิติการเข้าชมแบบอัตโนมัติ */}
+                                {/* ระบบนับยอดวิว สร้างเองจาก Google Sheet */}
                                 <div className="flex justify-center mt-2 mb-4 animate-in fade-in zoom-in">
-                                    <img src="https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https%3A%2F%2Fcouncilkm69-cloud.github.io%2Fzonecheck&count_bg=%23C8102E&title_bg=%231F2937&title=%E0%B8%9C%E0%B8%B9%E0%B9%89%E0%B9%80%E0%B8%82%E0%B9%89%E0%B8%B2%E0%B8%8A%E0%B8%A1&edge_flat=false" alt="Visitor Count" className="h-6 shadow-sm rounded-md" crossOrigin="anonymous" />
+                                    <div className="bg-white px-4 py-1.5 rounded-full shadow-sm border border-gray-100 flex items-center gap-2">
+                                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                                        <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">ผู้เข้าชมทั้งหมด</span>
+                                        <span className="text-sm font-black text-[#C8102E] bg-red-50 px-2 py-0.5 rounded-md">{settings?.visitor_count || 1}</span>
+                                    </div>
                                 </div>
 
                                 <div className="grid grid-cols-1 gap-6">
@@ -1644,21 +1639,21 @@
                         
                         {/* --- เส้นทาง: อันดับคะแนน (Leaderboard) --- */}
                         {currentRoute === 'leaderboard' && (
-                             <div className="bg-gradient-to-b from-[#C8102E] to-red-900 rounded-[2.5rem] shadow-xl border border-red-400/30 overflow-hidden animate-in fade-in relative flex flex-col min-h-full">
-                                <div className="p-4 flex justify-center z-20 relative">
+                             <div className="bg-gradient-to-b from-[#C8102E] to-red-900 rounded-[2.5rem] shadow-xl border border-red-400/30 overflow-hidden animate-in fade-in relative min-h-full flex flex-col">
+                                <div className="p-4 flex justify-center z-20 relative shrink-0">
                                     <div className="bg-black/20 backdrop-blur-md p-1.5 rounded-2xl flex gap-1 w-full max-w-sm">
                                         <button onClick={()=>setLeaderboardTab('all')} className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${leaderboardTab === 'all' ? 'bg-white text-[#C8102E] shadow-sm' : 'text-white/70 hover:bg-white/10'}`}>สะสมทั้งหมด</button>
                                         <button onClick={()=>setLeaderboardTab('monthly')} className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${leaderboardTab === 'monthly' ? 'bg-white text-[#C8102E] shadow-sm' : 'text-white/70 hover:bg-white/10'}`}>ประจำเดือน</button>
                                     </div>
                                 </div>
                                 {leaderboardTab === 'monthly' && (
-                                    <div className="px-4 pb-2 z-20 relative flex justify-center">
+                                    <div className="px-4 pb-2 z-20 relative flex justify-center shrink-0">
                                         <input type="month" value={selectedMonth} onChange={e=>setSelectedMonth(e.target.value)} className="bg-white/20 backdrop-blur-md text-white border border-white/20 p-2 rounded-xl text-xs font-bold outline-none cursor-pointer" />
                                     </div>
                                 )}
                                 {currentLeaderboardView.length === 0 ? ( <div className="bg-white p-6 rounded-b-[2.5rem] mt-4 text-center text-gray-400 font-medium py-16 flex-1">ยังไม่มีข้อมูล</div> ) : (
-                                    <>
-                                        <div className="flex justify-center items-end gap-2 sm:gap-6 px-4 pt-6 pb-6 relative z-10 md:pt-10">
+                                    <div className="flex-1 flex flex-col h-full overflow-hidden">
+                                        <div className="flex justify-center items-end gap-2 sm:gap-6 px-4 pt-6 pb-6 relative z-10 md:pt-10 shrink-0">
                                             {podiumWinners[1] && ( 
                                                 <div className="flex flex-col items-center flex-1 max-w-[110px] md:max-w-[140px]">
                                                     <div className="relative mb-2 flex flex-col items-center">
@@ -1697,10 +1692,10 @@
                                                 </div> 
                                             )}
                                         </div>
-                                        <div className="bg-white rounded-b-[2.5rem] rounded-t-[2.5rem] p-4 pb-20 shadow-[0_-15px_40px_-15px_rgba(0,0,0,0.4)] relative z-20 md:p-8 flex-1">
-                                            <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-4 md:mb-8"></div>
-                                            {currentLeaderboardView.length <= 3 && exportSortOrder === 'score' ? ( <p className="text-center text-gray-400 font-medium py-4">สิ้นสุดรายชื่อ</p> ) : (
-                                                <div className="space-y-3 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-4 md:space-y-0">
+                                        <div className="bg-white rounded-t-[2.5rem] rounded-b-[2.5rem] p-4 pb-24 shadow-[0_-15px_40px_-15px_rgba(0,0,0,0.4)] relative z-20 md:p-8 flex-1 overflow-y-auto">
+                                            <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-4 md:mb-8 shrink-0"></div>
+                                            {currentLeaderboardView.length <= 3 && exportSortOrder === 'score' ? ( <p className="text-center text-gray-400 font-medium py-4 shrink-0">สิ้นสุดรายชื่อ</p> ) : (
+                                                <div className="space-y-3 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-4 md:space-y-0 shrink-0">
                                                     {currentLeaderboardView.map((item, idx) => {
                                                         if (exportSortOrder === 'score' && idx < 3) return null; 
                                                         const realRank = exportSortOrder === 'score' ? item.trueRank : (idx + 1);
@@ -1718,9 +1713,9 @@
                                                 </div>
                                             )}
                                             
-                                            {/* ปุ่มดาวน์โหลดในหน้า Leaderboard (เฉพาะ Admin) */}
+                                            {/* ปุ่มดาวน์โหลดในหน้า Leaderboard (แสดงเฉพาะ Admin) */}
                                             {appMode !== 'guest' && (
-                                                <div className="mt-8 flex justify-end gap-2 border-t pt-4">
+                                                <div className="mt-8 flex justify-end gap-2 border-t pt-4 shrink-0 flex-wrap">
                                                     <select value={exportSortOrder} onChange={e => setExportSortOrder(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-lg p-2 text-xs font-bold text-gray-600 outline-none">
                                                         <option value="score">เรียงตามคะแนน</option><option value="room">เรียงตามห้อง</option>
                                                     </select>
@@ -1733,14 +1728,14 @@
                                                 </div>
                                             )}
                                         </div>
-                                    </>
+                                    </div>
                                 )}
                              </div>
                         )}
                         
                         {/* --- เส้นทาง: ประวัติ (History) --- */}
                         {currentRoute === 'history' && (
-                             <div className="space-y-4 pb-12">
+                             <div className="space-y-4">
                                 {/* แถบตัวกรอง */}
                                 <div className="bg-white p-4 sm:p-6 rounded-[1.5rem] shadow-sm border border-gray-100 animate-in fade-in relative">
                                     <div className="relative mb-5">
@@ -1815,9 +1810,9 @@
                                                 )}
                                             </div>
                                             
-                                            {/* ปุ่มดาวน์โหลด Export History (เฉพาะ Admin) */}
+                                            {/* ปุ่มดาวน์โหลด Export History (แสดงเฉพาะ Admin) */}
                                             {appMode !== 'guest' && (
-                                                <div className="mt-6 flex justify-end gap-2 border-t pt-4">
+                                                <div className="mt-6 flex justify-end gap-2 border-t pt-4 flex-wrap">
                                                     <select value={exportDestination} onChange={e => setExportDestination(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-lg p-2 text-xs font-bold text-gray-600 outline-none hidden md:block">
                                                         <option value="local">💻 โหลดลงเครื่อง</option><option value="drive">☁️ เซฟลง Drive</option>
                                                     </select>
@@ -1928,13 +1923,13 @@
                              <div className="animate-in fade-in space-y-4 pb-12">
                                 {(settings?.room_map_url || settings?.zone_map_url) && (
                                     <div className="flex gap-3 mb-4">
-                                        {/* แผนผังห้องเรียน ซ้าย */}
+                                        {/* แผนผังห้องเรียน (ซ้าย) */}
                                         {settings?.room_map_url && (
                                             <button onClick={() => setShowRoomMap(true)} className="flex-1 bg-white border border-blue-200 text-blue-600 font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-sm hover:bg-blue-50 active:scale-95 transition-all text-sm">
                                                 <i className="ph ph-buildings text-lg"></i> แผนผังห้องเรียน
                                             </button>
                                         )}
-                                        {/* แผนผังเขตพื้นที่ ขวา */}
+                                        {/* แผนผังเขตพื้นที่ (ขวา) */}
                                         {settings?.zone_map_url && (
                                             <button onClick={() => setShowZoneMap(true)} className="flex-1 bg-white border border-[#C8102E]/20 text-[#C8102E] font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-sm hover:bg-red-50 active:scale-95 transition-all text-sm">
                                                 <i className="ph ph-map-pin text-lg"></i> แผนผังเขตพื้นที่
@@ -2472,6 +2467,7 @@
                         </div>
                     )}
                     
+                    {/* Toast Notification โฉมใหม่ (มุมขวาบน) */}
                     {toast.visible && (
                         <div className="fixed top-4 right-4 z-[999999] animate-in fade-in slide-in-from-right-4 duration-300">
                             <div className={`flex items-center gap-3 px-5 py-4 rounded-2xl shadow-xl backdrop-blur-md border ${
@@ -2508,36 +2504,18 @@
                                 <div className={`p-1.5 rounded-xl mb-1 flex items-center justify-center ${currentRoute === 'leaderboard' ? 'bg-[#FDECEF]' : 'bg-transparent'}`}><i className={`ph ${currentRoute === 'leaderboard' ? 'ph-trophy ph-fill' : 'ph-trophy'} text-[24px]`}></i></div>
                                 <span className="text-[10px] font-medium truncate w-full text-center">อันดับ</span>
                             </button>
-                            
-                            {/* ปุ่มตรงกลาง (นูนขึ้น) */}
-                            {appMode === 'guest' ? (
-                                <button onClick={() => setShowAnnouncement(true)} className="flex flex-col items-center justify-center w-16 -mt-6">
-                                    <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-[#C8102E] to-red-600 text-white shadow-lg flex items-center justify-center border-4 border-white">
-                                        <i className="ph ph-megaphone text-2xl"></i>
-                                    </div>
-                                    <span className="text-[10px] font-bold text-[#C8102E] mt-1">ประกาศ</span>
-                                </button>
-                            ) : (
-                                <button onClick={() => setCurrentRoute('inspect')} className="flex flex-col items-center justify-center w-16 -mt-6">
-                                    <div className={`w-12 h-12 rounded-full text-white shadow-lg flex items-center justify-center border-4 border-white transition-all ${currentRoute === 'inspect' ? 'bg-gradient-to-tr from-[#C8102E] to-red-600' : 'bg-gray-800'}`}>
-                                        <i className="ph ph-clipboard-text text-2xl ph-fill"></i>
-                                    </div>
-                                    <span className={`text-[10px] font-bold mt-1 ${currentRoute === 'inspect' ? 'text-[#C8102E]' : 'text-gray-800'}`}>ประเมินผล</span>
-                                </button>
-                            )}
-
                             <button onClick={() => setCurrentRoute('history')} className={`flex flex-col items-center p-2 w-16 transition-all ${currentRoute === 'history' ? 'text-[#C8102E]' : 'text-gray-500'}`}>
                                 <div className={`p-1.5 rounded-xl mb-1 flex items-center justify-center ${currentRoute === 'history' ? 'bg-[#FDECEF]' : 'bg-transparent'}`}><i className={`ph ${currentRoute === 'history' ? 'ph-clock-counter-clockwise ph-fill' : 'ph-clock-counter-clockwise'} text-[24px]`}></i></div>
                                 <span className="text-[10px] font-medium truncate w-full text-center">ประวัติ</span>
                             </button>
                             
-                            {/* ปุ่มขวาสุด สลับตามสถานะ */}
-                            {appMode === 'guest' ? (
-                                <button onClick={() => setShowInfoModal(true)} className="flex flex-col items-center p-2 w-16 transition-all text-gray-500 hover:text-[#C8102E]">
-                                    <div className="p-1.5 rounded-xl mb-1 flex items-center justify-center bg-transparent"><i className="ph ph-question text-[24px]"></i></div>
-                                    <span className="text-[10px] font-medium truncate w-full text-center">ช่วยเหลือ</span>
+                            {(appMode === 'admin' || appMode === 'inspector') && (
+                                <button onClick={() => setCurrentRoute('inspect')} className={`flex flex-col items-center p-2 w-16 transition-all ${currentRoute === 'inspect' ? 'text-[#C8102E]' : 'text-gray-500'}`}>
+                                    <div className={`p-1.5 rounded-xl mb-1 flex items-center justify-center ${currentRoute === 'inspect' ? 'bg-[#FDECEF]' : 'bg-transparent'}`}><i className={`ph ${currentRoute === 'inspect' ? 'ph-clipboard-text ph-fill' : 'ph-clipboard-text'} text-[24px]`}></i></div>
+                                    <span className="text-[10px] font-medium truncate w-full text-center">ประเมิน</span>
                                 </button>
-                            ) : (
+                            )}
+                            {appMode === 'admin' && (
                                 <button onClick={() => setCurrentRoute('settings')} className={`flex flex-col items-center p-2 w-16 transition-all ${currentRoute === 'settings' ? 'text-[#C8102E]' : 'text-gray-500'}`}>
                                     <div className={`p-1.5 rounded-xl mb-1 flex items-center justify-center ${currentRoute === 'settings' ? 'bg-[#FDECEF]' : 'bg-transparent'}`}><i className={`ph ${currentRoute === 'settings' ? 'ph-gear ph-fill' : 'ph-gear'} text-[24px]`}></i></div>
                                     <span className="text-[10px] font-medium truncate w-full text-center">ตั้งค่า</span>
