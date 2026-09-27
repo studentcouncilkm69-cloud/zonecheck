@@ -15,7 +15,10 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
-    <!-- Phosphor Icons (Theme เดียวกับ Student Voice) -->
+    <!-- ⚠️ สำคัญมาก: สคริปต์แก้บั๊กจอขาว regeneratorRuntime -->
+    <script src="https://unpkg.com/regenerator-runtime@0.14.1/runtime.js"></script>
+    
+    <!-- Phosphor Icons -->
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
     
     <!-- PDF & Excel Export -->
@@ -23,7 +26,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
     
-    <!-- Fonts (Noto Sans Thai แบบ Student Voice) -->
+    <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700;900&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
     
     <style>
@@ -89,13 +92,12 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo, useRef } = React;
 
-        // ⚠️ สำคัญมาก: ใส่ URL ของ ZoneCheck Backend (REST API) ที่ได้จาก Google Apps Script
-        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxp7RJqJIajrEx8J9IVnJC75saIt_FeiQDUxNgxnP7vrYOy7xcYy77RqXljRUXv_xHm/exec"; 
+        // ⚠️ ลิงก์ใหม่ล่าสุดที่คุณให้มา
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby3CKwBAOiz6dJQWI-t8nabgSv-46yTcAI8QZHR2KFWtrGJSHuKHdnm7-sCDsfL26yu/exec"; 
 
         const HARDCODED_LOGO = "https://i.postimg.cc/wBN5btrp/rong-re-yn-kham-wng.png";
         const HARDCODED_NAME = "STUDENT COUNCIL • KHAMMUANG SCHOOL";
 
-        // ฟังก์ชันจัดการ LocalStorage ป้องกัน Error
         const safeGetItem = (key) => { try { return localStorage.getItem(key); } catch(e) { return null; } };
         const safeSetItem = (key, val) => { try { localStorage.setItem(key, val); } catch(e) {} };
         const safeRemoveItem = (key) => { try { localStorage.removeItem(key); } catch(e) {} };
@@ -131,6 +133,8 @@
                 return this.props.children;
             }
         }
+
+        const defaultAnnouncement = `📌 เกณฑ์การให้คะแนนความสะอาด\n\n1. ห้องเรียน (เต็ม 10 คะแนน)\nทำครบรับข้อละ 2 คะแนน:\n• จัดโต๊ะเก้าอี้\n• นำขยะไปเท\n• ปิดหน้าต่างและปิดไฟ\n• กวาดถูพื้น\n• ลบกระดานดำ\n\n2. เขตพื้นที่ (เต็ม 10 คะแนน)\n• ดีเยี่ยม: +10\n• ดี: +8\n• พอใช้: +5\n• ปรับปรุง: +2\n\n⚠️ ข้ามการตรวจ = ไม่ได้คะแนน`;
 
         const initialSettings = { 
             passcode: "1234", master_passcode: "9999", is_maintenance: "false", 
@@ -182,9 +186,13 @@
             const [appMode, setAppMode] = useState('guest'); 
             const [currentRoute, setCurrentRoute] = useState('dashboard'); 
             const [showSplash, setShowSplash] = useState(true); 
-            const [toast, setToast] = useState('');
+            // ระบบ Toast ใหม่ (สวยงามมุมขวาบน)
+            const [toast, setToast] = useState({ message: '', type: 'info', visible: false });
+            const toastTimeoutRef = useRef(null);
+            
             const [isSyncing, setIsSyncing] = useState(false);
 
+            // States ล็อกอิน
             const [logoTaps, setLogoTaps] = useState(0);
             const tapTimeoutRef = useRef(null);
             const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
@@ -241,7 +249,7 @@
             const [showInfoModal, setShowInfoModal] = useState(false);
             const [showAnnouncement, setShowAnnouncement] = useState(false);
             const [showZoneMap, setShowZoneMap] = useState(false); 
-            const [showRoomMap, setShowRoomMap] = useState(false); 
+            const [showRoomMap, setShowRoomMap] = useState(false);
             const [showMainBannerPopup, setShowMainBannerPopup] = useState(false);
             const [hideBannerFor7Days, setHideBannerFor7Days] = useState(false);
             const [printData, setPrintData] = useState({ isPreparing: false, format: null, mode: null, title: '', subtitle: '', dateText: '', data: [] });
@@ -254,7 +262,7 @@
             const [logoInput, setLogoInput] = useState('');
             const [schoolLogoInput, setSchoolLogoInput] = useState('');
             const [zoneMapInput, setZoneMapInput] = useState(''); 
-            const [roomMapInput, setRoomMapInput] = useState('');
+            const [roomMapInput, setRoomMapInput] = useState(''); 
             const [mainBannerInput, setMainBannerInput] = useState(''); 
             const [popupBannerInput, setPopupBannerInput] = useState(''); 
             const [announceBannerInput, setAnnounceBannerInput] = useState(''); 
@@ -278,8 +286,8 @@
                     setMainBannerInput(settings.main_banner_url || '');
                     setPopupBannerInput(settings.popup_banner_url || '');
                     setAnnounceBannerInput(settings.announce_banner_url || settings.banner_url || '');
-                    setAnnouncementTitleInput(settings.announcement_title || '');
-                    setAnnouncementInput(settings.announcement_msg || '');
+                    setAnnouncementTitleInput(settings.announcement_title || ''); // ให้เป็นค่าว่าง
+                    setAnnouncementInput(settings.announcement_msg || ''); // ให้เป็นค่าว่าง
                     setVisMainBanner(settings.visibility_main_banner || 'public');
                     setVisPopupBanner(settings.visibility_popup_banner || 'public');
                     setVisAnnounceBanner(settings.visibility_announce_banner || 'public');
@@ -355,6 +363,15 @@
                 tapTimeoutRef.current = setTimeout(() => { setLogoTaps(0); }, 3000);
             };
 
+            // ฟังก์ชันโชว์ Toast สวยๆ ขวาบน
+            const showToast = (message, type = 'info') => {
+                if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+                setToast({ message, type, visible: true });
+                toastTimeoutRef.current = setTimeout(() => {
+                    setToast(prev => ({ ...prev, visible: false }));
+                }, 4000);
+            };
+
             const handleLoginSubmit = (e) => {
                 e.preventDefault(); 
                 if (!selectedLoginName) { setLoginError('กรุณาเลือกชื่อผู้ตรวจ'); return; }
@@ -375,7 +392,7 @@
                     setCurrentRoute('dashboard'); 
                     safeSetItem('zc26_last_user', selectedLoginName);
                     handleSync(); 
-                    showToast(`เข้าสู่ระบบในชื่อ ${selectedLoginName}`);
+                    showToast(`ยินดีต้อนรับ, ${selectedLoginName}`, 'success');
                 } else { setLoginError('รหัสผ่านไม่ถูกต้อง'); }
             };
 
@@ -395,10 +412,10 @@
                         setInspectors(Array.isArray(json.inspectors) ? json.inspectors : []);
                         setInspections(Array.isArray(json.inspections) ? json.inspections : []);
                         setSettings(json.settings || initialSettings);
-                        if(json.settings && String(json.settings.is_maintenance).toLowerCase() !== 'true' && !showSplash) showToast('อัปเดตข้อมูลล่าสุดแล้ว');
+                        if(json.settings && String(json.settings.is_maintenance).toLowerCase() !== 'true' && !showSplash) showToast('อัปเดตข้อมูลล่าสุดแล้ว', 'success');
                     }
                 } catch (err) {
-                    if (!showSplash) showToast('เชื่อมต่อฐานข้อมูลล้มเหลว ตรวจสอบอินเทอร์เน็ต');
+                    if (!showSplash) showToast('เชื่อมต่อฐานข้อมูลล้มเหลว ตรวจสอบอินเทอร์เน็ต', 'error');
                 } finally {
                     setIsSyncing(false);
                     setTimeout(() => setShowSplash(false), 800);
@@ -437,7 +454,7 @@
                 const d = new Date();
                 const currentMonthYear = `${thaiMonths[d.getMonth()]} ${d.getFullYear() + 543}`;
                 
-                showToast(`☁️ กำลังเริ่มส่งไฟล์เข้า Google Drive...`);
+                showToast(`☁️ กำลังเริ่มส่งไฟล์เข้า Google Drive...`, 'info');
                 
                 if (base64Data.length > 6000000) { 
                     showAlertMsg("❌ ไฟล์มีขนาดใหญ่เกินกว่าที่ระบบ Google Drive จะรับได้อัตโนมัติ\nกรุณาเลือกดาวน์โหลด 'ลงเครื่อง' แทนครับ");
@@ -451,7 +468,7 @@
                     });
 
                     if(res && res.status === 'Success') {
-                        showToast('✅ บันทึกไฟล์ลง Google Drive สำเร็จ!');
+                        showToast('✅ บันทึกไฟล์ลง Google Drive สำเร็จ!', 'success');
                         return res.url;
                     } else {
                         throw new Error(res.message || 'Unknown Server Error');
@@ -462,7 +479,6 @@
                 }
             };
 
-            const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 4500); };
             const showConfirm = (msg, onConfirmFn) => { setConfirmDialog({ isOpen: true, message: msg, onConfirm: onConfirmFn, isAlert: false }); };
             const showAlertMsg = (msg) => { setConfirmDialog({ isOpen: true, message: msg, onConfirm: () => {}, isAlert: true }); };
 
@@ -472,7 +488,7 @@
                 const existInsp = validInspections.find(i => i.roomId === room.id && i.type === type && i.date && String(i.date).startsWith(targetDateStr));
                 
                 if(existInsp) { 
-                    showToast(`ห้องนี้มีผลตรวจของวันที่ ${formatDateObj(targetDateStr)} อยู่แล้วครับ`); 
+                    showToast(`ห้องนี้มีผลตรวจของวันที่ ${formatDateObj(targetDateStr)} อยู่แล้วครับ`, 'warning'); 
                 } else {
                     setEvalComment('');
                     setInspectImage(null);
@@ -495,7 +511,7 @@
                 if(!file) return;
                 
                 setIsImageProcessing(true);
-                showToast("📸 กำลังประมวลผลรูปลายน้ำ...");
+                showToast("📸 กำลังประมวลผลรูปลายน้ำ...", 'info');
 
                 const reader = new FileReader();
                 reader.onload = (event) => {
@@ -552,7 +568,7 @@
                             let base64Only = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
                             
                             setInspectImage({ fileName: file.name, base64: base64Only, mimeType: 'image/jpeg', dataUrl: dataUrl });
-                            showToast("✅ สร้างลายน้ำสำเร็จ");
+                            showToast("✅ สร้างลายน้ำสำเร็จ", 'success');
                         } catch (err) {
                             showAlertMsg("❌ เกิดข้อผิดพลาดในการสร้างลายน้ำ: " + err.message);
                         } finally {
@@ -568,10 +584,10 @@
             const removeImage = () => { setInspectImage(null); if(fileInputRef.current) fileInputRef.current.value = ''; };
 
             const handleSubmitInspection = async () => {
-                if (isImageProcessing) return showToast('⏳ กรุณารอสักครู่ กำลังวาดลายน้ำ...');
+                if (isImageProcessing) return showToast('⏳ กรุณารอสักครู่ กำลังวาดลายน้ำ...', 'warning');
                 const loc = inspectModal.room; const type = inspectModal.type; if(!loc) return;
                 
-                if (isSkipped && (!evalComment || !evalComment.trim())) return showToast('⚠️ กรุณาระบุ "หมายเหตุ" เมื่อเลือกข้ามการตรวจด้วยครับ');
+                if (isSkipped && (!evalComment || !evalComment.trim())) return showToast('⚠️ กรุณาระบุ "หมายเหตุ" เมื่อเลือกข้ามการตรวจด้วยครับ', 'warning');
 
                 let totalScore = 0; let breakdown = {};
                 
@@ -602,7 +618,7 @@
                 try {
                     let photoUrl = '';
                     if (inspectImage && inspectImage.base64) {
-                        showToast('📸 กำลังอัปโหลดรูปภาพหลักฐานลง Google Drive...');
+                        showToast('📸 กำลังอัปโหลดรูปภาพหลักฐานลง Google Drive...', 'info');
                         const targetMonthYear = formatMonthYearThai(inspectModal.date); 
                         const roomFileName = `${(loc.name||'').replace(/\//g,'-')}_${inspectModal.date}.jpg`;
                         
@@ -624,10 +640,10 @@
                     await syncToGASAsync('saveInspection', newInsp);
                     const validInspections = Array.isArray(inspections) ? inspections : [];
                     setInspections([...validInspections, newInsp]); 
-                    showToast(`บันทึกผลของวันที่ ${formatDateObj(inspectModal.date)} สำเร็จ!`); 
+                    showToast(`บันทึกผลของวันที่ ${formatDateObj(inspectModal.date)} สำเร็จ!`, 'success'); 
                     setInspectModal({ isOpen: false, room: null, type: 'room', date: new Date().toISOString().split('T')[0] });
                 } catch(e) { 
-                    showToast('บันทึกไม่สำเร็จ กรุณาลองใหม่'); 
+                    showToast('บันทึกไม่สำเร็จ กรุณาลองใหม่', 'error'); 
                 } finally { 
                     setIsSavingData(false); 
                 }
@@ -642,9 +658,9 @@
                     
                     try {
                         for (const record of toDelete) { await syncToGASAsync('deleteInspection', record.id); }
-                        showToast(`ลบผลการประเมินแล้ว`);
+                        showToast(`ลบผลการประเมินแล้ว`, 'success');
                     } catch(e) {
-                        showToast(`เกิดข้อผิดพลาดในการลบประวัติบน Server`);
+                        showToast(`เกิดข้อผิดพลาดในการลบประวัติบน Server`, 'error');
                     }
                 });
             };
@@ -655,10 +671,10 @@
                         const validInspections = Array.isArray(inspections) ? inspections : [];
                         setInspections(validInspections.filter(i => i.id !== id)); 
                         await syncToGASAsync('deleteInspection', id); 
-                        showToast('ลบประวัติสำเร็จ');
+                        showToast('ลบประวัติสำเร็จ', 'success');
                         if (fromModal === 'viewDetail') setViewDetailModal(null);
                     } catch(e) {
-                        showToast('ลบไม่สำเร็จ กรุณาลองใหม่');
+                        showToast('ลบไม่สำเร็จ กรุณาลองใหม่', 'error');
                     }
                 });
             };
@@ -922,8 +938,8 @@
                     await syncToGASAsync('updateSettings', { key: 'maintenance_msg', val: maintenanceMsg }); 
                     await syncToGASAsync('updateSettings', { key: 'passcode', val: sysPasscode }); 
                     await syncToGASAsync('updateSettings', { key: 'master_passcode', val: sysMasterPasscode }); 
-                    showToast('บันทึกตั้งค่าเรียบร้อย'); 
-                } catch(e) { showToast('บันทึกล้มเหลว'); }
+                    showToast('บันทึกตั้งค่าเรียบร้อย', 'success'); 
+                } catch(e) { showToast('บันทึกล้มเหลว', 'error'); }
             };
             
             const handleSaveMegaphoneAndLogo = async () => { 
@@ -950,8 +966,8 @@
                     await syncToGASAsync('updateSettings', { key: 'visibility_announce_banner', val: visAnnounceBanner }); 
                     
                     if(!popupBannerInput) { safeRemoveItem('zc26_hide_banner_until'); }
-                    showToast('บันทึกข้อมูลเรียบร้อย'); 
-                } catch(e) { showToast('บันทึกล้มเหลว'); }
+                    showToast('บันทึกข้อมูลเรียบร้อย', 'success'); 
+                } catch(e) { showToast('บันทึกล้มเหลว', 'error'); }
             };
 
             const handleAddBulkInspectors = async () => {
@@ -964,8 +980,8 @@
                 try {
                     await syncToGASAsync('updateInspectors', newInspecs); 
                     setBulkInspectors(''); 
-                    showToast('เพิ่มรายชื่อสำเร็จ');
-                } catch(e) { showToast('เพิ่มรายชื่อล้มเหลว'); }
+                    showToast('เพิ่มรายชื่อสำเร็จ', 'success');
+                } catch(e) { showToast('เพิ่มรายชื่อล้มเหลว', 'error'); }
             };
 
             const handleDeleteInspector = (id) => { 
@@ -975,8 +991,8 @@
                     setInspectors(newInspecs); 
                     try {
                         await syncToGASAsync('updateInspectors', newInspecs); 
-                        showToast('ลบรายชื่อสำเร็จ'); 
-                    } catch(e) { showToast('ลบล้มเหลว'); }
+                        showToast('ลบรายชื่อสำเร็จ', 'success'); 
+                    } catch(e) { showToast('ลบล้มเหลว', 'error'); }
                 }); 
             };
 
@@ -990,8 +1006,8 @@
                 try {
                     await syncToGASAsync('updateRooms', newRooms); 
                     setBulkRooms(''); 
-                    showToast('เพิ่มห้องเรียนสำเร็จ');
-                } catch(e) { showToast('เพิ่มห้องล้มเหลว'); }
+                    showToast('เพิ่มห้องเรียนสำเร็จ', 'success');
+                } catch(e) { showToast('เพิ่มห้องล้มเหลว', 'error'); }
             };
 
             const handleDeleteRoom = (id) => { 
@@ -1001,8 +1017,8 @@
                     setRooms(newRooms); 
                     try {
                         await syncToGASAsync('updateRooms', newRooms); 
-                        showToast('ลบห้องสำเร็จ'); 
-                    } catch(e) { showToast('ลบล้มเหลว'); }
+                        showToast('ลบห้องสำเร็จ', 'success'); 
+                    } catch(e) { showToast('ลบล้มเหลว', 'error'); }
                 }); 
             };
             
@@ -1012,8 +1028,8 @@
                 setRooms(newRooms); 
                 try {
                     await syncToGASAsync('updateRooms', newRooms); 
-                    showToast(`อัปเดตสิทธิ์เขตของห้อง ${name} แล้ว`); 
-                } catch(e) { showToast('อัปเดตล้มเหลว'); }
+                    showToast(`อัปเดตสิทธิ์เขตของห้อง ${name} แล้ว`, 'success'); 
+                } catch(e) { showToast('อัปเดตล้มเหลว', 'error'); }
             };
             
             const moveRoomUp = async (index) => {
@@ -1035,7 +1051,7 @@
             };
 
             const exportExcel = (mode) => {
-                if (typeof XLSX === 'undefined') return showToast("กำลังโหลดเครื่องมือสร้าง Excel กรุณารอสักครู่...");
+                if (typeof XLSX === 'undefined') return showToast("กำลังโหลดเครื่องมือสร้าง Excel กรุณารอสักครู่...", 'info');
 
                 setPrintData(prev => ({ ...prev, isPreparing: true, format: 'excel' }));
                 
@@ -1059,7 +1075,7 @@
 
                             const sortedMonths = Array.from(uniqueMonths).sort();
                             if (sortedMonths.length === 0) {
-                                showToast('ไม่มีข้อมูลสำหรับการส่งออก');
+                                showToast('ไม่มีข้อมูลสำหรับการส่งออก', 'warning');
                                 setPrintData(prev => ({ ...prev, isPreparing: false, format: null }));
                                 return;
                             }
@@ -1191,7 +1207,7 @@
                             }
 
                             if(formattedData.length === 0) { 
-                                showToast('ไม่มีข้อมูลสำหรับส่งออก'); 
+                                showToast('ไม่มีข้อมูลสำหรับส่งออก', 'warning'); 
                                 setPrintData(prev => ({ ...prev, isPreparing: false, format: null }));
                                 return; 
                             }
@@ -1233,7 +1249,7 @@
                             await uploadFileToGoogleDrive(fileName, base64Str, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
                         } else {
                             XLSX.writeFile(wb, fileName);
-                            showToast('ดาวน์โหลดไฟล์ Excel สำเร็จ');
+                            showToast('ดาวน์โหลดไฟล์ Excel สำเร็จ', 'success');
                         }
                     } catch (error) {
                         console.error(error);
@@ -1245,7 +1261,7 @@
 
             const executeDirectExport = async (mode, format) => {
                 if (typeof window.html2canvas === 'undefined' || (format === 'pdf' && typeof window.html2pdf === 'undefined')) {
-                    return showToast("กำลังโหลดเครื่องมือสร้างเอกสาร กรุณารอสักครู่...");
+                    return showToast("กำลังโหลดเครื่องมือสร้างเอกสาร กรุณารอสักครู่...", 'info');
                 }
                 let title = 'รายงานการตรวจความเรียบร้อย';
                 let dateText = ''; let typeName = guestFilterType === 'all' ? 'รวมทุกหมวด' : guestFilterType === 'room' ? 'เฉพาะห้องเรียน' : 'เฉพาะเขตพื้นที่';
@@ -1282,7 +1298,7 @@
 
                 setPrintData({ isPreparing: true, format: format, mode, title, dateText, typeName, groupName, data: dataToPrint });
                 
-                if (exportDestination === 'local') showToast(`กำลังเตรียมไฟล์ ${format.toUpperCase()}...`);
+                if (exportDestination === 'local') showToast(`กำลังเตรียมไฟล์ ${format.toUpperCase()}...`, 'info');
 
                 setTimeout(async () => {
                     const element = document.getElementById('pdf-export-container');
@@ -1299,7 +1315,7 @@
                             } else {
                                 const link = document.createElement('a');
                                 link.download = fileName; link.href = dataUrl; link.click();
-                                showToast("ดาวน์โหลด PNG สำเร็จ");
+                                showToast("ดาวน์โหลด PNG สำเร็จ", 'success');
                             }
                         } else if (format === 'pdf') {
                             const opt = {
@@ -1317,11 +1333,11 @@
                                 await uploadFileToGoogleDrive(fileName, pdfBase64, 'application/pdf');
                             } else {
                                 await window.html2pdf().set(opt).from(element).save();
-                                showToast("ดาวน์โหลด PDF สำเร็จ");
+                                showToast("ดาวน์โหลด PDF สำเร็จ", 'success');
                             }
                         }
                     } catch(e) {
-                        if (exportDestination === 'local') showToast(`เกิดข้อผิดพลาดในการสร้างไฟล์ ${format.toUpperCase()}`);
+                        if (exportDestination === 'local') showToast(`เกิดข้อผิดพลาดในการสร้างไฟล์ ${format.toUpperCase()}`, 'error');
                     } finally {
                         setPrintData(prev => ({ ...prev, isPreparing: false, format: null }));
                     }
@@ -1520,20 +1536,21 @@
                             
                             <div className="flex items-center gap-2 ml-2 flex-shrink-0">
                                 {appMode === 'guest' && (
-                                    <button onClick={() => setShowAnnouncement(true)} className="text-[#C8102E] hover:text-red-800 transition-colors w-10 h-10 flex items-center justify-center rounded-full bg-red-50 border border-red-100 shadow-sm active:scale-95"><i className="ph ph-megaphone text-xl"></i></button>
+                                    <>
+                                        <button onClick={() => setShowAnnouncement(true)} className="text-[#C8102E] hover:text-red-800 transition-colors w-10 h-10 flex items-center justify-center rounded-full bg-red-50 border border-red-100 shadow-sm active:scale-95"><i className="ph ph-megaphone text-xl"></i></button>
+                                        <button onClick={()=>setShowInfoModal(true)} className="text-gray-500 hover:text-gray-700 transition-colors w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 border border-gray-200 shadow-sm active:scale-95"><i className="ph ph-question text-xl"></i></button>
+                                    </>
                                 )}
                                 <button onClick={handleSync} className="text-gray-400 hover:text-[#C8102E] transition-colors w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 border border-gray-100 shadow-sm active:scale-95"><i className={`ph ph-arrows-clockwise text-xl ${isSyncing ? "animate-spin text-[#C8102E]" : ""}`}></i></button>
-                                {appMode === 'guest' ? (
-                                    <button onClick={()=>setShowInfoModal(true)} className="text-gray-500 hover:text-gray-700 transition-colors w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 border border-gray-200 shadow-sm active:scale-95"><i className="ph ph-question text-xl"></i></button>
-                                ) : (
+                                {appMode !== 'guest' && (
                                     <button onClick={() => { showConfirm('ต้องการออกจากระบบใช่หรือไม่?', () => { setAppMode('guest'); setInputPasscode(''); setCurrentUser(null); setCurrentRoute('dashboard'); }); }} className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-900 text-white hover:bg-black transition-colors shadow-sm active:scale-95"><i className="ph ph-sign-out text-xl"></i></button>
                                 )}
                             </div>
                         </div>
                     </header>
 
-                    {/* การแสดงผลหน้าต่างๆ (เพิ่ม pb-28 เพื่อให้เลื่อนสุดทางได้บน iPad และมือถือ) */}
-                    <main className="flex-1 flex flex-col overflow-y-auto relative pb-28 md:pb-12 custom-scrollbar p-4 md:p-8 max-w-5xl mx-auto w-full">
+                    {/* การแสดงผลหน้าต่างๆ */}
+                    <main className="flex-1 flex flex-col overflow-y-auto relative pb-[70px] md:pb-0 custom-scrollbar p-4 md:p-8 max-w-5xl mx-auto w-full">
                         
                         {/* --- เส้นทาง: หน้าแรก (Dashboard) --- */}
                         {currentRoute === 'dashboard' && (
@@ -1543,18 +1560,23 @@
                                         <img src={settings.main_banner_url} alt="Main Banner" className="w-full h-full object-cover block absolute inset-0" />
                                     </div>
                                 ) : (
-                                    <div className="bg-gradient-to-br from-[#E11D48] via-[#BE123C] to-[#881337] rounded-[2rem] p-6 md:p-10 text-white shadow-[0_8px_30px_rgb(200,16,46,0.3)] relative overflow-hidden">
+                                    <div className="bg-gradient-to-br from-[#E11D48] via-[#BE123C] to-[#881337] rounded-3xl p-6 md:p-10 text-white shadow-[0_8px_30px_rgb(200,16,46,0.3)] relative overflow-hidden">
                                         <div className="absolute -right-6 top-0 text-white/10 rotate-12 transform scale-110 pointer-events-none"><i className="ph ph-clipboard-text text-[140px]"></i></div>
                                         <div className="absolute left-16 -top-12 text-white/5 rotate-45 transform scale-110 pointer-events-none"><i className="ph ph-broom text-[150px]"></i></div>
                                         <div className="relative z-10">
                                             <span className="inline-block bg-white/20 backdrop-blur-md px-3 py-1 rounded-full text-[10px] font-bold tracking-widest mb-3 border border-white/20">STUDENT COUNCIL</span>
                                             <h2 className="text-2xl md:text-3xl font-bold mb-2.5">เช็คคะแนนกันหน่อย!</h2>
-                                            <p className="text-[#FFE4E6] text-xs md:text-sm max-w-md leading-relaxed opacity-95">วันนี้ห้องเรารอด หรือห้องเราร่วง? ตรวจสอบและรายงานผลการดูแลรักษาเขตพื้นที่และห้องเรียน สนับสนุนโดยสภานักเรียนโรงเรียนคำม่วง</p>
+                                            <p className="text-[#FFE4E6] text-xs md:text-sm max-w-md leading-relaxed opacity-95">วันนี้ห้องเรารอด หรือห้องเราร่วง? ตรวจสอบและรายงานผลการดูแลรักษาเขตพื้นที่และห้องเรียน จัดทำโดยสภานักเรียนโรงเรียนคำม่วง</p>
                                         </div>
                                     </div>
                                 )}
 
-                                <div>
+                                {/* ป้ายสถิติการเข้าชมแบบอัตโนมัติ */}
+                                <div className="flex justify-center mt-2 mb-4 animate-in fade-in zoom-in">
+                                    <img src="https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https%3A%2F%2Fcouncilkm69-cloud.github.io%2Fzonecheck&count_bg=%23C8102E&title_bg=%231F2937&title=%E0%B8%9C%E0%B8%B9%E0%B9%89%E0%B9%80%E0%B8%82%E0%B9%89%E0%B8%B2%E0%B8%8A%E0%B8%A1&edge_flat=false" alt="Visitor Count" className="h-6 shadow-sm rounded-md" crossOrigin="anonymous" />
+                                </div>
+
+                                <div className="grid grid-cols-1 gap-6">
                                     {/* ความคืบหน้าการตรวจ */}
                                     <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 flex flex-col md:flex-row md:items-center gap-6">
                                         <div className="flex-shrink-0">
@@ -1584,7 +1606,7 @@
                                     </div>
                                 </div>
                                 
-                                {/* ตารางอันดับ Top 5 ในหน้า Dashboard (เอากลับมาให้ครบถ้วน) */}
+                                {/* ตารางอันดับ Top 5 ในหน้า Dashboard */}
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
                                     <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 flex flex-col">
                                         <div className="flex justify-between items-center mb-4">
@@ -1622,7 +1644,7 @@
                         
                         {/* --- เส้นทาง: อันดับคะแนน (Leaderboard) --- */}
                         {currentRoute === 'leaderboard' && (
-                             <div className="bg-gradient-to-b from-[#C8102E] to-red-900 rounded-[2.5rem] shadow-xl border border-red-400/30 overflow-hidden animate-in fade-in relative pb-0">
+                             <div className="bg-gradient-to-b from-[#C8102E] to-red-900 rounded-[2.5rem] shadow-xl border border-red-400/30 overflow-hidden animate-in fade-in relative flex flex-col min-h-full">
                                 <div className="p-4 flex justify-center z-20 relative">
                                     <div className="bg-black/20 backdrop-blur-md p-1.5 rounded-2xl flex gap-1 w-full max-w-sm">
                                         <button onClick={()=>setLeaderboardTab('all')} className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${leaderboardTab === 'all' ? 'bg-white text-[#C8102E] shadow-sm' : 'text-white/70 hover:bg-white/10'}`}>สะสมทั้งหมด</button>
@@ -1634,7 +1656,7 @@
                                         <input type="month" value={selectedMonth} onChange={e=>setSelectedMonth(e.target.value)} className="bg-white/20 backdrop-blur-md text-white border border-white/20 p-2 rounded-xl text-xs font-bold outline-none cursor-pointer" />
                                     </div>
                                 )}
-                                {currentLeaderboardView.length === 0 ? ( <div className="bg-white p-6 rounded-[2.5rem] mt-4 text-center text-gray-400 font-medium py-16">ยังไม่มีข้อมูล</div> ) : (
+                                {currentLeaderboardView.length === 0 ? ( <div className="bg-white p-6 rounded-b-[2.5rem] mt-4 text-center text-gray-400 font-medium py-16 flex-1">ยังไม่มีข้อมูล</div> ) : (
                                     <>
                                         <div className="flex justify-center items-end gap-2 sm:gap-6 px-4 pt-6 pb-6 relative z-10 md:pt-10">
                                             {podiumWinners[1] && ( 
@@ -1675,8 +1697,7 @@
                                                 </div> 
                                             )}
                                         </div>
-                                        {/* เพิ่ม pb-24 เพื่อให้แน่ใจว่าเลื่อนหน้าจอลงไปดูอันดับสุดท้ายได้สุดทาง */}
-                                        <div className="bg-white rounded-[2.5rem] p-4 pb-24 shadow-[0_-15px_40px_-15px_rgba(0,0,0,0.4)] relative z-20 md:p-8">
+                                        <div className="bg-white rounded-b-[2.5rem] rounded-t-[2.5rem] p-4 pb-20 shadow-[0_-15px_40px_-15px_rgba(0,0,0,0.4)] relative z-20 md:p-8 flex-1">
                                             <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-4 md:mb-8"></div>
                                             {currentLeaderboardView.length <= 3 && exportSortOrder === 'score' ? ( <p className="text-center text-gray-400 font-medium py-4">สิ้นสุดรายชื่อ</p> ) : (
                                                 <div className="space-y-3 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-4 md:space-y-0">
@@ -1697,9 +1718,9 @@
                                                 </div>
                                             )}
                                             
-                                            {/* ปุ่มดาวน์โหลดในหน้า Leaderboard แสดงเฉพาะแอดมิน/ผู้ตรวจ (นักเรียนไม่เห็น) */}
+                                            {/* ปุ่มดาวน์โหลดในหน้า Leaderboard (เฉพาะ Admin) */}
                                             {appMode !== 'guest' && (
-                                                <div className="mt-8 flex justify-end gap-2 border-t pt-4 flex-wrap">
+                                                <div className="mt-8 flex justify-end gap-2 border-t pt-4">
                                                     <select value={exportSortOrder} onChange={e => setExportSortOrder(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-lg p-2 text-xs font-bold text-gray-600 outline-none">
                                                         <option value="score">เรียงตามคะแนน</option><option value="room">เรียงตามห้อง</option>
                                                     </select>
@@ -1719,7 +1740,7 @@
                         
                         {/* --- เส้นทาง: ประวัติ (History) --- */}
                         {currentRoute === 'history' && (
-                             <div className="space-y-4">
+                             <div className="space-y-4 pb-12">
                                 {/* แถบตัวกรอง */}
                                 <div className="bg-white p-4 sm:p-6 rounded-[1.5rem] shadow-sm border border-gray-100 animate-in fade-in relative">
                                     <div className="relative mb-5">
@@ -1794,9 +1815,9 @@
                                                 )}
                                             </div>
                                             
-                                            {/* ปุ่มดาวน์โหลด Export History แสดงเฉพาะแอดมิน/ผู้ตรวจ (นักเรียนไม่เห็น) */}
+                                            {/* ปุ่มดาวน์โหลด Export History (เฉพาะ Admin) */}
                                             {appMode !== 'guest' && (
-                                                <div className="mt-6 flex justify-end gap-2 border-t pt-4 flex-wrap">
+                                                <div className="mt-6 flex justify-end gap-2 border-t pt-4">
                                                     <select value={exportDestination} onChange={e => setExportDestination(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-lg p-2 text-xs font-bold text-gray-600 outline-none hidden md:block">
                                                         <option value="local">💻 โหลดลงเครื่อง</option><option value="drive">☁️ เซฟลง Drive</option>
                                                     </select>
@@ -1901,19 +1922,19 @@
                                 )}
                              </div>
                         )}
-                        
+
                         {/* --- เส้นทาง: ประเมินผล (Inspect) --- */}
                         {(appMode === 'admin' || appMode === 'inspector') && currentRoute === 'inspect' && (
                              <div className="animate-in fade-in space-y-4 pb-12">
                                 {(settings?.room_map_url || settings?.zone_map_url) && (
                                     <div className="flex gap-3 mb-4">
-                                        {/* แผนผังห้องเรียน ซ้ายมือ */}
+                                        {/* แผนผังห้องเรียน ซ้าย */}
                                         {settings?.room_map_url && (
                                             <button onClick={() => setShowRoomMap(true)} className="flex-1 bg-white border border-blue-200 text-blue-600 font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-sm hover:bg-blue-50 active:scale-95 transition-all text-sm">
                                                 <i className="ph ph-buildings text-lg"></i> แผนผังห้องเรียน
                                             </button>
                                         )}
-                                        {/* แผนผังเขตพื้นที่ ขวามือ */}
+                                        {/* แผนผังเขตพื้นที่ ขวา */}
                                         {settings?.zone_map_url && (
                                             <button onClick={() => setShowZoneMap(true)} className="flex-1 bg-white border border-[#C8102E]/20 text-[#C8102E] font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-sm hover:bg-red-50 active:scale-95 transition-all text-sm">
                                                 <i className="ph ph-map-pin text-lg"></i> แผนผังเขตพื้นที่
@@ -2358,7 +2379,7 @@
                                     {settings?.announce_banner_url && <div className="w-full aspect-[16/9] rounded-xl overflow-hidden shadow-sm border border-gray-100 bg-gray-50"><img src={settings.announce_banner_url} alt="Announcement Banner" className="w-full h-full object-cover" /></div>}
                                     <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
                                         <h3 className="font-bold text-[#C8102E] mb-2">{settings?.announcement_title || '📌 ประกาศจากระบบ'}</h3>
-                                        <div className="whitespace-pre-line text-gray-700 text-sm font-medium leading-relaxed">{settings?.announcement_msg || 'ยังไม่มีประกาศใหม่'}</div>
+                                        <div className="whitespace-pre-line text-gray-700 text-sm font-medium leading-relaxed">{settings?.announcement_msg || defaultAnnouncement}</div>
                                     </div>
                                 </div>
                             </div>
@@ -2423,28 +2444,23 @@
                         </div>
                     )}
 
-                    {/* หน้าต่างช่วยเหลือโฉมใหม่ (นามบัตรแนวนอน) */}
                     {showInfoModal && (
-                        <div className="fixed inset-0 z-[9990] bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in" onClick={()=>setShowInfoModal(false)}>
-                            <div className="bg-white rounded-[2rem] p-6 w-full max-w-sm shadow-2xl animate-in zoom-in-95 relative" onClick={e=>e.stopPropagation()}>
-                                <h2 className="text-xl font-black text-gray-800 mb-1 border-b border-gray-100 pb-3 text-center">ศูนย์ช่วยเหลือ</h2>
-                                <p className="text-gray-500 text-[12px] mb-6 mt-3 text-center">หากลืมรหัสผ่าน หรือพบปัญหาการใช้งานระบบ<br/>สามารถกดติดต่อแอดมินผ่าน LINE ได้เลยครับ</p>
-                                
-                                <div className="flex flex-row items-center gap-4 text-left mb-6 bg-gray-50 p-4 rounded-2xl border border-gray-100">
-                                    <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-white shadow-md shrink-0 bg-gray-200 flex items-center justify-center">
-                                        <i className="ph ph-user text-3xl text-gray-400"></i>
-                                    </div>
-                                    <div>
-                                        <p className="font-bold text-gray-800 text-sm mb-0.5">นายภูธนากร หงษ์ทอง (พี่ภีม)</p>
-                                        <p className="text-[10px] text-gray-500 font-medium">เลขานุการสภานักเรียนโรงเรียนคำม่วง</p>
-                                    </div>
+                        <div className="fixed inset-0 z-[9990] bg-gray-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4 animate-in fade-in" onClick={()=>setShowInfoModal(false)}>
+                            <div className="bg-white rounded-[2rem] p-6 w-full max-w-sm shadow-2xl animate-in slide-in-from-bottom-full sm:zoom-in-95 text-center relative" onClick={e=>e.stopPropagation()}>
+                                <div className="w-16 h-16 bg-[#00B900] rounded-[1.2rem] mx-auto flex items-center justify-center mb-4 shadow-lg shadow-green-500/30">
+                                    <i className="ph ph-chat-circle-text text-white text-3xl"></i>
                                 </div>
-
+                                <h2 className="text-xl font-black text-gray-800 mb-1">ศูนย์ช่วยเหลือ</h2>
+                                <p className="text-gray-500 text-[12px] mb-6">หากลืมรหัสผ่าน หรือพบปัญหาการใช้งานระบบ<br/>สามารถกดติดต่อแอดมินผ่าน LINE ได้เลย</p>
                                 <a href="https://line.me/ti/p/~470aijh" target="_blank" className="w-full flex items-center justify-center gap-2 py-3 bg-[#00B900] hover:bg-[#009900] text-white rounded-xl font-bold transition-all active:scale-95 text-sm shadow-md shadow-green-500/20 mb-4">
-                                    <i className="ph ph-chat-circle-dots text-lg"></i> ติดต่อผ่าน LINE
+                                    <i className="ph ph-chat-circle-dots text-lg"></i> ติดต่อแอดมิน
                                 </a>
-
-                                <button onClick={()=>setShowInfoModal(false)} className="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl font-bold transition-colors text-sm">ปิดหน้าต่าง</button>
+                                <div className="text-center pt-4 border-t border-gray-100">
+                                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1">ZONECHECK V2.1</p>
+                                    <p className="font-bold text-gray-700 text-[12px] mb-0.5">นายภูธนากร หงษ์ทอง (พี่ภีม)</p>
+                                    <p className="text-[10px] text-gray-500">เลขานุการสภานักเรียนโรงเรียนคำม่วง</p>
+                                </div>
+                                <button onClick={()=>setShowInfoModal(false)} className="w-full mt-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl font-bold transition-colors text-sm">ปิดหน้าต่าง</button>
                             </div>
                         </div>
                     )}
@@ -2456,9 +2472,27 @@
                         </div>
                     )}
                     
-                    {toast && (
-                        <div className="fixed bottom-24 md:bottom-8 left-1/2 transform -translate-x-1/2 z-[999999] bg-gray-800 text-white px-5 py-3 rounded-xl shadow-2xl animate-in slide-in-from-bottom-4 fade-in font-medium text-sm flex items-center gap-2 whitespace-nowrap">
-                            <i className="ph ph-info"></i> {toast}
+                    {toast.visible && (
+                        <div className="fixed top-4 right-4 z-[999999] animate-in fade-in slide-in-from-right-4 duration-300">
+                            <div className={`flex items-center gap-3 px-5 py-4 rounded-2xl shadow-xl backdrop-blur-md border ${
+                                toast.type === 'success' ? 'bg-emerald-50/90 border-emerald-200 text-emerald-800' :
+                                toast.type === 'error' ? 'bg-red-50/90 border-red-200 text-red-800' :
+                                toast.type === 'warning' ? 'bg-amber-50/90 border-amber-200 text-amber-800' :
+                                'bg-white/90 border-gray-200 text-gray-800'
+                            }`}>
+                                <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
+                                    toast.type === 'success' ? 'bg-emerald-100 text-emerald-600' :
+                                    toast.type === 'error' ? 'bg-red-100 text-red-600' :
+                                    toast.type === 'warning' ? 'bg-amber-100 text-amber-600' :
+                                    'bg-gray-100 text-gray-600'
+                                }`}>
+                                    {toast.type === 'success' && <i className="ph ph-check-circle text-lg ph-fill"></i>}
+                                    {toast.type === 'error' && <i className="ph ph-warning-circle text-lg ph-fill"></i>}
+                                    {toast.type === 'warning' && <i className="ph ph-warning text-lg ph-fill"></i>}
+                                    {toast.type === 'info' && <i className="ph ph-info text-lg ph-fill"></i>}
+                                </div>
+                                <span className="font-bold text-sm tracking-wide">{toast.message}</span>
+                            </div>
                         </div>
                     )}
 
@@ -2475,20 +2509,20 @@
                                 <span className="text-[10px] font-medium truncate w-full text-center">อันดับ</span>
                             </button>
                             
-                            {/* ปุ่มตรงกลางลอยนูน (ประกาศ / ประเมินผล) */}
+                            {/* ปุ่มตรงกลาง (นูนขึ้น) */}
                             {appMode === 'guest' ? (
-                                <button onClick={() => setShowAnnouncement(true)} className="flex flex-col items-center p-0 w-16 transition-all relative -top-5">
-                                    <div className="w-14 h-14 bg-gradient-to-tr from-[#C8102E] to-red-600 text-white rounded-full flex items-center justify-center shadow-lg shadow-red-500/40 active:scale-95 transition-transform border-4 border-[#F3F4F6]">
+                                <button onClick={() => setShowAnnouncement(true)} className="flex flex-col items-center justify-center w-16 -mt-6">
+                                    <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-[#C8102E] to-red-600 text-white shadow-lg flex items-center justify-center border-4 border-white">
                                         <i className="ph ph-megaphone text-2xl"></i>
                                     </div>
-                                    <span className="text-[10px] font-bold text-gray-500 mt-1 truncate w-full text-center">ประกาศ</span>
+                                    <span className="text-[10px] font-bold text-[#C8102E] mt-1">ประกาศ</span>
                                 </button>
                             ) : (
-                                <button onClick={() => setCurrentRoute('inspect')} className="flex flex-col items-center p-0 w-16 transition-all relative -top-5">
-                                    <div className="w-14 h-14 bg-gray-900 text-white rounded-full flex items-center justify-center shadow-lg shadow-gray-900/40 active:scale-95 transition-transform border-4 border-[#F3F4F6]">
+                                <button onClick={() => setCurrentRoute('inspect')} className="flex flex-col items-center justify-center w-16 -mt-6">
+                                    <div className={`w-12 h-12 rounded-full text-white shadow-lg flex items-center justify-center border-4 border-white transition-all ${currentRoute === 'inspect' ? 'bg-gradient-to-tr from-[#C8102E] to-red-600' : 'bg-gray-800'}`}>
                                         <i className="ph ph-clipboard-text text-2xl ph-fill"></i>
                                     </div>
-                                    <span className={`text-[10px] font-bold mt-1 truncate w-full text-center ${currentRoute === 'inspect' ? 'text-[#C8102E]' : 'text-gray-500'}`}>ประเมินผล</span>
+                                    <span className={`text-[10px] font-bold mt-1 ${currentRoute === 'inspect' ? 'text-[#C8102E]' : 'text-gray-800'}`}>ประเมินผล</span>
                                 </button>
                             )}
 
@@ -2497,19 +2531,18 @@
                                 <span className="text-[10px] font-medium truncate w-full text-center">ประวัติ</span>
                             </button>
                             
+                            {/* ปุ่มขวาสุด สลับตามสถานะ */}
                             {appMode === 'guest' ? (
-                                <button onClick={() => setShowInfoModal(true)} className="flex flex-col items-center p-2 w-16 transition-all text-gray-500">
+                                <button onClick={() => setShowInfoModal(true)} className="flex flex-col items-center p-2 w-16 transition-all text-gray-500 hover:text-[#C8102E]">
                                     <div className="p-1.5 rounded-xl mb-1 flex items-center justify-center bg-transparent"><i className="ph ph-question text-[24px]"></i></div>
                                     <span className="text-[10px] font-medium truncate w-full text-center">ช่วยเหลือ</span>
                                 </button>
-                            ) : (appMode === 'admin' ? (
+                            ) : (
                                 <button onClick={() => setCurrentRoute('settings')} className={`flex flex-col items-center p-2 w-16 transition-all ${currentRoute === 'settings' ? 'text-[#C8102E]' : 'text-gray-500'}`}>
                                     <div className={`p-1.5 rounded-xl mb-1 flex items-center justify-center ${currentRoute === 'settings' ? 'bg-[#FDECEF]' : 'bg-transparent'}`}><i className={`ph ${currentRoute === 'settings' ? 'ph-gear ph-fill' : 'ph-gear'} text-[24px]`}></i></div>
                                     <span className="text-[10px] font-medium truncate w-full text-center">ตั้งค่า</span>
                                 </button>
-                            ) : (
-                                <div className="w-16"></div>
-                            ))}
+                            )}
                         </div>
                     </div>
                 </div>
