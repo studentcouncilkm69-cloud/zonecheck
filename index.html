@@ -2166,7 +2166,7 @@
                                 <div className="w-20 h-20 bg-white rounded-full mx-auto flex items-center justify-center mb-4 shadow-lg border border-gray-200 overflow-hidden">
                                     <img src={settings?.app_logo_url || HARDCODED_LOGO} alt="Login Logo" className="w-full h-full object-cover" crossOrigin="anonymous"/>
                                 </div>
-                                <h2 className="text-2xl font-black text-center text-gray-800 mb-1">ระบบผู้ตรวจ</h2>
+                                <h2 className="text-2xl font-black text-center text-gray-800 mb-1">ระบบเจ้าหน้าที่</h2>
                                 <form onSubmit={handleLoginSubmit}>
                                     <div className="space-y-4 mt-6">
                                         <input type="text" placeholder="ชื่อผู้ใช้งาน..." value={loginInspector} onChange={(e) => { setLoginInspector(e.target.value); setSelectedLoginName(e.target.value); setShowLoginSuggestions(true); }} className="w-full px-4 py-3 rounded-2xl border bg-gray-50 focus:outline-none focus:border-[#C8102E]" />
