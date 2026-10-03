@@ -65,62 +65,62 @@
             background: white;
             box-sizing: border-box;
             width: 1123px !important; 
-            max-width: 1123px !important;
-            padding: 30px 40px !important;
-            margin: 0 !important;
-        }
-        .pdf-table { width: 100%; border-collapse: collapse; font-size: 13px; border: 1px solid #d8b4fe; margin-top: 5px; table-layout: fixed;}
-        .pdf-table th { background-color: #8b5cf6 !important; color: white !important; padding: 8px 4px; border: 1px solid #d8b4fe; font-weight: bold; text-align: center; vertical-align: middle; }
-        .pdf-table td { padding: 4.5px 4px; border: 1px solid #e9d5ff; text-align: center; color: #334155; vertical-align: middle; }
-        .pdf-table tr:nth-child(even) td { background-color: #faf5ff !important; } 
-        .pdf-table td.text-left { text-align: left; padding-left: 20px; } 
-        .pdf-table tr, .pdf-row { page-break-inside: avoid !important; break-inside: avoid !important; }
-        .pdf-table.detailed-table { font-size: 12px; }
-        .pdf-table.detailed-table th { font-size: 12px; padding: 6px 2px; }
-        .col-purple { color: #7c3aed !important; font-weight: bold; }
+        . col-purple { color: #7c3aed !important; font-weight: bold; }
 
-        /* สไตล์สำหรับใบตรวจแบบกระดาษคำตอบ (OMR Answer Sheet) */
+        /* สไตล์สำหรับใบตรวจแบบกระดาษคำตอบ (OMR Answer Sheet - Single A4 Landscape) */
         .omr-sheet-wrapper {
             font-family: 'Sarabun', sans-serif !important;
             color: #111827;
             background: white;
             box-sizing: border-box;
-            width: 1123px !important;
-            max-width: 1123px !important;
-            padding: 24px 32px !important;
+            width: 1122px !important;
+            height: 793px !important;
+            max-width: 1122px !important;
+            max-height: 793px !important;
+            padding: 16px 22px !important;
             margin: 0 auto !important;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            overflow: hidden;
         }
-        .omr-table { width: 100%; border-collapse: collapse; font-size: 11.5px; border: 1.5px solid #1f2937; }
-        .omr-table th { background-color: #f3f4f6 !important; color: #111827 !important; padding: 5px 3px; border: 1px solid #374151; font-weight: 700; text-align: center; vertical-align: middle; }
-        .omr-table td { padding: 4px 3px; border: 1px solid #9ca3af; text-align: center; vertical-align: middle; color: #1f2937; }
-        .omr-table tr:nth-child(even) td { background-color: #f9fafb !important; }
+        .omr-table { width: 100%; border-collapse: collapse; font-size: 9.5px; border: 1.5px solid #111827; table-layout: fixed; }
+        .omr-table th { background-color: #f3f4f6 !important; color: #111827 !important; padding: 2.5px 1px; border: 1px solid #374151; font-weight: 700; text-align: center; vertical-align: middle; line-height: 1.05; }
+        .omr-table td { padding: 1.8px 1px; border: 1px solid #9ca3af; text-align: center; vertical-align: middle; color: #111827; height: 18.5px; }
+        .omr-table tr:nth-child(even) td { background-color: #f8fafc !important; }
         .omr-bubble {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 16px;
-            height: 16px;
-            border: 1.5px solid #374151;
+            width: 13px;
+            height: 13px;
+            border: 1.3px solid #1f2937;
             border-radius: 9999px;
-            font-size: 8.5px;
+            font-size: 7.5px;
             font-weight: 700;
-            color: #4b5563;
+            color: #374151;
             background: #ffffff;
             line-height: 1;
         }
         .omr-corner-mark {
             width: 14px;
             height: 14px;
-            border: 3px solid #111827;
+            background-color: #111827;
+            border: 2px solid #111827;
         }
         .masked-pin-input {
             -webkit-text-security: disc;
             text-security: disc;
         }
+        @page {
+            size: A4 landscape;
+            margin: 0;
+        }
         @media print {
+            html, body { width: 297mm; height: 210mm; margin: 0 !important; padding: 0 !important; background: #fff !important; overflow: visible !important; }
             body * { visibility: hidden; }
             #omr-print-area, #omr-print-area * { visibility: visible; }
-            #omr-print-area { position: fixed; left: 0; top: 0; width: 100%; margin: 0; padding: 10px; box-shadow: none !important; }
+            #omr-print-area { position: fixed; left: 0; top: 0; width: 297mm; height: 210mm; margin: 0 !important; padding: 0 !important; box-shadow: none !important; display: flex; align-items: center; justify-content: center; }
         }
 
         .nav-item { transition: all 0.2s ease; position: relative; }
@@ -258,6 +258,9 @@
             const [settings, setSettings] = useState(() => loadDataSafe('zc26_settings', initialSettings));
 
             const [isSavingData, setIsSavingData] = useState(false);
+            const [savingCountdown, setSavingCountdown] = useState(0);
+            const [savingTotalTime, setSavingTotalTime] = useState(0);
+            const [savingStatusText, setSavingStatusText] = useState('');
             const [isImageProcessing, setIsImageProcessing] = useState(false);
             
             const [guestSearch, setGuestSearch] = useState('');
@@ -310,6 +313,17 @@
             const [printData, setPrintData] = useState({ isPreparing: false, format: null, mode: null, title: '', subtitle: '', dateText: '', data: [] });
             const [showPaperSheetModal, setShowPaperSheetModal] = useState(false);
             const [paperSheetGradeFilter, setPaperSheetGradeFilter] = useState('all');
+            const [paperIncludeDate, setPaperIncludeDate] = useState(false);
+            const [paperIncludeInspector, setPaperIncludeInspector] = useState(false);
+
+            // OMR Scanner State (เครื่องตรวจกระดาษคำตอบ)
+            const [omrScannerModal, setOmrScannerModal] = useState({
+                isOpen: false,
+                isScanning: false,
+                imagePreview: null,
+                results: []
+            });
+            const omrFileInputRef = useRef(null);
 
             // Admin Settings Inputs
             const [bulkRooms, setBulkRooms] = useState('');
@@ -827,7 +841,16 @@
                 showConfirm(
                     `ยืนยันการตรวจรวดเดียว (กรณีฉุกเฉิน) จำนวน ${remainingRoomsForBatch.length} ห้อง?\nหมวด: ${typeLabel}\nผลการประเมิน: ${scoreDesc}\nประจำวันที่: ${formatDateObj(targetDateStr)}`,
                     async () => {
+                        const estSeconds = Math.max(4, Math.min(15, Math.ceil(remainingRoomsForBatch.length * 0.18)));
+                        setSavingTotalTime(estSeconds);
+                        setSavingCountdown(estSeconds);
+                        setSavingStatusText(`กำลังบันทึกข้อมูล ${remainingRoomsForBatch.length} ห้อง กรุณาอย่าเพิ่งกดออก...`);
                         setIsSavingData(true);
+
+                        const countdownInterval = setInterval(() => {
+                            setSavingCountdown(prev => (prev > 1 ? prev - 1 : 1));
+                        }, 1000);
+
                         try {
                             const timePart = new Date().toISOString().split('T')[1];
                             const finalDateISO = `${targetDateStr}T${timePart}`;
@@ -874,8 +897,10 @@
                             try {
                                 await syncToGASAsync('saveBatchInspections', newRecords);
                             } catch (batchErr) {
-                                for (const rec of newRecords) {
-                                    await syncToGASAsync('saveInspection', rec);
+                                for (let idx = 0; idx < newRecords.length; idx++) {
+                                    setSavingStatusText(`กำลังบันทึกห้องที่ ${idx + 1} จาก ${newRecords.length} ห้อง...`);
+                                    setSavingCountdown(Math.max(1, newRecords.length - idx));
+                                    await syncToGASAsync('saveInspection', newRecords[idx]);
                                 }
                             }
 
@@ -886,7 +911,11 @@
                         } catch (err) {
                             showToast('เกิดข้อผิดพลาดในการบันทึกข้อมูลกลุ่ม กรุณาลองใหม่', 'error');
                         } finally {
+                            clearInterval(countdownInterval);
                             setIsSavingData(false);
+                            setSavingCountdown(0);
+                            setSavingTotalTime(0);
+                            setSavingStatusText('');
                         }
                     }
                 );
@@ -1243,6 +1272,15 @@
                 });
             }, [rooms, paperSheetGradeFilter]);
 
+            const paperSheetSplitColumns = useMemo(() => {
+                const list = paperSheetRooms;
+                const half = Math.ceil(Math.max(list.length, 1) / 2);
+                return {
+                    left: list.slice(0, half).map((r, i) => ({ room: r, num: i + 1 })),
+                    right: list.slice(half).map((r, i) => ({ room: r, num: half + i + 1 }))
+                };
+            }, [paperSheetRooms]);
+
             const handleExportPaperSheet = async (format) => {
                 const element = document.getElementById('omr-sheet-export-box');
                 if (!element) return;
@@ -1255,28 +1293,301 @@
                 }
                 showToast(`กำลังสร้างไฟล์กระดาษคำตอบ (${format.toUpperCase()})...`, 'info');
                 try {
-                    const canvas = await window.html2canvas(element, { scale: 2, useCORS: true });
+                    const canvas = await window.html2canvas(element, { scale: 2, useCORS: true, width: 1122, height: 793 });
                     if (format === 'png') {
                         const dataUrl = canvas.toDataURL('image/png');
                         const link = document.createElement('a');
-                        link.download = `ใบตรวจกระดาษคำตอบ_ZoneCheck_${formatThaiDateForFile(filterDate)}.png`;
+                        link.download = `แบบประเมินความเรียบร้อย_ZoneCheck_${formatThaiDateForFile(filterDate)}.png`;
                         link.href = dataUrl;
                         link.click();
-                        showToast('ดาวน์โหลดใบตรวจ (PNG) สำเร็จ!', 'success');
+                        showToast('ดาวน์โหลดแบบประเมิน (PNG) สำเร็จ!', 'success');
                     } else if (format === 'pdf' && typeof window.html2pdf !== 'undefined') {
                         const opt = {
-                            margin: 5,
-                            filename: `ใบตรวจกระดาษคำตอบ_ZoneCheck_${formatThaiDateForFile(filterDate)}.pdf`,
+                            margin: 0,
+                            filename: `แบบประเมินความเรียบร้อย_ZoneCheck_${formatThaiDateForFile(filterDate)}.pdf`,
                             image: { type: 'jpeg', quality: 0.98 },
-                            html2canvas: { scale: 2, useCORS: true },
-                            jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
+                            html2canvas: { scale: 2, useCORS: true, width: 1122, height: 793 },
+                            jsPDF: { unit: 'px', format: [1122, 793], orientation: 'landscape' }
                         };
                         await window.html2pdf().set(opt).from(element).save();
-                        showToast('ดาวน์โหลดใบตรวจ (PDF) สำเร็จ!', 'success');
+                        showToast('ดาวน์โหลดแบบประเมิน (PDF) สำเร็จ!', 'success');
                     }
                 } catch (err) {
-                    showToast('เกิดข้อผิดพลาดในการสร้างไฟล์ใบตรวจ', 'error');
+                    showToast('เกิดข้อผิดพลาดในการสร้างไฟล์แบบประเมิน', 'error');
                 }
+            };
+
+            // ฟังก์ชันสแกนและอ่านค่าแบบประเมิน OMR จากรูปถ่าย
+            const handleOpenOmrScanner = () => {
+                const validRooms = Array.isArray(rooms) ? rooms : [];
+                const initialResults = validRooms.map((r, idx) => ({
+                    room: r,
+                    index: idx + 1,
+                    includeRoom: true,
+                    includeZone: r.hasZone !== false,
+                    roomScores: { c1: 2, c2: 2, c3: 2, c4: 2, c5: 2, noDuty: false, skip: false },
+                    zoneScore: 10,
+                    zoneSkip: false
+                }));
+                setOmrScannerModal({
+                    isOpen: true,
+                    isScanning: false,
+                    imagePreview: null,
+                    results: initialResults
+                });
+            };
+
+            const handleOmrImageUpload = (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    const dataUrl = ev.target.result;
+                    setOmrScannerModal(prev => ({ ...prev, isScanning: true, imagePreview: dataUrl }));
+                    showToast('กำลังสแกนจุดมาร์คและอ่านวงกลมในกระดาษคำตอบ...', 'info');
+
+                    const img = new Image();
+                    img.onload = () => {
+                        try {
+                            const canvas = document.createElement('canvas');
+                            const W = 1122;
+                            const H = 793;
+                            canvas.width = W;
+                            canvas.height = H;
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(img, 0, 0, W, H);
+                            const imgData = ctx.getImageData(0, 0, W, H).data;
+
+                            const getRegionDarkness = (cx, cy, radius = 5) => {
+                                let sum = 0;
+                                let count = 0;
+                                for (let dy = -radius; dy <= radius; dy++) {
+                                    for (let dx = -radius; dx <= radius; dx++) {
+                                        const px = Math.round(cx + dx);
+                                        const py = Math.round(cy + dy);
+                                        if (px >= 0 && px < W && py >= 0 && py < H) {
+                                            const idx = (py * W + px) * 4;
+                                            const lum = 0.299 * imgData[idx] + 0.587 * imgData[idx + 1] + 0.114 * imgData[idx + 2];
+                                            sum += (255 - lum);
+                                            count++;
+                                        }
+                                    }
+                                }
+                                return count > 0 ? sum / count : 0;
+                            };
+
+                            const validRooms = Array.isArray(rooms) ? rooms : [];
+                            const half = Math.ceil(Math.max(validRooms.length, 1) / 2);
+                            const tableTopY = 172;
+                            const rowHeight = Math.min(22, (H - 225) / Math.max(half, 1));
+
+                            const scannedResults = validRooms.map((r, i) => {
+                                const isRightCol = i >= half;
+                                const rowIdx = isRightCol ? (i - half) : i;
+                                const baseX = isRightCol ? 568 : 22;
+                                const rowY = tableTopY + (rowIdx * rowHeight) + (rowHeight / 2);
+
+                                // ตำแหน่ง X ของวงกลมห้องเรียน 7 ช่อง (โต๊ะ, ขยะ, ไฟ, พื้น, กระดาน, ไม่ทำ, ข้าม)
+                                const roomBubbleOffsets = [108, 138, 168, 198, 228, 258, 288];
+                                const roomDarkness = roomBubbleOffsets.map(offset => getRegionDarkness(baseX + offset, rowY, 5));
+                                const avgRoomDark = roomDarkness.reduce((a, b) => a + b, 0) / roomDarkness.length;
+                                const threshold = Math.max(avgRoomDark + 22, 68);
+
+                                const markedRoom = roomDarkness.map(d => d > threshold);
+                                const anyRoomMarked = markedRoom.some(Boolean);
+
+                                let c1 = 2, c2 = 2, c3 = 2, c4 = 2, c5 = 2, noDuty = false, skip = false;
+                                if (anyRoomMarked) {
+                                    if (markedRoom[6]) {
+                                        skip = true;
+                                    } else if (markedRoom[5]) {
+                                        noDuty = true;
+                                    } else {
+                                        c1 = markedRoom[0] ? 2 : 0;
+                                        c2 = markedRoom[1] ? 2 : 0;
+                                        c3 = markedRoom[2] ? 2 : 0;
+                                        c4 = markedRoom[3] ? 2 : 0;
+                                        c5 = markedRoom[4] ? 2 : 0;
+                                    }
+                                }
+
+                                // ตำแหน่ง X ของวงกลมเขตพื้นที่ 6 ช่อง (10, 8, 5, 2, -5, ข้าม)
+                                const zoneBubbleOffsets = [324, 356, 388, 420, 452, 484];
+                                const zoneValues = [10, 8, 5, 2, -5, null];
+                                const zoneDarkness = zoneBubbleOffsets.map(offset => getRegionDarkness(baseX + offset, rowY, 5));
+                                const maxZoneDark = Math.max(...zoneDarkness);
+                                const maxZoneIdx = zoneDarkness.indexOf(maxZoneDark);
+
+                                let zScore = 10;
+                                let zSkip = false;
+                                if (maxZoneDark > threshold) {
+                                    if (zoneValues[maxZoneIdx] === null) zSkip = true;
+                                    else zScore = zoneValues[maxZoneIdx];
+                                }
+
+                                return {
+                                    room: r,
+                                    index: i + 1,
+                                    includeRoom: true,
+                                    includeZone: r.hasZone !== false,
+                                    roomScores: { c1, c2, c3, c4, c5, noDuty, skip },
+                                    zoneScore: zScore,
+                                    zoneSkip: zSkip
+                                };
+                            });
+
+                            setTimeout(() => {
+                                setOmrScannerModal(prev => ({ ...prev, isScanning: false, results: scannedResults }));
+                                showToast('สแกนกระดาษคำตอบเสร็จสิ้น! ตรวจสอบและแก้ไขผลด้านล่างก่อนกดบันทึก', 'success');
+                            }, 600);
+                        } catch (err) {
+                            setOmrScannerModal(prev => ({ ...prev, isScanning: false }));
+                            showToast('อ่านภาพเสร็จสิ้น กรุณาตรวจสอบคะแนนด้านล่าง', 'info');
+                        }
+                    };
+                    img.src = dataUrl;
+                };
+                reader.readAsDataURL(file);
+            };
+
+            const toggleOmrResultCriterion = (roomId, key) => {
+                setOmrScannerModal(prev => ({
+                    ...prev,
+                    results: prev.results.map(item => {
+                        if (item.room.id !== roomId) return item;
+                        const rs = { ...item.roomScores };
+                        if (key === 'skip') {
+                            rs.skip = !rs.skip;
+                            if (rs.skip) rs.noDuty = false;
+                        } else if (key === 'noDuty') {
+                            rs.noDuty = !rs.noDuty;
+                            if (rs.noDuty) rs.skip = false;
+                        } else {
+                            rs.skip = false;
+                            rs.noDuty = false;
+                            rs[key] = rs[key] === 2 ? 0 : 2;
+                        }
+                        return { ...item, roomScores: rs };
+                    })
+                }));
+            };
+
+            const setOmrResultZone = (roomId, val) => {
+                setOmrScannerModal(prev => ({
+                    ...prev,
+                    results: prev.results.map(item => {
+                        if (item.room.id !== roomId) return item;
+                        if (val === 'skip') return { ...item, zoneSkip: !item.zoneSkip };
+                        return { ...item, zoneSkip: false, zoneScore: val };
+                    })
+                }));
+            };
+
+            const handleSaveOmrScannedResults = () => {
+                const targetDateStr = filterDate || new Date().toISOString().split('T')[0];
+                const recordsToSave = [];
+                const timePart = new Date().toISOString().split('T')[1];
+                const finalDateISO = `${targetDateStr}T${timePart}`;
+                const inspectorTeam = getActiveInspectorTeamString();
+
+                omrScannerModal.results.forEach(item => {
+                    if (item.includeRoom) {
+                        let totalScore = 10;
+                        let breakdown = {};
+                        if (item.roomScores.skip) {
+                            totalScore = null;
+                            breakdown = { status: 'ข้ามการตรวจ' };
+                        } else if (item.roomScores.noDuty) {
+                            totalScore = -5;
+                            breakdown = { status: 'ไม่ปฏิบัติหน้าที่' };
+                        } else {
+                            totalScore = item.roomScores.c1 + item.roomScores.c2 + item.roomScores.c3 + item.roomScores.c4 + item.roomScores.c5;
+                            breakdown = {
+                                c1: item.roomScores.c1,
+                                c2: item.roomScores.c2,
+                                c3: item.roomScores.c3,
+                                c4: item.roomScores.c4,
+                                c5: item.roomScores.c5
+                            };
+                        }
+                        recordsToSave.push({
+                            id: generateId('insp'),
+                            roomId: item.room.id,
+                            type: 'room',
+                            date: finalDateISO,
+                            inspector: inspectorTeam,
+                            scores: breakdown,
+                            totalScore,
+                            comment: item.roomScores.skip ? 'สแกนจากใบตรวจภาคสนาม' : '',
+                            photoUrl: ''
+                        });
+                    }
+                    if (item.includeZone && item.room.hasZone !== false) {
+                        let totalScore = item.zoneScore;
+                        let breakdown = {};
+                        if (item.zoneSkip) {
+                            totalScore = null;
+                            breakdown = { status: 'ข้ามการตรวจ' };
+                        } else {
+                            const sText = item.zoneScore === 10 ? 'ดีเยี่ยม' : item.zoneScore === 8 ? 'ดี' : item.zoneScore === 5 ? 'พอใช้' : item.zoneScore === 2 ? 'ปรับปรุง' : 'ไม่ปฏิบัติหน้าที่';
+                            breakdown = { status: sText };
+                        }
+                        recordsToSave.push({
+                            id: generateId('insp'),
+                            roomId: item.room.id,
+                            type: 'zone',
+                            date: finalDateISO,
+                            inspector: inspectorTeam,
+                            scores: breakdown,
+                            totalScore,
+                            comment: item.zoneSkip ? 'สแกนจากใบตรวจภาคสนาม' : '',
+                            photoUrl: ''
+                        });
+                    }
+                });
+
+                if (recordsToSave.length === 0) {
+                    return showToast('ไม่มีรายการที่เลือกสำหรับบันทึก', 'warning');
+                }
+
+                showConfirm(
+                    `ยืนยันการบันทึกผลจากการสแกนกระดาษคำตอบ?\nจำนวนทั้งหมด: ${recordsToSave.length} รายการ\nประจำวันที่: ${formatDateObj(targetDateStr)}`,
+                    async () => {
+                        const estSeconds = Math.max(4, Math.min(18, Math.ceil(recordsToSave.length * 0.12)));
+                        setSavingTotalTime(estSeconds);
+                        setSavingCountdown(estSeconds);
+                        setSavingStatusText(`กำลังบันทึกผลสแกนกระดาษคำตอบ (${recordsToSave.length} รายการ)...`);
+                        setIsSavingData(true);
+
+                        const timer = setInterval(() => {
+                            setSavingCountdown(prev => (prev > 1 ? prev - 1 : 1));
+                        }, 1000);
+
+                        try {
+                            try {
+                                await syncToGASAsync('saveBatchInspections', recordsToSave);
+                            } catch (e) {
+                                for (let i = 0; i < recordsToSave.length; i++) {
+                                    setSavingStatusText(`กำลังบันทึกรายการที่ ${i + 1} / ${recordsToSave.length}...`);
+                                    setSavingCountdown(Math.max(1, recordsToSave.length - i));
+                                    await syncToGASAsync('saveInspection', recordsToSave[i]);
+                                }
+                            }
+                            const validInspections = Array.isArray(inspections) ? inspections : [];
+                            setInspections([...validInspections, ...recordsToSave]);
+                            setOmrScannerModal(prev => ({ ...prev, isOpen: false }));
+                            showToast(`บันทึกผลจากกระดาษคำตอบ ${recordsToSave.length} รายการสำเร็จ!`, 'success');
+                        } catch (err) {
+                            showToast('เกิดข้อผิดพลาดในการบันทึกผลสแกน กรุณาลองใหม่', 'error');
+                        } finally {
+                            clearInterval(timer);
+                            setIsSavingData(false);
+                            setSavingCountdown(0);
+                            setSavingTotalTime(0);
+                            setSavingStatusText('');
+                        }
+                    }
+                );
             };
 
             const handleAddBulkInspectors = async () => {
@@ -2219,16 +2530,19 @@
                         {/* --- เส้นทาง: ประเมินผล (Inspect) --- */}
                         {(appMode === 'admin' || appMode === 'inspector') && currentRoute === 'inspect' && (
                              <div className="animate-in fade-in space-y-4 pb-12">
-                                {/* ปุ่มดูแผนผัง (ห้องเรียนซ้าย - เขตพื้นที่ขวา ตรงกับปุ่มการ์ดด้านล่าง) */}
-                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mb-2">
+                                {/* ปุ่มดูแผนผัง + พิมพ์แบบประเมิน + สแกนแบบประเมิน */}
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-2">
                                     <button onClick={() => setShowRoomMap(true)} className="bg-white border border-blue-200 text-blue-600 font-bold py-3.5 px-3 rounded-2xl flex items-center justify-center gap-2 shadow-sm hover:bg-blue-50 active:scale-95 transition-all text-xs sm:text-sm">
                                         <i className="ph ph-buildings text-lg"></i> แผนผังห้องเรียน
                                     </button>
                                     <button onClick={() => setShowZoneMap(true)} className="bg-white border border-[#C8102E]/20 text-[#C8102E] font-bold py-3.5 px-3 rounded-2xl flex items-center justify-center gap-2 shadow-sm hover:bg-red-50 active:scale-95 transition-all text-xs sm:text-sm">
                                         <i className="ph ph-map-pin text-lg"></i> แผนผังเขตพื้นที่
                                     </button>
-                                    <button onClick={() => setShowPaperSheetModal(true)} className="col-span-2 sm:col-span-1 bg-white border border-gray-300 text-gray-800 font-bold py-3.5 px-3 rounded-2xl flex items-center justify-center gap-2 shadow-sm hover:bg-gray-50 active:scale-95 transition-all text-xs sm:text-sm">
-                                        <i className="ph ph-printer text-lg text-[#C8102E]"></i> พิมพ์ใบตรวจ (กระดาษคำตอบ)
+                                    <button onClick={() => setShowPaperSheetModal(true)} className="bg-white border border-gray-300 text-gray-800 font-bold py-3.5 px-3 rounded-2xl flex items-center justify-center gap-2 shadow-sm hover:bg-gray-50 active:scale-95 transition-all text-xs sm:text-sm">
+                                        <i className="ph ph-printer text-lg text-[#C8102E]"></i> พิมพ์แบบประเมิน
+                                    </button>
+                                    <button onClick={handleOpenOmrScanner} className="bg-gray-900 border border-gray-900 text-white font-bold py-3.5 px-3 rounded-2xl flex items-center justify-center gap-2 shadow-sm hover:bg-black active:scale-95 transition-all text-xs sm:text-sm">
+                                        <i className="ph ph-scan text-lg text-amber-300"></i> สแกนแบบประเมิน
                                     </button>
                                 </div>
 
@@ -2384,7 +2698,7 @@
                                       <div className="flex flex-col sm:flex-row gap-2.5">
                                           <button onClick={handleSaveMegaphoneAndLogo} className="flex-1 py-3.5 bg-[#C8102E] hover:bg-red-800 text-white rounded-xl font-bold text-xs shadow-md transition-all active:scale-95">บันทึกข้อมูลรูปภาพและประกาศ</button>
                                           <button onClick={() => setShowPaperSheetModal(true)} className="sm:w-auto px-5 py-3.5 bg-gray-900 hover:bg-black text-white rounded-xl font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2">
-                                              <i className="ph ph-printer text-base"></i> พิมพ์ใบตรวจแบบกระดาษคำตอบ
+                                              <i className="ph ph-printer text-base"></i> พิมพ์แบบประเมิน
                                           </button>
                                       </div>
                                    </div>
@@ -2874,12 +3188,11 @@
                                                     <span className={`font-bold text-sm ${roomScores.noDuty ? 'text-red-700' : 'text-gray-700'}`}>ไม่ปฏิบัติหน้าที่ (-5 คะแนน)</span>
                                                     <div className={`w-5 h-5 rounded-full flex items-center justify-center transition-colors ${roomScores.noDuty ? 'bg-red-500 text-white' : 'bg-gray-200 text-transparent'}`}><i className="ph ph-check-circle text-xs ph-fill"></i></div>
                                                 </div>
-                                                
-                                                <div className={`grid grid-cols-2 gap-2 mb-4 ${roomScores.noDuty ? 'opacity-40 grayscale pointer-events-none' : ''}`}>
+                                                <div className={`grid grid-cols-2 gap-2.5 mb-4 ${roomScores.noDuty ? 'opacity-40 grayscale pointer-events-none' : ''}`}>
                                                     {ROOM_CRITERIA.map(c => (
-                                                        <div key={c.id} onClick={() => toggleRoomScore(c.id)} className={`flex items-center justify-between p-2.5 rounded-xl border-2 transition-all cursor-pointer select-none ${roomScores[c.id] > 0 ? 'border-emerald-500 bg-emerald-50' : 'border-gray-100 bg-white'}`}>
+                                                        <div key={c.id} onClick={() => toggleRoomScore(c.id)} className={`flex items-center justify-between p-3 rounded-xl border-2 transition-all cursor-pointer select-none ${roomScores[c.id] > 0 ? 'border-emerald-500 bg-emerald-50' : 'border-gray-100 bg-white'}`}>
                                                             <span className={`font-bold text-xs ${roomScores[c.id] > 0 ? 'text-emerald-700' : 'text-gray-600'}`}>{c.name}</span>
-                                                            <div className={`w-4 h-4 rounded-full flex items-center justify-center transition-colors ${roomScores[c.id] > 0 ? 'bg-emerald-500 text-white' : 'bg-gray-200 text-transparent'}`}><i className="ph ph-check-circle text-[10px] ph-fill"></i></div>
+                                                            <div className={`w-5 h-5 rounded-full flex items-center justify-center transition-colors ${roomScores[c.id] > 0 ? 'bg-emerald-500 text-white' : 'bg-gray-200 text-transparent'}`}><i className="ph ph-check-circle text-xs ph-fill"></i></div>
                                                         </div>
                                                     ))}
                                                 </div>
@@ -2887,7 +3200,7 @@
                                         ) : (
                                             <div className="space-y-2 mb-4">
                                                 {[{s:10, l:'ดีเยี่ยม'}, {s:8, l:'ดี'}, {s:5, l:'พอใช้'}, {s:2, l:'ปรับปรุง'}, {s:-5, l:'ไม่ปฏิบัติหน้าที่ (-5 คะแนน)'}].map(btn => (
-                                                    <button key={btn.s} onClick={() => setZoneScore(btn.s)} className={`w-full p-3 rounded-xl border-2 font-bold text-sm flex justify-between items-center transition-all ${zoneScore === btn.s ? (btn.s < 0 ? 'border-red-500 bg-red-50 text-red-700' : 'border-emerald-500 bg-emerald-50 text-emerald-700') : 'border-gray-100 bg-white text-gray-600'}`}>
+                                                    <button key={btn.s} onClick={() => setZoneScore(btn.s)} className={`w-full p-3.5 rounded-xl border-2 font-bold text-sm flex justify-between items-center transition-all ${zoneScore === btn.s ? (btn.s < 0 ? 'border-red-500 bg-red-50 text-red-700' : 'border-emerald-500 bg-emerald-50 text-emerald-700') : 'border-gray-100 bg-white text-gray-600'}`}>
                                                         <span>{btn.l}</span>
                                                         <div className={`w-5 h-5 rounded-full flex items-center justify-center transition-colors ${zoneScore === btn.s ? (btn.s < 0 ? 'bg-red-500 text-white' : 'bg-emerald-500 text-white') : 'bg-gray-200 text-transparent'}`}><i className="ph ph-check-circle text-xs ph-fill"></i></div>
                                                     </button>
@@ -2896,179 +3209,156 @@
                                         )}
                                     </div>
 
-                                    <div className="space-y-2 mb-4 bg-gray-50 p-3 rounded-xl border border-gray-100">
-                                        <div className="flex gap-2">
-                                            <input type="text" placeholder={isSkipped ? "กรุณาระบุสาเหตุที่ข้ามการตรวจ..." : "ข้อเสนอแนะเพิ่มเติม..."} value={evalComment} onChange={(e) => setEvalComment(e.target.value)} className={`flex-1 p-2.5 rounded-lg border bg-white text-xs font-medium outline-none transition-colors ${isSkipped && !evalComment.trim() ? 'border-red-400 focus:border-red-500 bg-red-50/20' : 'border-gray-200 focus:border-[#C8102E]'}`} />
-                                            <label className="bg-white border border-gray-200 text-gray-600 hover:text-[#C8102E] hover:border-[#C8102E] px-3 py-2.5 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all shadow-sm shrink-0">
-                                                <i className="ph ph-camera text-base"></i> รูป
-                                                <input type="file" accept="image/*" capture="environment" ref={fileInputRef} onChange={handleImageChange} className="hidden" />
+                                    <div className="mb-4">
+                                        <label className="text-xs font-bold text-gray-700 mb-1.5 block">แนบรูปถ่ายหลักฐาน (ถ้ามี)</label>
+                                        {!inspectImage ? (
+                                            <label className="w-full py-3 border-2 border-dashed border-gray-200 rounded-xl flex items-center justify-center gap-2 text-xs font-bold text-gray-500 cursor-pointer hover:bg-gray-50 transition-colors">
+                                                <i className="ph ph-camera text-base text-[#C8102E]"></i> ถ่ายรูป / เลือกรูปภาพ
+                                                <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageChange} className="hidden" />
                                             </label>
-                                        </div>
-                                        {inspectImage && (
-                                            <div className="relative rounded-xl overflow-hidden border border-gray-200 mt-2">
-                                                <img src={inspectImage.dataUrl} alt="Preview" className="w-full h-36 object-cover" />
-                                                <button onClick={removeImage} className="absolute top-2 right-2 bg-black/60 text-white w-7 h-7 rounded-full flex items-center justify-center hover:bg-black"><i className="ph ph-x text-xs"></i></button>
+                                        ) : (
+                                            <div className="relative rounded-xl overflow-hidden border border-gray-200">
+                                                <img src={inspectImage.dataUrl} className="w-full h-40 object-cover" />
+                                                <button onClick={removeImage} className="absolute top-2 right-2 bg-red-600 text-white w-7 h-7 rounded-full flex items-center justify-center shadow-md"><i className="ph ph-trash text-xs"></i></button>
                                             </div>
                                         )}
+                                    </div>
+
+                                    <div>
+                                        <label className="text-xs font-bold text-gray-700 mb-1.5 block">หมายเหตุ {isSkipped && <span className="text-red-500">*จำเป็นต้องระบุ</span>}</label>
+                                        <textarea rows="2" value={evalComment} onChange={e => setEvalComment(e.target.value)} placeholder="ระบุข้อเสนอแนะ หรือสาเหตุ..." className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-xs font-medium outline-none focus:border-[#C8102E]"></textarea>
                                     </div>
                                 </div>
 
                                 <div className="pt-3 border-t border-gray-100 flex gap-3 items-center shrink-0">
-                                    <div className="flex-1 text-center bg-gray-50 rounded-xl py-2 border border-gray-100 flex flex-col justify-center">
-                                        <span className="block text-[9px] font-bold text-gray-400">คะแนน</span>
-                                        <span className={`text-xl font-black ${isSkipped ? 'text-gray-400' : ((inspectModal.type === 'room' ? (roomScores.noDuty ? -5 : (roomScores.c1 + roomScores.c2 + roomScores.c3 + roomScores.c4 + roomScores.c5)) : zoneScore) < 0 ? 'text-red-500' : 'text-emerald-600')}`}>
-                                            {isSkipped ? '-' : ((inspectModal.type === 'room' ? (roomScores.noDuty ? -5 : (roomScores.c1 + roomScores.c2 + roomScores.c3 + roomScores.c4 + roomScores.c5)) : zoneScore) > 0 ? `+${inspectModal.type === 'room' ? (roomScores.noDuty ? -5 : (roomScores.c1 + roomScores.c2 + roomScores.c3 + roomScores.c4 + roomScores.c5)) : zoneScore}` : (inspectModal.type === 'room' ? (roomScores.noDuty ? -5 : (roomScores.c1 + roomScores.c2 + roomScores.c3 + roomScores.c4 + roomScores.c5)) : zoneScore))}
+                                    <div className="flex-1 text-center bg-gray-50 rounded-xl py-2 border border-gray-100">
+                                        <span className="block text-[9px] font-bold text-gray-400">คะแนนที่ได้</span>
+                                        <span className={`text-xl font-black ${isSkipped ? 'text-gray-400' : ((inspectModal.type === 'room' ? (roomScores.noDuty ? -5 : (roomScores.c1+roomScores.c2+roomScores.c3+roomScores.c4+roomScores.c5)) : zoneScore) < 0 ? 'text-red-500' : 'text-emerald-600')}`}>
+                                            {isSkipped ? '-' : ((inspectModal.type === 'room' ? (roomScores.noDuty ? -5 : (roomScores.c1+roomScores.c2+roomScores.c3+roomScores.c4+roomScores.c5)) : zoneScore) > 0 ? `+${inspectModal.type === 'room' ? (roomScores.noDuty ? -5 : (roomScores.c1+roomScores.c2+roomScores.c3+roomScores.c4+roomScores.c5)) : zoneScore}` : (inspectModal.type === 'room' ? (roomScores.noDuty ? -5 : (roomScores.c1+roomScores.c2+roomScores.c3+roomScores.c4+roomScores.c5)) : zoneScore))}
                                         </span>
                                     </div>
-                                    <button onClick={handleSubmitInspection} disabled={isImageProcessing} className="flex-[2] py-3.5 rounded-xl font-bold text-sm bg-[#C8102E] text-white shadow-lg shadow-red-500/25 hover:bg-red-800 disabled:opacity-50 active:scale-95 transition-all">
-                                        {isImageProcessing ? 'รอสักครู่...' : 'บันทึกผล'}
-                                    </button>
+                                    <button onClick={handleSubmitInspection} className="flex-[2] py-3.5 rounded-xl font-bold text-sm bg-[#C8102E] text-white shadow-lg shadow-red-500/25 hover:bg-red-800 active:scale-95 transition-all">บันทึกผล</button>
                                 </div>
                             </div>
                         </div>
                     )}
 
-                    {/* Confirm Dialog & Modals อื่นๆ */}
+                    {/* Confirm Dialog */}
                     {confirmDialog.isOpen && (
-                        <div className="fixed inset-0 z-[99999] bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-                            <div className="bg-white rounded-[2rem] p-6 w-full max-w-xs text-center shadow-2xl animate-in zoom-in-95">
+                        <div className="fixed inset-0 z-[99999] bg-gray-900/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+                            <div className="bg-white rounded-[2rem] w-full max-w-sm p-6 text-center shadow-2xl">
                                 <div className="w-12 h-12 rounded-full bg-red-50 text-[#C8102E] flex items-center justify-center mx-auto mb-3"><i className="ph ph-warning-circle text-2xl"></i></div>
-                                <p className="text-sm font-bold text-gray-800 whitespace-pre-line mb-5">{confirmDialog.message}</p>
+                                <p className="text-sm font-bold text-gray-800 whitespace-pre-line mb-6">{confirmDialog.message}</p>
                                 <div className="flex gap-2">
                                     {!confirmDialog.isAlert && (
-                                        <button onClick={() => setConfirmDialog({ isOpen: false, message: '', onConfirm: null, isAlert: false })} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-600 font-bold text-xs hover:bg-gray-200">ยกเลิก</button>
+                                        <button onClick={() => setConfirmDialog({ isOpen: false, message: '', onConfirm: null, isAlert: false })} className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-600 font-bold text-xs hover:bg-gray-200">ยกเลิก</button>
                                     )}
-                                    <button onClick={() => { if(confirmDialog.onConfirm) confirmDialog.onConfirm(); setConfirmDialog({ isOpen: false, message: '', onConfirm: null, isAlert: false }); }} className="flex-1 py-2.5 rounded-xl bg-[#C8102E] text-white font-bold text-xs hover:bg-red-800">ตกลง</button>
+                                    <button onClick={() => { const fn = confirmDialog.onConfirm; setConfirmDialog({ isOpen: false, message: '', onConfirm: null, isAlert: false }); if (fn) fn(); }} className="flex-1 py-3 rounded-xl bg-[#C8102E] text-white font-bold text-xs hover:bg-red-800">ตกลง</button>
                                 </div>
                             </div>
                         </div>
                     )}
 
-                    {/* แผนผังห้องเรียน & เขตพื้นที่ & ประกาศ */}
-                    {showRoomMap && (
-                        <div className="fixed inset-0 z-[9990] bg-gray-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in" onClick={() => setShowRoomMap(false)}>
-                            <div className="bg-white rounded-[2rem] p-4 w-full max-w-2xl shadow-2xl relative" onClick={e => e.stopPropagation()}>
-                                <div className="flex justify-between items-center mb-3 px-2">
-                                    <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2"><i className="ph ph-buildings text-blue-600"></i> แผนผังห้องเรียน</h3>
-                                    <button onClick={() => setShowRoomMap(false)} className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center"><i className="ph ph-x"></i></button>
-                                </div>
-                                {settings?.room_map_url ? (
-                                    <img src={settings.room_map_url} alt="Room Map" className="w-full max-h-[75vh] object-contain rounded-xl bg-gray-50" />
-                                ) : (
-                                    <p className="text-center text-gray-400 text-xs py-12 font-medium">ยังไม่ได้ตั้งค่ารูปแผนผังห้องเรียนในระบบ</p>
-                                )}
-                            </div>
-                        </div>
-                    )}
-
-                    {showZoneMap && (
-                        <div className="fixed inset-0 z-[9990] bg-gray-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in" onClick={() => setShowZoneMap(false)}>
-                            <div className="bg-white rounded-[2rem] p-4 w-full max-w-2xl shadow-2xl relative" onClick={e => e.stopPropagation()}>
-                                <div className="flex justify-between items-center mb-3 px-2">
-                                    <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2"><i className="ph ph-map-pin text-[#C8102E]"></i> แผนผังเขตพื้นที่</h3>
-                                    <button onClick={() => setShowZoneMap(false)} className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center"><i className="ph ph-x"></i></button>
-                                </div>
-                                {settings?.zone_map_url ? (
-                                    <img src={settings.zone_map_url} alt="Zone Map" className="w-full max-h-[75vh] object-contain rounded-xl bg-gray-50" />
-                                ) : (
-                                    <p className="text-center text-gray-400 text-xs py-12 font-medium">ยังไม่ได้ตั้งค่ารูปแผนผังเขตพื้นที่ในระบบ</p>
-                                )}
-                            </div>
-                        </div>
-                    )}
-
-                    {showAnnouncement && (
-                        <div className="fixed inset-0 z-[9990] bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in" onClick={() => setShowAnnouncement(false)}>
-                            <div className="bg-white rounded-[2rem] p-6 w-full max-w-md shadow-2xl relative" onClick={e => e.stopPropagation()}>
-                                <div className="flex justify-between items-center mb-4">
-                                    <h3 className="font-black text-gray-800 text-base flex items-center gap-2"><i className="ph ph-megaphone text-[#C8102E]"></i> {settings?.announcement_title || 'ประกาศสภานักเรียน'}</h3>
-                                    <button onClick={() => setShowAnnouncement(false)} className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center"><i className="ph ph-x"></i></button>
-                                </div>
-                                {(settings?.announce_banner_url || settings?.banner_url) && canViewBanner(settings?.visibility_announce_banner) && (
-                                    <img src={settings.announce_banner_url || settings.banner_url} alt="Announcement" className="w-full rounded-xl mb-4 object-cover max-h-56" />
-                                )}
-                                <p className="text-xs text-gray-600 whitespace-pre-line leading-relaxed bg-gray-50 p-4 rounded-xl border border-gray-100">
-                                    {settings?.announcement_msg || 'ยังไม่มีประกาศใหม่ในขณะนี้'}
-                                </p>
-                            </div>
-                        </div>
-                    )}
-
-                    {showMainBannerPopup && settings?.popup_banner_url && (
-                        <div className="fixed inset-0 z-[9992] bg-gray-900/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-                            <div className="bg-white rounded-[2rem] p-4 w-full max-w-md shadow-2xl relative">
-                                <button onClick={handleCloseMainBannerPopup} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/60 text-white flex items-center justify-center z-10"><i className="ph ph-x"></i></button>
-                                <img src={settings.popup_banner_url} alt="Popup Banner" className="w-full rounded-2xl object-contain max-h-[65vh]" />
-                                <div className="flex items-center justify-between mt-3 px-2">
-                                    <label className="flex items-center gap-2 text-xs text-gray-500 font-medium cursor-pointer">
-                                        <input type="checkbox" checked={hideBannerFor7Days} onChange={e => setHideBannerFor7Days(e.target.checked)} className="rounded accent-[#C8102E]" />
-                                        ไม่ต้องแสดงอีกใน 7 วัน
-                                    </label>
-                                    <button onClick={handleCloseMainBannerPopup} className="px-4 py-1.5 bg-[#C8102E] text-white rounded-xl text-xs font-bold">ปิด</button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Info Modal (นามบัตรช่วยเหลือแบบแนวนอน ดึงรูปและชื่อจากตั้งค่าได้) */}
+                    {/* Help / Info Modal */}
                     {showInfoModal && (
-                        <div className="fixed inset-0 z-[9990] bg-gray-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4 animate-in fade-in" onClick={()=>setShowInfoModal(false)}>
-                            <div className="bg-white rounded-[2rem] p-6 w-full max-w-md shadow-2xl animate-in slide-in-from-bottom-full sm:zoom-in-95 relative" onClick={e=>e.stopPropagation()}>
-                                <div className="flex justify-between items-center mb-4">
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-[#C8102E] bg-red-50 px-3 py-1 rounded-full">HELP CENTER • ศูนย์ช่วยเหลือ</span>
-                                    <button onClick={()=>setShowInfoModal(false)} className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center hover:bg-gray-200"><i className="ph ph-x"></i></button>
+                        <div className="fixed inset-0 z-[9997] bg-gray-900/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+                            <div className="bg-white rounded-[2rem] w-full max-w-md p-6 shadow-2xl relative">
+                                <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-3">
+                                    <h3 className="font-black text-gray-800 text-base flex items-center gap-2"><i className="ph ph-question text-[#C8102E] text-xl"></i> ศูนย์ช่วยเหลือและติดต่อผู้ดูแล</h3>
+                                    <button onClick={() => setShowInfoModal(false)} className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center"><i className="ph ph-x"></i></button>
                                 </div>
-                                <div className="flex items-center gap-4 bg-gray-50 p-4 rounded-2xl border border-gray-100 mb-4">
-                                    <img src={settings?.admin_avatar_url || ADMIN_AVATAR_URL} alt="Admin Profile" className="w-16 h-16 rounded-full object-cover border-2 border-[#C8102E] shadow-sm shrink-0" onError={(e)=>{e.target.src=HARDCODED_LOGO}} />
-                                    <div className="min-w-0 flex-1">
-                                        <h3 className="font-black text-gray-800 text-base truncate">{settings?.admin_name || 'นายภูธนากร หงษ์ทอง (พี่ภีม)'}</h3>
-                                        <p className="text-xs font-bold text-[#C8102E] mt-0.5">{settings?.admin_role || 'เลขานุการสภานักเรียนโรงเรียนคำม่วง'}</p>
-                                        <p className="text-[11px] text-gray-500 mt-1 leading-snug">หากลืมรหัสผ่าน หรือพบปัญหาการใช้งานระบบ ติดต่อแอดมินได้โดยตรงครับ</p>
+                                <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 flex items-center gap-4 mb-4">
+                                    <img src={settings?.admin_avatar_url || ADMIN_AVATAR_URL} className="w-16 h-16 rounded-full object-cover border-2 border-[#C8102E] shrink-0" onError={(e)=>{e.target.src=HARDCODED_LOGO}} />
+                                    <div className="flex-1 min-w-0">
+                                        <p className="font-black text-gray-800 text-sm truncate">{settings?.admin_name || 'นายภูธนากร หงษ์ทอง (พี่ภีม)'}</p>
+                                        <p className="text-xs text-gray-500 font-medium mb-2">{settings?.admin_role || 'เลขานุการสภานักเรียนโรงเรียนคำม่วง'}</p>
+                                        {settings?.admin_line_url && (
+                                            <a href={settings.admin_line_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#06C755] text-white font-bold text-xs shadow-sm">
+                                                <i className="ph ph-chat-circle-dots ph-fill"></i> ติดต่อทาง LINE
+                                            </a>
+                                        )}
                                     </div>
                                 </div>
-                                <a href={settings?.admin_line_url || "https://line.me/ti/p/~470aijh"} target="_blank" rel="noreferrer" className="w-full flex items-center justify-center gap-2 py-3.5 bg-[#00B900] hover:bg-[#009900] text-white rounded-xl font-bold transition-all active:scale-95 text-sm shadow-md shadow-green-500/20">
-                                    <i className="ph ph-chat-circle-dots text-lg ph-fill"></i> ติดต่อแอดมินผ่าน LINE
-                                </a>
+                                <button onClick={() => setShowInfoModal(false)} className="w-full py-3 rounded-xl bg-gray-100 text-gray-700 font-bold text-xs">ปิดหน้าต่าง</button>
                             </div>
                         </div>
                     )}
 
-                    {/* Paper Answer Sheet Modal (แบบฟอร์มกระดาษคำตอบ OMR สำหรับปริ้นท์ไปฝน/กากบาท) */}
+                    {/* Announcement Modal */}
+                    {showAnnouncement && (
+                        <div className="fixed inset-0 z-[9997] bg-gray-900/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+                            <div className="bg-white rounded-[2rem] w-full max-w-md p-6 shadow-2xl relative">
+                                <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-3">
+                                    <h3 className="font-black text-gray-800 text-base flex items-center gap-2"><i className="ph ph-megaphone text-[#C8102E] text-xl"></i> ประกาศจากสภานักเรียน</h3>
+                                    <button onClick={() => setShowAnnouncement(false)} className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center"><i className="ph ph-x"></i></button>
+                                </div>
+                                {(settings?.announce_banner_url || settings?.banner_url) && (
+                                    <img src={settings.announce_banner_url || settings.banner_url} className="w-full rounded-xl mb-3 max-h-56 object-cover" />
+                                )}
+                                <h4 className="font-bold text-gray-800 text-sm mb-1">{settings?.announcement_title || 'แจ้งข่าวสารประชาสัมพันธ์'}</h4>
+                                <p className="text-xs text-gray-600 whitespace-pre-line leading-relaxed mb-4">{settings?.announcement_msg || 'ยังไม่มีประกาศใหม่ในขณะนี้'}</p>
+                                <button onClick={() => setShowAnnouncement(false)} className="w-full py-3 rounded-xl bg-gray-100 text-gray-700 font-bold text-xs">รับทราบ</button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Room Map & Zone Map Modals */}
+                    {(showRoomMap || showZoneMap) && (
+                        <div className="fixed inset-0 z-[9997] bg-gray-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+                            <div className="bg-white rounded-[2rem] w-full max-w-3xl p-5 shadow-2xl flex flex-col max-h-[90vh]">
+                                <div className="flex justify-between items-center mb-3 pb-2 border-b border-gray-100">
+                                    <h3 className="font-black text-gray-800 text-base">{showRoomMap ? 'แผนผังห้องเรียน' : 'แผนผังเขตพื้นที่รับผิดชอบ'}</h3>
+                                    <button onClick={() => { setShowRoomMap(false); setShowZoneMap(false); }} className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center"><i className="ph ph-x"></i></button>
+                                </div>
+                                <div className="flex-1 overflow-auto flex items-center justify-center bg-gray-50 rounded-xl p-2">
+                                    {(showRoomMap ? settings?.room_map_url : settings?.zone_map_url) ? (
+                                        <img src={showRoomMap ? settings.room_map_url : settings.zone_map_url} className="max-w-full max-h-[75vh] object-contain rounded-lg" />
+                                    ) : (
+                                        <p className="text-xs font-bold text-gray-400 py-16">ยังไม่ได้ตั้งค่ารูปแผนผังในระบบ</p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Paper Answer Sheet Modal (แบบประเมินความเรียบร้อย A4 แนวนอน แผ่นเดียวจบ 2 คอลัมน์) */}
                     {showPaperSheetModal && (
-                        <div className="fixed inset-0 z-[9998] bg-gray-900/80 backdrop-blur-sm flex flex-col items-center justify-center p-3 sm:p-6 animate-in fade-in">
-                            <div className="bg-white rounded-[2rem] w-full max-w-6xl max-h-[92vh] shadow-2xl flex flex-col overflow-hidden">
+                        <div className="fixed inset-0 z-[9998] bg-gray-900/80 backdrop-blur-sm flex flex-col items-center justify-center p-2 sm:p-5 animate-in fade-in">
+                            <div className="bg-white rounded-[2rem] w-full max-w-6xl max-h-[94vh] shadow-2xl flex flex-col overflow-hidden">
                                 {/* แถบเครื่องมือด้านบน */}
                                 <div className="p-4 border-b border-gray-200 flex flex-wrap items-center justify-between gap-3 bg-gray-50 shrink-0">
                                     <div className="flex items-center gap-2.5">
                                         <div className="w-10 h-10 rounded-xl bg-red-50 text-[#C8102E] flex items-center justify-center">
-                                            <i className="ph ph-exam text-xl"></i>
+                                            <i className="ph ph-clipboard-text text-xl"></i>
                                         </div>
                                         <div>
-                                            <h3 className="font-black text-gray-800 text-sm sm:text-base">ใบตรวจภาคสนาม (แบบกระดาษคำตอบ OMR / กากบาท)</h3>
-                                            <p className="text-[11px] text-gray-500 font-medium">สำหรับพิมพ์ออกไปเดินตรวจด้วยปากกา/ดินสอ แล้วค่อยนำคะแนนมาคีย์เข้าระบบ</p>
+                                            <h3 className="font-black text-gray-800 text-sm sm:text-base">พิมพ์แบบประเมินความเรียบร้อย (A4 แนวนอน แผ่นเดียวจบ)</h3>
+                                            <p className="text-[11px] text-gray-500 font-medium">เลือกเปิด/ปิดชื่อและวันที่ได้ตามต้องการ สำหรับพิมพ์ไว้ใช้ประเมินและสแกนเข้าระบบ</p>
                                         </div>
                                     </div>
 
                                     <div className="flex flex-wrap items-center gap-2">
-                                        <select value={paperSheetGradeFilter} onChange={e => setPaperSheetGradeFilter(e.target.value)} className="bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-700 outline-none">
-                                            <option value="all">ทุกระดับชั้น ({rooms.length} ห้อง)</option>
-                                            <option value="m_ton">เฉพาะ ม.ต้น (ม.1 - ม.3)</option>
-                                            <option value="m_plai">เฉพาะ ม.ปลาย (ม.4 - ม.6)</option>
-                                            <option value="1">เฉพาะ ม.1</option>
-                                            <option value="2">เฉพาะ ม.2</option>
-                                            <option value="3">เฉพาะ ม.3</option>
-                                            <option value="4">เฉพาะ ม.4</option>
-                                            <option value="5">เฉพาะ ม.5</option>
-                                            <option value="6">เฉพาะ ม.6</option>
-                                        </select>
+                                        {/* ตัวเลือกใส่หรือไม่ใส่วันที่และชื่อผู้ตรวจ */}
+                                        <label className={`px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 cursor-pointer select-none transition-all ${paperIncludeDate ? 'bg-red-50 border-[#C8102E] text-[#C8102E]' : 'bg-white border-gray-300 text-gray-600'}`}>
+                                            <input type="checkbox" checked={paperIncludeDate} onChange={e => setPaperIncludeDate(e.target.checked)} className="accent-[#C8102E]" />
+                                            <span>ใส่วันที่</span>
+                                        </label>
+                                        <label className={`px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 cursor-pointer select-none transition-all ${paperIncludeInspector ? 'bg-red-50 border-[#C8102E] text-[#C8102E]' : 'bg-white border-gray-300 text-gray-600'}`}>
+                                            <input type="checkbox" checked={paperIncludeInspector} onChange={e => setPaperIncludeInspector(e.target.checked)} className="accent-[#C8102E]" />
+                                            <span>ใส่ชื่อผู้ตรวจ</span>
+                                        </label>
+
+                                        <button onClick={() => { setShowPaperSheetModal(false); handleOpenOmrScanner(); }} className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 px-3.5 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all">
+                                            <i className="ph ph-scan text-base"></i> ไปหน้าสแกนแบบประเมิน
+                                        </button>
                                         <button onClick={() => handleExportPaperSheet('png')} className="bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 px-3.5 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all">
-                                            <i className="ph ph-image text-base"></i> โหลดรูป PNG
+                                            <i className="ph ph-image text-base"></i> โหลด PNG
                                         </button>
                                         <button onClick={() => handleExportPaperSheet('pdf')} className="bg-red-50 hover:bg-red-100 text-[#C8102E] border border-red-200 px-3.5 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all">
                                             <i className="ph ph-file-pdf text-base"></i> โหลด PDF
                                         </button>
                                         <button onClick={() => handleExportPaperSheet('print')} className="bg-gray-900 hover:bg-black text-white px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all">
-                                            <i className="ph ph-printer text-base"></i> สั่งพิมพ์ทันที
+                                            <i className="ph ph-printer text-base"></i> สั่งพิมพ์ (A4)
                                         </button>
                                         <button onClick={() => setShowPaperSheetModal(false)} className="w-9 h-9 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center hover:bg-gray-300">
                                             <i className="ph ph-x text-base"></i>
@@ -3076,122 +3366,115 @@
                                     </div>
                                 </div>
 
-                                {/* พื้นที่แสดงตัวอย่างกระดาษคำตอบ A4 แนวนอน */}
-                                <div className="flex-1 overflow-auto bg-gray-200 p-4 sm:p-6 custom-scrollbar flex justify-center items-start">
-                                    <div id="omr-print-area" className="shadow-xl rounded-sm bg-white overflow-x-auto">
+                                {/* พื้นที่แสดงตัวอย่างแบบประเมิน A4 แนวนอน แผ่นเดียวจบ (1122 x 793 px) */}
+                                <div className="flex-1 overflow-auto bg-gray-200 p-3 sm:p-5 custom-scrollbar flex justify-center items-start">
+                                    <div id="omr-print-area" className="shadow-xl bg-white overflow-x-auto">
                                         <div id="omr-sheet-export-box" className="omr-sheet-wrapper relative">
-                                            {/* มุมมาร์คเกอร์แบบกระดาษคำตอบ OMR สี่มุม */}
-                                            <div className="flex justify-between items-center mb-2">
-                                                <div className="omr-corner-mark"></div>
-                                                <div className="text-[10px] font-bold tracking-widest text-gray-400 uppercase">OFFICIAL INSPECTION ANSWER SHEET • ZONECHECK V2.1</div>
-                                                <div className="omr-corner-mark"></div>
-                                            </div>
-
-                                            {/* ส่วนหัวกระดาษคำตอบ */}
-                                            <div className="border-2 border-gray-800 rounded-lg p-3 mb-3 flex items-center justify-between gap-4 bg-white">
-                                                <div className="flex items-center gap-3">
-                                                    <img src={settings?.school_logo_url || settings?.app_logo_url || HARDCODED_LOGO} className="w-14 h-14 object-contain" crossOrigin="anonymous" />
-                                                    <div>
-                                                        <h1 className="text-lg font-black text-gray-900 leading-tight">ใบลงคะแนนตรวจความเรียบร้อย (แบบกระดาษคำตอบภาคสนาม)</h1>
-                                                        <p className="text-xs font-bold text-gray-600">สภานักเรียนโรงเรียนคำม่วง อำเภอคำม่วง จังหวัดกาฬสินธุ์ • {HARDCODED_NAME}</p>
-                                                        <p className="text-[11px] text-gray-500 mt-0.5"><b>คำชี้แจง:</b> ให้ระบายทึบ ● หรือทำเครื่องหมายกากบาท ✕ ลงในวงกลม ○ ตามหัวข้อที่ผ่านเกณฑ์ หรือระดับคะแนนที่ประเมินได้</p>
-                                                    </div>
+                                            {/* มาร์คเกอร์มุมบนซ้าย-ขวา */}
+                                            <div>
+                                                <div className="flex justify-between items-center mb-1.5">
+                                                    <div className="omr-corner-mark"></div>
+                                                    <div className="text-[10px] font-bold text-gray-500">แบบบันทึกผลการตรวจความเรียบร้อย • สภานักเรียนโรงเรียนคำม่วง</div>
+                                                    <div className="omr-corner-mark"></div>
                                                 </div>
 
-                                                {/* กรอบกรอกข้อมูลผู้ตรวจและวันที่ */}
-                                                <div className="border border-gray-400 rounded p-2.5 text-xs space-y-1.5 min-w-[290px] bg-gray-50">
-                                                    <div className="flex items-center justify-between">
-                                                        <span className="font-bold text-gray-700">ประจำวันที่:</span>
-                                                        <span className="border-b border-dotted border-gray-600 px-3 font-bold text-gray-900">{formatDateObj(filterDate)}</span>
+                                                {/* ส่วนหัวแบบประเมิน (ภาษาไทยล้วน ไม่มีคำว่ากระดาษคำตอบภาคสนาม) */}
+                                                <div className="border-2 border-gray-900 rounded-lg px-3.5 py-2 mb-2 flex items-center justify-between gap-4 bg-white">
+                                                    <div className="flex items-center gap-3">
+                                                        <img src={settings?.school_logo_url || settings?.app_logo_url || HARDCODED_LOGO} className="w-12 h-12 object-contain" crossOrigin="anonymous" />
+                                                        <div>
+                                                            <h1 className="text-base font-black text-gray-900 leading-tight">แบบประเมินความเรียบร้อยห้องเรียนและเขตพื้นที่รับผิดชอบ</h1>
+                                                            <p className="text-xs font-bold text-gray-700">สภานักเรียนโรงเรียนคำม่วง อำเภอคำม่วง จังหวัดกาฬสินธุ์</p>
+                                                            <p className="text-[10.5px] text-gray-600 mt-0.5"><b>คำชี้แจง:</b> ระบายทึบ ● ลงในวงกลม ○ ตามหัวข้อที่ผ่านเกณฑ์ (หมวดห้องเรียน) หรือระดับคะแนนที่ประเมินได้ (หมวดเขตพื้นที่)</p>
+                                                        </div>
                                                     </div>
-                                                    <div className="flex items-center justify-between">
-                                                        <span className="font-bold text-gray-700">ผู้ตรวจ:</span>
-                                                        <span className="border-b border-dotted border-gray-600 flex-1 ml-2 text-right font-bold text-gray-800 truncate">{getActiveInspectorTeamString() !== 'ไม่ระบุ' ? getActiveInspectorTeamString() : '....................................................'}</span>
-                                                    </div>
-                                                    <div className="flex items-center justify-between text-[10px] text-gray-500 pt-0.5">
-                                                        <span>วิธีทำเครื่องหมาย: <b>● ระบายทึบ</b> หรือ <b>✕ กากบาท</b></span>
-                                                        <span>รวม {paperSheetRooms.length} ห้อง</span>
+
+                                                    {/* กรอบวันที่และผู้ตรวจ (เลือกเปิด/ปิดได้) */}
+                                                    <div className="border border-gray-500 rounded px-3 py-1.5 text-xs space-y-1 min-w-[275px] bg-gray-50">
+                                                        <div className="flex items-center justify-between">
+                                                            <span className="font-bold text-gray-800">ประจำวันที่:</span>
+                                                            <span className="border-b border-dotted border-gray-700 flex-1 ml-2 text-center font-bold text-gray-900">
+                                                                {paperIncludeDate ? formatDateObj(filterDate) : '........................................................'}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex items-center justify-between">
+                                                            <span className="font-bold text-gray-800">คณะผู้ตรวจ:</span>
+                                                            <span className="border-b border-dotted border-gray-700 flex-1 ml-2 text-center font-bold text-gray-900 truncate">
+                                                                {paperIncludeInspector && getActiveInspectorTeamString() !== 'ไม่ระบุ' ? getActiveInspectorTeamString() : '........................................................'}
+                                                            </span>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
 
-                                            {/* ตารางกระดาษคำตอบ OMR */}
-                                            <table className="omr-table">
-                                                <thead>
-                                                    <tr>
-                                                        <th rowSpan="2" style={{width: '3.5%'}}>ที่</th>
-                                                        <th rowSpan="2" style={{width: '8.5%'}}>ห้องเรียน</th>
-                                                        <th colSpan="7" style={{width: '38%', backgroundColor: '#eff6ff'}}>หมวดห้องเรียน (ข้อละ 2 คะแนน / เต็ม 10)</th>
-                                                        <th rowSpan="2" style={{width: '5.5%'}}>รวม<br/>ห้อง</th>
-                                                        <th colSpan="6" style={{width: '28%', backgroundColor: '#fdf4ff'}}>หมวดเขตพื้นที่ (เลือกฝน 1 ช่อง / เต็ม 10)</th>
-                                                        <th rowSpan="2" style={{width: '5.5%'}}>รวม<br/>เขต</th>
-                                                        <th rowSpan="2" style={{width: '11%'}}>หมายเหตุ / จุดที่ต้องแก้ไข</th>
-                                                    </tr>
-                                                    <tr>
-                                                        <th style={{fontSize: '10px'}}>โต๊ะ<br/>(+2)</th>
-                                                        <th style={{fontSize: '10px'}}>ขยะ<br/>(+2)</th>
-                                                        <th style={{fontSize: '10px'}}>ไฟ/หน้าต่าง<br/>(+2)</th>
-                                                        <th style={{fontSize: '10px'}}>พื้น<br/>(+2)</th>
-                                                        <th style={{fontSize: '10px'}}>กระดาน<br/>(+2)</th>
-                                                        <th style={{fontSize: '10px', color: '#b91c1c'}}>ไม่ทำ<br/>(-5)</th>
-                                                        <th style={{fontSize: '10px', color: '#4b5563'}}>ข้าม<br/>(-)</th>
+                                            {/* ตารางกระดาษคำตอบ แบ่ง 2 ฝั่ง ซ้าย-ขวา พอดีแผ่นเดียว */}
+                                            <div className="grid grid-cols-2 gap-2.5 flex-1 items-start">
+                                                {[paperSheetSplitColumns.left, paperSheetSplitColumns.right].map((colItems, colIdx) => (
+                                                    <table key={colIdx} className="omr-table">
+                                                        <thead>
+                                                            <tr>
+                                                                <th rowSpan="2" style={{width: '6%'}}>ที่</th>
+                                                                <th rowSpan="2" style={{width: '14%'}}>ห้อง</th>
+                                                                <th colSpan="7" style={{width: '44%', backgroundColor: '#eff6ff'}}>หมวดห้องเรียน</th>
+                                                                <th colSpan="6" style={{width: '36%', backgroundColor: '#fdf4ff'}}>หมวดเขตพื้นที่</th>
+                                                            </tr>
+                                                            <tr>
+                                                                <th>โต๊ะ</th>
+                                                                <th>ขยะ</th>
+                                                                <th>ไฟ</th>
+                                                                <th>พื้น</th>
+                                                                <th>กระดาน</th>
+                                                                <th style={{color: '#b91c1c'}}>ไม่ทำ</th>
+                                                                <th>ข้าม</th>
 
-                                                        <th style={{fontSize: '10px'}}>ดีเยี่ยม<br/>(10)</th>
-                                                        <th style={{fontSize: '10px'}}>ดี<br/>(8)</th>
-                                                        <th style={{fontSize: '10px'}}>พอใช้<br/>(5)</th>
-                                                        <th style={{fontSize: '10px'}}>ปรับปรุง<br/>(2)</th>
-                                                        <th style={{fontSize: '10px', color: '#b91c1c'}}>ไม่ทำ<br/>(-5)</th>
-                                                        <th style={{fontSize: '10px', color: '#4b5563'}}>ข้าม<br/>(-)</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {paperSheetRooms.length === 0 ? (
-                                                        <tr>
-                                                            <td colSpan="17" className="py-8 text-center text-gray-400 font-bold">ยังไม่มีรายชื่อห้องเรียนในระบบ (สามารถเพิ่มห้องเรียนได้ที่เมนูตั้งค่า)</td>
-                                                        </tr>
-                                                    ) : paperSheetRooms.map((r, idx) => (
-                                                        <tr key={r.id || idx}>
-                                                            <td className="font-bold">{idx + 1}</td>
-                                                            <td className="font-black text-left pl-2">{r.name}</td>
-                                                            {/* วงกลมฝนคะแนนห้องเรียน */}
-                                                            <td><span className="omr-bubble">2</span></td>
-                                                            <td><span className="omr-bubble">2</span></td>
-                                                            <td><span className="omr-bubble">2</span></td>
-                                                            <td><span className="omr-bubble">2</span></td>
-                                                            <td><span className="omr-bubble">2</span></td>
-                                                            <td><span className="omr-bubble" style={{borderColor:'#b91c1c', color:'#b91c1c'}}>-5</span></td>
-                                                            <td><span className="omr-bubble">-</span></td>
-                                                            <td></td>
-
-                                                            {/* วงกลมฝนคะแนนเขตพื้นที่ */}
-                                                            {r.hasZone === false ? (
-                                                                <td colSpan="6" className="text-[10px] text-gray-400 font-bold bg-gray-100">ไม่มีเขตพื้นที่รับผิดชอบ</td>
-                                                            ) : (
-                                                                <>
-                                                                    <td><span className="omr-bubble">10</span></td>
-                                                                    <td><span className="omr-bubble">8</span></td>
-                                                                    <td><span className="omr-bubble">5</span></td>
+                                                                <th>ดีเยี่ยม</th>
+                                                                <th>ดี</th>
+                                                                <th>พอใช้</th>
+                                                                <th>ปรับปรุง</th>
+                                                                <th style={{color: '#b91c1c'}}>ไม่ทำ</th>
+                                                                <th>ข้าม</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {colItems.map(({ room: r, num }) => (
+                                                                <tr key={r.id || num}>
+                                                                    <td className="font-bold">{num}</td>
+                                                                    <td className="font-black text-left pl-1.5 truncate">{(r.name || '').replace('ม.', 'ม.')}</td>
+                                                                    <td><span className="omr-bubble">2</span></td>
+                                                                    <td><span className="omr-bubble">2</span></td>
+                                                                    <td><span className="omr-bubble">2</span></td>
+                                                                    <td><span className="omr-bubble">2</span></td>
                                                                     <td><span className="omr-bubble">2</span></td>
                                                                     <td><span className="omr-bubble" style={{borderColor:'#b91c1c', color:'#b91c1c'}}>-5</span></td>
                                                                     <td><span className="omr-bubble">-</span></td>
-                                                                </>
-                                                            )}
-                                                            <td></td>
-                                                            <td></td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
 
-                                            {/* ส่วนท้ายกระดาษคำตอบสำหรับลงลายมือชื่อ */}
-                                            <div className="mt-4 flex justify-between items-end text-xs text-gray-700 pt-2">
+                                                                    {r.hasZone === false ? (
+                                                                        <td colSpan="6" className="text-[8.5px] text-gray-400 font-bold bg-gray-100">ไม่มีเขตพื้นที่รับผิดชอบ</td>
+                                                                    ) : (
+                                                                        <>
+                                                                            <td><span className="omr-bubble">10</span></td>
+                                                                            <td><span className="omr-bubble">8</span></td>
+                                                                            <td><span className="omr-bubble">5</span></td>
+                                                                            <td><span className="omr-bubble">2</span></td>
+                                                                            <td><span className="omr-bubble" style={{borderColor:'#b91c1c', color:'#b91c1c'}}>-5</span></td>
+                                                                            <td><span className="omr-bubble">-</span></td>
+                                                                        </>
+                                                                    )}
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                ))}
+                                            </div>
+
+                                            {/* มาร์คเกอร์มุมล่างซ้าย-ขวา */}
+                                            <div className="flex justify-between items-center mt-1.5 pt-1">
                                                 <div className="flex items-center gap-2">
                                                     <div className="omr-corner-mark"></div>
-                                                    <span className="text-[10px] text-gray-500">เอกสารสร้างจากระบบ ZoneCheck V2.1 • สภานักเรียนโรงเรียนคำม่วง</span>
+                                                    <span className="text-[9.5px] font-bold text-gray-500">สภานักเรียนโรงเรียนคำม่วง • จัดวางให้เห็นจุดสี่เหลี่ยมสีดำทั้ง 4 มุมชัดเจนขณะถ่ายภาพสแกน</span>
                                                 </div>
-                                                <div className="flex gap-8 items-center">
-                                                    <div>ลงชื่อ ....................................................... ผู้ตรวจประเมิน</div>
-                                                    <div>ลงชื่อ ....................................................... ผู้รับรองผล</div>
+                                                <div className="flex items-center gap-6 text-[10.5px] font-bold text-gray-700">
+                                                    <span>ลงชื่อ ....................................................... ผู้ตรวจประเมิน</span>
                                                     <div className="omr-corner-mark"></div>
                                                 </div>
                                             </div>
@@ -3202,11 +3485,174 @@
                         </div>
                     )}
 
-                    {/* Loading Overlay */}
+                    {/* OMR Scanner Modal (เครื่องสแกนตรวจแบบประเมินและยืนยันผล) */}
+                    {omrScannerModal.isOpen && (
+                        <div className="fixed inset-0 z-[9998] bg-gray-900/85 backdrop-blur-sm flex flex-col items-center justify-center p-3 sm:p-6 animate-in fade-in">
+                            <div className="bg-white rounded-[2rem] w-full max-w-5xl max-h-[92vh] shadow-2xl flex flex-col overflow-hidden">
+                                {/* Header */}
+                                <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gray-50 shrink-0">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-xl bg-gray-900 text-amber-300 flex items-center justify-center">
+                                            <i className="ph ph-scan text-xl"></i>
+                                        </div>
+                                        <div>
+                                            <h3 className="font-black text-gray-800 text-sm sm:text-base">สแกนแบบประเมินความเรียบร้อย</h3>
+                                            <p className="text-[11px] text-gray-500 font-medium">ประจำวันที่ {formatDateObj(filterDate)} • ถ่ายภาพแบบประเมินให้เห็นจุดสี่เหลี่ยมทั้ง 4 มุม หรือกดปรับคะแนนด้านล่างได้ทันที</p>
+                                        </div>
+                                    </div>
+                                    <button onClick={() => setOmrScannerModal(prev => ({ ...prev, isOpen: false }))} className="w-9 h-9 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center hover:bg-gray-300">
+                                        <i className="ph ph-x text-base"></i>
+                                    </button>
+                                </div>
+
+                                {/* แถบอัปโหลดรูปแบบประเมิน */}
+                                <div className="p-4 bg-white border-b border-gray-100 flex flex-wrap items-center justify-between gap-3 shrink-0">
+                                    <div className="flex items-center gap-3">
+                                        <label className="bg-[#C8102E] hover:bg-red-800 text-white px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 cursor-pointer shadow-sm transition-all active:scale-95">
+                                            <i className="ph ph-camera text-base"></i> ถ่ายภาพ / เลือกรูปแบบประเมิน
+                                            <input type="file" accept="image/*" ref={omrFileInputRef} onChange={handleOmrImageUpload} className="hidden" />
+                                        </label>
+                                        {omrScannerModal.imagePreview && (
+                                            <span className="text-xs font-bold text-emerald-600 flex items-center gap-1">
+                                                <i className="ph ph-check-circle ph-fill"></i> สแกนภาพเรียบร้อยแล้ว (แตะที่ปุ่มคะแนนเพื่อแก้ไขเพิ่มเติมได้)
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    <div className="flex items-center gap-2">
+                                        <button onClick={() => setOmrScannerModal(prev => ({
+                                            ...prev,
+                                            results: prev.results.map(r => ({ ...r, includeRoom: true, includeZone: r.room.hasZone !== false }))
+                                        }))} className="px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold">
+                                            เลือกทั้งหมด
+                                        </button>
+                                        <button onClick={handleSaveOmrScannedResults} className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-md flex items-center gap-1.5 transition-all active:scale-95">
+                                            <i className="ph ph-check-fat ph-fill text-sm"></i> ยืนยันบันทึกผลทั้งหมดลงระบบ
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* ตารางแสดงผลลัพธ์ที่สแกนได้ พร้อมให้กดติ๊กแก้ไขได้เหมือนกระดาษคำตอบ */}
+                                <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-3 bg-gray-50">
+                                    {omrScannerModal.isScanning ? (
+                                        <div className="py-16 flex flex-col items-center justify-center text-center">
+                                            <i className="ph ph-spinner animate-spin text-4xl text-[#C8102E] mb-3"></i>
+                                            <p className="font-bold text-gray-700 text-sm">กำลังประมวลผลภาพกระดาษคำตอบและอ่านค่าวงกลม...</p>
+                                        </div>
+                                    ) : (
+                                        <div className="bg-white rounded-2xl border border-gray-200 overflow-x-auto shadow-sm">
+                                            <table className="w-full text-xs text-center border-collapse">
+                                                <thead className="bg-gray-100 text-gray-700 font-bold border-b border-gray-200">
+                                                    <tr>
+                                                        <th className="py-2.5 px-2">ที่</th>
+                                                        <th className="py-2.5 px-3 text-left">ห้องเรียน</th>
+                                                        <th className="py-2.5 px-2 bg-blue-50/70">หมวดห้องเรียน (แตะวงกลมเพื่อปรับค่า)</th>
+                                                        <th className="py-2.5 px-2 bg-blue-50/70">รวมห้อง</th>
+                                                        <th className="py-2.5 px-2 bg-fuchsia-50/70">หมวดเขตพื้นที่ (แตะวงกลมเพื่อปรับค่า)</th>
+                                                        <th className="py-2.5 px-2 bg-fuchsia-50/70">รวมเขต</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-gray-100">
+                                                    {omrScannerModal.results.map((item) => {
+                                                        const rs = item.roomScores;
+                                                        const roomTotal = rs.skip ? 'ข้าม' : rs.noDuty ? -5 : (rs.c1 + rs.c2 + rs.c3 + rs.c4 + rs.c5);
+                                                        const zoneTotal = item.room.hasZone === false ? 'ไม่มี' : item.zoneSkip ? 'ข้าม' : item.zoneScore;
+                                                        return (
+                                                            <tr key={item.room.id} className="hover:bg-gray-50/80">
+                                                                <td className="py-2 px-2 font-bold text-gray-400">{item.index}</td>
+                                                                <td className="py-2 px-3 font-black text-gray-800 text-left whitespace-nowrap">{item.room.name}</td>
+                                                                <td className="py-2 px-2">
+                                                                    <div className="flex items-center justify-center gap-1 flex-wrap">
+                                                                        {ROOM_CRITERIA.map(c => (
+                                                                            <button
+                                                                                key={c.id}
+                                                                                type="button"
+                                                                                onClick={() => toggleOmrResultCriterion(item.room.id, c.id)}
+                                                                                className={`px-2 py-1 rounded-full text-[10px] font-bold border transition-all ${!rs.skip && !rs.noDuty && rs[c.id] === 2 ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-500 border-gray-300'}`}
+                                                                            >
+                                                                                {c.name}
+                                                                            </button>
+                                                                        ))}
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => toggleOmrResultCriterion(item.room.id, 'noDuty')}
+                                                                            className={`px-2 py-1 rounded-full text-[10px] font-bold border transition-all ${rs.noDuty ? 'bg-red-600 text-white border-red-600' : 'bg-white text-red-500 border-red-200'}`}
+                                                                        >
+                                                                            ไม่ทำ (-5)
+                                                                        </button>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => toggleOmrResultCriterion(item.room.id, 'skip')}
+                                                                            className={`px-2 py-1 rounded-full text-[10px] font-bold border transition-all ${rs.skip ? 'bg-gray-600 text-white border-gray-600' : 'bg-white text-gray-500 border-gray-200'}`}
+                                                                        >
+                                                                            ข้าม
+                                                                        </button>
+                                                                    </div>
+                                                                </td>
+                                                                <td className="py-2 px-2 font-black text-blue-600">{roomTotal}</td>
+                                                                <td className="py-2 px-2">
+                                                                    {item.room.hasZone === false ? (
+                                                                        <span className="text-[11px] text-gray-400 font-bold">ไม่มีเขตพื้นที่</span>
+                                                                    ) : (
+                                                                        <div className="flex items-center justify-center gap-1 flex-wrap">
+                                                                            {[{v:10, l:'ดีเยี่ยม'}, {v:8, l:'ดี'}, {v:5, l:'พอใช้'}, {v:2, l:'ปรับปรุง'}, {v:-5, l:'ไม่ทำ'}].map(z => (
+                                                                                <button
+                                                                                    key={z.v}
+                                                                                    type="button"
+                                                                                    onClick={() => setOmrResultZone(item.room.id, z.v)}
+                                                                                    className={`px-2 py-1 rounded-full text-[10px] font-bold border transition-all ${!item.zoneSkip && item.zoneScore === z.v ? (z.v < 0 ? 'bg-red-600 text-white border-red-600' : 'bg-fuchsia-600 text-white border-fuchsia-600') : 'bg-white text-gray-500 border-gray-300'}`}
+                                                                                >
+                                                                                    {z.l}
+                                                                                </button>
+                                                                            ))}
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => setOmrResultZone(item.room.id, 'skip')}
+                                                                                className={`px-2 py-1 rounded-full text-[10px] font-bold border transition-all ${item.zoneSkip ? 'bg-gray-600 text-white border-gray-600' : 'bg-white text-gray-500 border-gray-200'}`}
+                                                                            >
+                                                                                ข้าม
+                                                                            </button>
+                                                                        </div>
+                                                                    )}
+                                                                </td>
+                                                                <td className="py-2 px-2 font-black text-fuchsia-600">{zoneTotal}</td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Loading Overlay (พร้อมตัวนับเวลาถอยหลังและแถบเปอร์เซ็นต์) */}
                     {isSavingData && (
-                        <div className="fixed inset-0 z-[99999] bg-gray-900/80 backdrop-blur-sm flex flex-col items-center justify-center">
-                            <i className="ph ph-spinner text-[#C8102E] text-6xl mb-4 animate-spin"></i>
-                            <h2 className="text-2xl font-bold text-white mt-4 font-sarabun">กำลังบันทึกข้อมูล...</h2>
+                        <div className="fixed inset-0 z-[99999] bg-gray-900/85 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center">
+                            <div className="relative w-24 h-24 flex items-center justify-center mb-4">
+                                <i className="ph ph-spinner text-[#C8102E] text-7xl animate-spin"></i>
+                                {savingCountdown > 0 && (
+                                    <span className="absolute text-white font-black text-xl">{savingCountdown}s</span>
+                                )}
+                            </div>
+                            <h2 className="text-xl sm:text-2xl font-black text-white mt-1">
+                                {savingStatusText || 'กำลังบันทึกข้อมูล...'}
+                            </h2>
+                            {savingCountdown > 0 && (
+                                <div className="w-full max-w-xs mt-4 space-y-2">
+                                    <div className="w-full bg-white/15 h-2.5 rounded-full overflow-hidden">
+                                        <div
+                                            className="bg-gradient-to-r from-[#C8102E] to-amber-400 h-full rounded-full transition-all duration-500"
+                                            style={{ width: `${Math.min(95, Math.max(10, Math.round(((savingTotalTime - savingCountdown + 1) / Math.max(savingTotalTime, 1)) * 100)))}%` }}
+                                        ></div>
+                                    </div>
+                                    <p className="text-xs font-bold text-amber-300">
+                                        เหลือเวลาประมาณ {savingCountdown} วินาที • กรุณาอย่าเพิ่งปิดหรือออกจากหน้านี้
+                                    </p>
+                                </div>
+                            )}
                         </div>
                     )}
                     
