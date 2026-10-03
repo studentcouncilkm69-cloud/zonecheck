@@ -502,15 +502,7 @@
                 const validInspectors = Array.isArray(inspectors) ? inspectors : [];
                 const found = validInspectors.find(u => String(u.name).trim() === cleanName);
                 if (found && found.avatar_url) return found.avatar_url;
-                
-                // 1. ดึงจาก Key รายบุคคลใน settings (ป้องกันปัญหาเกิน 50,000 ตัวอักษรต่อช่องใน Google Sheets)
-                if (settings && settings[`avatar_u_${cleanName}`]) {
-                    return settings[`avatar_u_${cleanName}`];
-                }
 
-                // 2. ดึงจากข้อมูลสำรองใน settings และ localStorage
-                const savedMap = safeParse(settings?.inspector_avatars_json, {});
-                if (savedMap && savedMap[cleanName]) return savedMap[cleanName];
                 const localMap = safeParse(safeGetItem('zc26_avatars_map'), {});
                 if (localMap && localMap[cleanName]) return localMap[cleanName];
 
@@ -582,21 +574,10 @@
                     
                     if (json && json.status === 'Success') {
                         const incomingSettings = json.settings ? { ...initialSettings, ...json.settings } : initialSettings;
-                        const settingsAvatarMap = safeParse(incomingSettings.inspector_avatars_json, {});
                         const localAvatarMap = safeParse(safeGetItem('zc26_avatars_map'), {});
                         const prevInspectors = Array.isArray(inspectors) ? inspectors : [];
 
-                        // ดึงรูปหน้าจาก Key รายบุคคล (avatar_u_ชื่อ) ในชีตตั้งค่าระบบมารวมด้วย
-                        const perUserSettingsMap = {};
-                        Object.keys(incomingSettings).forEach(k => {
-                            if (k.startsWith('avatar_u_') && incomingSettings[k]) {
-                                const uName = k.replace('avatar_u_', '').trim();
-                                perUserSettingsMap[uName] = incomingSettings[k];
-                            }
-                        });
-
-                        // ผสานรูปหน้าจากทุกแหล่ง ไม่ให้ข้อมูลว่างจากเซิร์ฟเวอร์มาทับรูปที่ตั้งไว้หายไป
-                        const mergedAvatarMap = { ...localAvatarMap, ...settingsAvatarMap, ...perUserSettingsMap };
+                        const mergedAvatarMap = { ...localAvatarMap };
                         prevInspectors.forEach(u => {
                             if (u?.name && u?.avatar_url) {
                                 const cName = String(u.name).trim();
@@ -607,13 +588,13 @@
                         const rawInspectors = Array.isArray(json.inspectors) ? json.inspectors : [];
                         const loadedInspectors = rawInspectors.map(u => {
                             const cleanName = String(u.name || '').trim();
-                            const finalAvatar = u.avatar_url || perUserSettingsMap[cleanName] || mergedAvatarMap[cleanName] || '';
+                            // ดึงรูปจากคอลัมน์ C ของชีต "รายชื่อผู้ตรวจ" เป็นหลัก
+                            const finalAvatar = u.avatar_url || mergedAvatarMap[cleanName] || '';
                             if (finalAvatar) mergedAvatarMap[cleanName] = finalAvatar;
                             return { ...u, avatar_url: finalAvatar };
                         });
 
                         safeSetItem('zc26_avatars_map', JSON.stringify(mergedAvatarMap));
-                        incomingSettings.inspector_avatars_json = JSON.stringify(mergedAvatarMap);
 
                         setRooms(Array.isArray(json.rooms) ? json.rooms : []);
                         setInspectors(loadedInspectors);
@@ -1923,31 +1904,23 @@
                 const newInspecs = validInspectors.map(u => u.id === editingInspectorAvatar.id ? { ...u, avatar_url: cleanUrl } : u);
                 setInspectors(newInspecs);
 
-                // บันทึกลงแผนที่รูปโปรไฟล์ทั้งใน LocalStorage และแยกเป็น Key รายบุคคลในชีตตั้งค่าระบบ (ไม่เกิน 50,000 ตัวอักษรต่อเซลล์ 100%)
-                const currentMap = { ...safeParse(safeGetItem('zc26_avatars_map'), {}), ...safeParse(settings?.inspector_avatars_json, {}) };
+                const currentMap = safeParse(safeGetItem('zc26_avatars_map'), {});
                 if (cleanName) {
                     if (cleanUrl) currentMap[cleanName] = cleanUrl;
                     else delete currentMap[cleanName];
                 }
-                const mapJsonStr = JSON.stringify(currentMap);
-                safeSetItem('zc26_avatars_map', mapJsonStr);
-                const perUserKey = `avatar_u_${cleanName}`;
-                setSettings(prev => ({ ...prev, [perUserKey]: cleanUrl, inspector_avatars_json: mapJsonStr }));
+                safeSetItem('zc26_avatars_map', JSON.stringify(currentMap));
 
                 if (currentUser && String(currentUser.name || '').trim() === cleanName) {
                     setCurrentUser(prev => ({ ...prev, avatar_url: cleanUrl }));
                 }
                 setEditingInspectorAvatar(null);
                 try {
-                    // ส่งบันทึกแยกเป็นรายคน (perUserKey) ทำให้ Google Sheets บันทึกผ่าน 100% และซิงค์เข้าโทรศัพท์ทุกเครื่องได้ทันที
-                    await syncToGASAsync('updateSettings', { key: perUserKey, val: cleanUrl });
+                    // บันทึกลงคอลัมน์ C (ข้างชื่อผู้ตรวจ) ในชีต "รายชื่อผู้ตรวจ" โดยตรงอย่างเดียว!
                     await syncToGASAsync('updateInspectors', newInspecs);
-                    if (mapJsonStr.length < 45000) {
-                        await syncToGASAsync('updateSettings', { key: 'inspector_avatars_json', val: mapJsonStr });
-                    }
-                    showToast('บันทึกรูปโปรไฟล์ผู้ตรวจขึ้นระบบออนไลน์สำเร็จ!', 'success');
+                    showToast('บันทึกลิงก์รูปไว้ข้างชื่อในชีต รายชื่อผู้ตรวจ สำเร็จ!', 'success');
                 } catch (e) {
-                    showToast('บันทึกรูปโปรไฟล์ลงเครื่องสำเร็จ', 'success');
+                    showToast('บันทึกรูปไม่สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ต', 'error');
                 }
             };
 
