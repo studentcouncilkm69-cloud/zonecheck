@@ -61,17 +61,18 @@
         /* PDF Export Styles */
         .pdf-export-wrapper {
             font-family: 'Sarabun', sans-serif !important;
-            color: #333;
+            color: #1e293b;
             background: white;
             box-sizing: border-box;
             width: 1123px !important;
             padding: 30px 40px !important;
         }
-        .pdf-table { width: 100%; border-collapse: collapse; font-size: 13px; border: 1px solid #cbd5e1; }
-        .pdf-table th { background-color: #f8fafc !important; color: #334155 !important; padding: 8px 6px; border: 1px solid #cbd5e1; font-weight: bold; text-align: center; }
-        .pdf-table td { padding: 7px 6px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; }
+        .pdf-table { width: 100%; border-collapse: collapse; font-size: 13px; border: 1.5px solid #c4b5fd; }
+        .pdf-table th { background-color: #f3e8ff !important; color: #5b21b6 !important; padding: 9px 6px; border: 1px solid #c4b5fd; font-weight: bold; text-align: center; }
+        .pdf-table td { padding: 7px 6px; border: 1px solid #ddd6fe; text-align: center; vertical-align: middle; }
+        .pdf-table tr:nth-child(even) td { background-color: #faf5ff !important; }
         .pdf-table td.text-left { text-align: left; padding-left: 10px; }
-        .col-purple { color: #7c3aed !important; font-weight: bold; }
+        .col-purple { color: #6d28d9 !important; font-weight: bold; }
 
         /* สไตล์สำหรับใบตรวจแบบกระดาษคำตอบ (OMR Answer Sheet - Single A4 Landscape) */
         .omr-sheet-wrapper, .omr-sheet-wrapper * {
@@ -523,7 +524,7 @@
             const handleSync = async () => {
                 setIsSyncing(true);
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 5000);
+                const timeoutId = setTimeout(() => controller.abort(), 25000);
                 try {
                     const response = await fetch(`${GOOGLE_SCRIPT_URL}?action=getInitialData&_t=${Date.now()}`, {
                         method: 'GET',
@@ -1033,32 +1034,51 @@
             }, [inspections, filteredRooms, filterDate, guestFilterType, dateMode, exportSortOrder, guestAdvancedFilter]);
 
             const monthlyDashboardData = useMemo(() => {
-                const [year, month] = selectedMonth.split('-'); const stats = {};
-                filteredRooms.forEach((r, idx) => { stats[r.id] = { room: r, score: 0, roomScore: 0, zoneScore: 0, originalIndex: idx }; });
+                const [year, month] = selectedMonth.split('-');
+                const stats = {};
+                filteredRooms.forEach((r, idx) => {
+                    stats[r.id] = { room: r, score: 0, roomScore: 0, zoneScore: 0, maxRoomScore: 0, maxZoneScore: 0, maxScore: 0, originalIndex: idx };
+                });
                 
                 const validInspections = Array.isArray(inspections) ? inspections : [];
-                const uniqueDaysSet = new Set();
+                const monthlyDayMap = {};
 
                 validInspections.forEach(insp => {
-                    if(!insp?.date || !insp?.roomId || insp.totalScore === null) return; 
+                    if(!insp?.date || !insp?.roomId || insp.totalScore === null || insp.totalScore === undefined) return; 
                     const d = new Date(insp.date);
                     if (isNaN(d.getTime())) return;
                     
-                    if(d.getFullYear() == parseInt(year) && (d.getMonth() + 1) == parseInt(month)) {
-                        uniqueDaysSet.add(insp.date.split('T')[0]);
-                        if(stats[insp.roomId]) {
-                            const room = stats[insp.roomId].room;
-                            if (guestFilterType !== 'all' && insp.type !== guestFilterType) return;
-                            if (insp.type === 'room') { stats[insp.roomId].score += insp.totalScore; stats[insp.roomId].roomScore += insp.totalScore; }
-                            if (insp.type === 'zone' && room.hasZone !== false) { stats[insp.roomId].score += insp.totalScore; stats[insp.roomId].zoneScore += insp.totalScore; }
-                        }
+                    if(d.getFullYear() === parseInt(year) && (d.getMonth() + 1) === parseInt(month)) {
+                        if (guestFilterType !== 'all' && insp.type !== guestFilterType) return;
+                        const dateStr = String(insp.date).split('T')[0];
+                        const key = `${insp.roomId}_${dateStr}`;
+                        if (!monthlyDayMap[key]) monthlyDayMap[key] = { roomId: insp.roomId, roomInsp: null, zoneInsp: null };
+                        if (insp.type === 'room') monthlyDayMap[key].roomInsp = insp;
+                        if (insp.type === 'zone') monthlyDayMap[key].zoneInsp = insp;
                     }
                 });
 
-                const totalDays = uniqueDaysSet.size;
+                Object.values(monthlyDayMap).forEach(dayRecord => {
+                    if (!stats[dayRecord.roomId]) return;
+                    const room = stats[dayRecord.roomId].room;
+                    if (dayRecord.roomInsp && dayRecord.roomInsp.totalScore !== null) {
+                        const s = Number(dayRecord.roomInsp.totalScore) || 0;
+                        stats[dayRecord.roomId].score += s;
+                        stats[dayRecord.roomId].roomScore += s;
+                        stats[dayRecord.roomId].maxRoomScore += 10;
+                        stats[dayRecord.roomId].maxScore += 10;
+                    }
+                    if (dayRecord.zoneInsp && dayRecord.zoneInsp.totalScore !== null && room.hasZone !== false) {
+                        const s = Number(dayRecord.zoneInsp.totalScore) || 0;
+                        stats[dayRecord.roomId].score += s;
+                        stats[dayRecord.roomId].zoneScore += s;
+                        stats[dayRecord.roomId].maxZoneScore += 10;
+                        stats[dayRecord.roomId].maxScore += 10;
+                    }
+                });
+
                 let data = Object.values(stats).map(item => {
-                    let max = totalDays * 10;
-                    if (guestFilterType === 'all') max = totalDays * (item.room.hasZone !== false ? 20 : 10);
+                    let max = item.maxScore;
                     let pct = max > 0 ? (item.score / max) * 100 : 0;
                     let medal = '';
                     if (pct >= 80) medal = '🥇 ทอง'; else if (pct >= 70) medal = '🥈 เงิน'; else if (pct >= 60) medal = '🥉 ทองแดง';
@@ -1070,18 +1090,18 @@
 
             const leaderboardDataAllTime = useMemo(() => {
                 const stats = {};
-                filteredRooms.forEach((r, idx) => { stats[r.id] = { room: r, score: 0, roomScore: 0, zoneScore: 0, originalIndex: idx }; });
+                filteredRooms.forEach((r, idx) => {
+                    stats[r.id] = { room: r, score: 0, roomScore: 0, zoneScore: 0, maxRoomScore: 0, maxZoneScore: 0, maxScore: 0, originalIndex: idx };
+                });
                 const allTimeMergedData = {};
-                const uniqueDaysSet = new Set();
                 
                 const validInspections = Array.isArray(inspections) ? inspections : [];
                 validInspections.forEach(insp => {
-                    if(!insp?.date || !insp?.roomId || insp.totalScore === null) return;
+                    if(!insp?.date || !insp?.roomId || insp.totalScore === null || insp.totalScore === undefined) return;
                     if (guestFilterType !== 'all' && insp.type !== guestFilterType) return;
                     const d = new Date(insp.date);
                     if (isNaN(d.getTime())) return;
-                    const dateStr = d.toISOString().split('T')[0];
-                    uniqueDaysSet.add(dateStr);
+                    const dateStr = String(insp.date).split('T')[0];
                     
                     const key = `${insp.roomId}_${dateStr}`;
                     if(!allTimeMergedData[key]) allTimeMergedData[key] = { roomId: insp.roomId, roomInsp: null, zoneInsp: null };
@@ -1092,14 +1112,24 @@
                 Object.values(allTimeMergedData).forEach(dayRecord => {
                     if (!stats[dayRecord.roomId]) return; 
                     const room = stats[dayRecord.roomId].room;
-                    if (dayRecord.roomInsp) { stats[dayRecord.roomId].score += dayRecord.roomInsp.totalScore; stats[dayRecord.roomId].roomScore += dayRecord.roomInsp.totalScore; }
-                    if (dayRecord.zoneInsp && room.hasZone !== false) { stats[dayRecord.roomId].score += dayRecord.zoneInsp.totalScore; stats[dayRecord.roomId].zoneScore += dayRecord.zoneInsp.totalScore; }
+                    if (dayRecord.roomInsp && dayRecord.roomInsp.totalScore !== null) {
+                        const s = Number(dayRecord.roomInsp.totalScore) || 0;
+                        stats[dayRecord.roomId].score += s;
+                        stats[dayRecord.roomId].roomScore += s;
+                        stats[dayRecord.roomId].maxRoomScore += 10;
+                        stats[dayRecord.roomId].maxScore += 10;
+                    }
+                    if (dayRecord.zoneInsp && dayRecord.zoneInsp.totalScore !== null && room.hasZone !== false) {
+                        const s = Number(dayRecord.zoneInsp.totalScore) || 0;
+                        stats[dayRecord.roomId].score += s;
+                        stats[dayRecord.roomId].zoneScore += s;
+                        stats[dayRecord.roomId].maxZoneScore += 10;
+                        stats[dayRecord.roomId].maxScore += 10;
+                    }
                 });
 
-                const totalDays = uniqueDaysSet.size;
                 let data = Object.values(stats).map(item => {
-                    let max = totalDays * 10;
-                    if (guestFilterType === 'all') max = totalDays * (item.room.hasZone !== false ? 20 : 10);
+                    let max = item.maxScore;
                     let pct = max > 0 ? (item.score / max) * 100 : 0;
                     let medal = '';
                     if (pct >= 80) medal = '🥇 ทอง'; else if (pct >= 70) medal = '🥈 เงิน'; else if (pct >= 60) medal = '🥉 ทองแดง';
@@ -2093,18 +2123,19 @@
 
             const renderExportHeader = () => (
                 <>
-                    <div style={{display: 'flex', alignItems: 'center', marginBottom: '12px'}}>
-                        <img src={settings?.school_logo_url || HARDCODED_LOGO} style={{width: '60px', height: '60px', objectFit: 'contain', marginRight: '15px'}} crossOrigin="anonymous"/>
-                        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                            <h1 style={{color: '#6d28d9', fontSize: '22px', fontWeight: 'bold', margin: '0 0 4px 0', lineHeight: '1'}}>รายงานการตรวจความเรียบร้อย</h1>
-                            <p style={{color: '#475569', fontSize: '14px', margin: 0, lineHeight: '1'}}>สภานักเรียนโรงเรียนคำม่วง อำเภอคำม่วง จังหวัดกาฬสินธุ์</p>
+                    <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#faf5ff', border: '1.5px solid #d8b4fe', borderRadius: '14px', padding: '14px 20px', marginBottom: '14px'}}>
+                        <div style={{display: 'flex', alignItems: 'center'}}>
+                            <img src={settings?.school_logo_url || HARDCODED_LOGO} style={{width: '58px', height: '58px', objectFit: 'contain', marginRight: '15px'}} crossOrigin="anonymous"/>
+                            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                <h1 style={{color: '#5b21b6', fontSize: '22px', fontWeight: 'bold', margin: '0 0 4px 0', lineHeight: '1.1'}}>รายงานการตรวจความสะอาดเรียบร้อย</h1>
+                                <p style={{color: '#6d28d9', fontSize: '13.5px', fontWeight: '600', margin: 0, lineHeight: '1.1'}}>สภานักเรียนโรงเรียนคำม่วง อำเภอคำม่วง จังหวัดกาฬสินธุ์</p>
+                            </div>
                         </div>
-                    </div>
-                    <div style={{ width: '100%', borderBottom: '1.5px solid #d8b4fe', marginBottom: '15px' }}></div>
-                    <div style={{display: 'flex', gap: '30px', marginBottom: '15px', fontSize: '13px', color: '#475569'}}>
-                        <div><span style={{fontWeight: 'bold'}}>วันที่:</span> <span style={{color: '#333', fontWeight: 'bold'}}>{printData.dateText}</span></div>
-                        <div><span style={{fontWeight: 'bold'}}>ระดับชั้น:</span> <span style={{color: '#333', fontWeight: 'bold'}}>{printData.groupName}</span></div>
-                        <div><span style={{fontWeight: 'bold'}}>หมวดหมู่:</span> <span style={{color: '#333', fontWeight: 'bold'}}>{printData.typeName}</span></div>
+                        <div style={{display: 'flex', gap: '22px', fontSize: '13px', color: '#475569', backgroundColor: '#ffffff', padding: '8px 16px', borderRadius: '10px', border: '1px solid #e9d5ff'}}>
+                            <div><span style={{fontWeight: 'bold', color: '#6d28d9'}}>วันที่:</span> <span style={{color: '#1e293b', fontWeight: 'bold'}}>{printData.dateText}</span></div>
+                            <div><span style={{fontWeight: 'bold', color: '#6d28d9'}}>ระดับชั้น:</span> <span style={{color: '#1e293b', fontWeight: 'bold'}}>{printData.groupName}</span></div>
+                            <div><span style={{fontWeight: 'bold', color: '#6d28d9'}}>หมวดหมู่:</span> <span style={{color: '#1e293b', fontWeight: 'bold'}}>{printData.typeName}</span></div>
+                        </div>
                     </div>
                 </>
             );
@@ -2115,18 +2146,31 @@
                         <table className="pdf-table">
                             <thead>
                               <tr>
-                                 <th style={{width: '6%'}}>ที่</th><th style={{width: '20%'}}>ห้องเรียน</th><th style={{width: '16%'}}>คะแนนห้อง</th><th style={{width: '16%'}}>คะแนนเขต</th><th style={{width: '18%'}}>รวมคะแนน</th>
-                                 {appMode !== 'guest' && (<><th style={{width: '12%'}}>ร้อยละ (%)</th><th style={{width: '12%'}}>เกณฑ์ประเมิน</th></>)}
+                                 <th style={{width: '6%'}}>ที่</th>
+                                 <th style={{width: '18%'}}>ห้องเรียน</th>
+                                 <th style={{width: '18%'}}>คะแนนห้อง (ได้/เต็ม)</th>
+                                 <th style={{width: '18%'}}>คะแนนเขต (ได้/เต็ม)</th>
+                                 <th style={{width: '18%'}}>รวมคะแนน (ได้/เต็ม)</th>
+                                 {appMode !== 'guest' && (<><th style={{width: '11%'}}>ร้อยละ (%)</th><th style={{width: '11%'}}>เกณฑ์ประเมิน</th></>)}
                               </tr>
                             </thead>
                             <tbody>
                                 {dataChunk.map((item, localIdx) => {
                                     const globalIdx = startIndex + localIdx;
-                                    let displayZoneScore = item.room?.hasZone === false ? 'ไม่มี' : item.zoneScore;
+                                    const rMax = item.maxRoomScore || 0;
+                                    const zMax = item.maxZoneScore || 0;
+                                    const totalMax = item.maxScore || 0;
+                                    const displayRoomScore = rMax > 0 ? `${item.roomScore} / ${rMax}` : `${item.roomScore}`;
+                                    const displayZoneScore = item.room?.hasZone === false ? 'ไม่มีเขต' : (zMax > 0 ? `${item.zoneScore} / ${zMax}` : `${item.zoneScore}`);
+                                    const displayTotalScore = totalMax > 0 ? `${item.score} / ${totalMax}` : `${item.score}`;
                                     let rankDisplay = exportSortOrder === 'score' ? item.trueRank : (globalIdx + 1);
                                     return(
                                     <tr key={localIdx} className="pdf-row" style={{ pageBreakInside: 'avoid' }}>
-                                        <td><b>{rankDisplay}</b></td><td className="text-left"><b>{item.room?.name || 'ไม่ทราบ'}</b></td><td className="col-purple">{item.roomScore}</td><td className="col-purple">{displayZoneScore}</td><td><b style={{fontSize: '18px'}}>{item.score}</b></td>
+                                        <td><b>{rankDisplay}</b></td>
+                                        <td className="text-left"><b>{item.room?.name || 'ไม่ทราบ'}</b></td>
+                                        <td className="col-purple">{displayRoomScore}</td>
+                                        <td className="col-purple" style={item.room?.hasZone === false ? {color: '#94a3b8', fontWeight: 'normal'} : {}}>{displayZoneScore}</td>
+                                        <td><b style={{fontSize: '15px', color: '#4c1d95'}}>{displayTotalScore}</b></td>
                                         {appMode !== 'guest' && (<><td style={{color: '#059669', fontWeight: 'bold'}}>{item.percentage}%</td><td>{item.medal}</td></>)}
                                     </tr>
                                 )})}
@@ -2138,44 +2182,66 @@
                         <table className="pdf-table detailed-table">
                             <thead>
                                 <tr>
-                                    <th rowSpan="2" style={{width: '4%'}}>ที่</th><th rowSpan="2" style={{width: '12%'}}>ห้องเรียน</th><th colSpan="5" style={{width: '35%'}}>รายละเอียดคะแนนห้อง (เต็ม 10)</th>
-                                    <th rowSpan="2" style={{width: '8%'}}>รวมห้อง</th><th rowSpan="2" style={{width: '8%'}}>รวมเขต</th><th rowSpan="2" style={{width: '9%'}}>รวมทั้งหมด</th><th rowSpan="2" style={{width: '24%'}}>หมายเหตุ</th>
+                                    <th rowSpan="2" style={{width: '4%'}}>ที่</th>
+                                    <th rowSpan="2" style={{width: '12%'}}>ห้องเรียน</th>
+                                    <th colSpan="5" style={{width: '33%'}}>รายละเอียดคะแนนห้อง (ข้อละ 2 คะแนน)</th>
+                                    <th rowSpan="2" style={{width: '9%'}}>คะแนนห้อง</th>
+                                    <th rowSpan="2" style={{width: '9%'}}>คะแนนเขต</th>
+                                    <th rowSpan="2" style={{width: '10%'}}>รวมคะแนน</th>
+                                    <th rowSpan="2" style={{width: '23%'}}>หมายเหตุ</th>
                                 </tr>
                                 <tr>
-                                    <th style={{width: '7%', whiteSpace: 'nowrap'}}>โต๊ะ</th><th style={{width: '7%', whiteSpace: 'nowrap'}}>ขยะ</th><th style={{width: '7%', whiteSpace: 'nowrap'}}>ไฟ/หน้าต่าง</th><th style={{width: '7%', whiteSpace: 'nowrap'}}>พื้น</th><th style={{width: '7%', whiteSpace: 'nowrap'}}>กระดาน</th>
+                                    <th style={{width: '6.6%', whiteSpace: 'nowrap'}}>โต๊ะ (2)</th>
+                                    <th style={{width: '6.6%', whiteSpace: 'nowrap'}}>ขยะ (2)</th>
+                                    <th style={{width: '6.6%', whiteSpace: 'nowrap'}}>ไฟ/หน้าต่าง (2)</th>
+                                    <th style={{width: '6.6%', whiteSpace: 'nowrap'}}>พื้น (2)</th>
+                                    <th style={{width: '6.6%', whiteSpace: 'nowrap'}}>กระดาน (2)</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {dataChunk.map((item, localIdx) => {
                                     const globalIdx = startIndex + localIdx;
                                     let rInsp = item.roomInsp; let zInsp = item.zoneInsp;
-                                    let rScore = guestFilterType === 'zone' ? '-' : (rInsp ? (rInsp.totalScore === null ? 'ข้าม' : rInsp.totalScore) : '-'); 
-                                    let zScore = guestFilterType === 'room' ? '-' : (item.room?.hasZone === false ? 'ไม่มี' : (zInsp ? (zInsp.totalScore === null ? 'ข้าม' : zInsp.totalScore) : '-'));
-                                    let totalScore = '-';
+                                    let hasRoomScore = guestFilterType !== 'zone' && rInsp && rInsp.totalScore !== null && rInsp.totalScore !== undefined;
+                                    let hasZoneScore = guestFilterType !== 'room' && item.room?.hasZone !== false && zInsp && zInsp.totalScore !== null && zInsp.totalScore !== undefined;
+
+                                    let rDisplay = guestFilterType === 'zone' ? '-' : (rInsp ? (rInsp.totalScore === null ? 'ข้าม' : `${rInsp.totalScore} / 10`) : '-'); 
+                                    let zDisplay = guestFilterType === 'room' ? '-' : (item.room?.hasZone === false ? 'ไม่มีเขต' : (zInsp ? (zInsp.totalScore === null ? 'ข้าม' : `${zInsp.totalScore} / 10`) : '-'));
+                                    
+                                    let totalDisplay = '-';
                                     if (rInsp || zInsp) {
-                                       let rTotal = rInsp?.totalScore || 0; let zTotal = zInsp?.totalScore || 0;
-                                       if (rInsp?.totalScore === null && zInsp?.totalScore === null) totalScore = 'ข้าม'; else totalScore = rTotal + zTotal;
+                                       if (rInsp?.totalScore === null && (!zInsp || zInsp?.totalScore === null)) {
+                                           totalDisplay = 'ข้าม';
+                                       } else {
+                                           let rTotal = hasRoomScore ? Number(rInsp.totalScore) : 0;
+                                           let zTotal = hasZoneScore ? Number(zInsp.totalScore) : 0;
+                                           let maxTotal = (hasRoomScore ? 10 : 0) + (hasZoneScore ? 10 : 0);
+                                           totalDisplay = maxTotal > 0 ? `${rTotal + zTotal} / ${maxTotal}` : '-';
+                                       }
                                     }
-                                    if (!rInsp && item.room?.hasZone === false) totalScore = '-';
+                                    if (!rInsp && item.room?.hasZone === false) totalDisplay = '-';
+
                                     let commentText = [];
                                     if(rInsp?.comment) commentText.push(rInsp.comment); if(zInsp?.comment) commentText.push(zInsp.comment);
                                     let finalComment = commentText.join(', ');
                                     let isNoDuty = rInsp?.scores?.status === 'ไม่ปฏิบัติหน้าที่'; let isSkip = rInsp?.scores?.status === 'ข้ามการตรวจ';
                                     let c1 = (guestFilterType === 'zone' || !rInsp || isSkip) ? '-' : (rInsp.scores?.c1 !== undefined ? rInsp.scores.c1 : '-');
-                                    let c2 = (guestFilterType === 'zone' || !rInsp || isSkip) ? '-' : (rInsp.scores?.c2 !== undefined ? rInsp.scores.c2 : '-');
+                                    let c2 = (guestFilterType === 'zone' || !rInsp || isSkip) ? '-' : (rInsp.scores?.c2 !== undefined ? rInsp.scores.c1 !== undefined ? rInsp.scores.c2 : '-' : '-');
                                     let c3 = (guestFilterType === 'zone' || !rInsp || isSkip) ? '-' : (rInsp.scores?.c3 !== undefined ? rInsp.scores.c3 : '-');
                                     let c4 = (guestFilterType === 'zone' || !rInsp || isSkip) ? '-' : (rInsp.scores?.c4 !== undefined ? rInsp.scores.c4 : '-');
                                     let c5 = (guestFilterType === 'zone' || !rInsp || isSkip) ? '-' : (rInsp.scores?.c5 !== undefined ? rInsp.scores.c5 : '-');
                                     
                                     return (
                                     <tr key={localIdx} className="pdf-row" style={{ pageBreakInside: 'avoid' }}>
-                                        <td>{exportSortOrder === 'score' ? item.trueRank : (globalIdx + 1)}</td><td className="text-left"><b>{item.room?.name || 'ไม่ระบุ'}</b></td>
-                                        {guestFilterType === 'zone' || !rInsp ? ( <td colSpan="5" style={{color: '#94a3b8', fontSize: '12px'}}>-</td> ) : isNoDuty ? ( <td colSpan="5" style={{color: '#e11d48', fontWeight: 'bold', fontSize: '13px'}}>ไม่ปฏิบัติหน้าที่ (-5)</td> ) : isSkip ? ( <td colSpan="5" style={{color: '#64748b', fontWeight: 'bold', fontSize: '13px'}}>ข้ามการตรวจ</td> ) : (
-                                            <><td style={{color: c1 === 0 ? '#e11d48' : '#16a34a'}}>{c1 > 0 ? c1 : '0'}</td><td style={{color: c2 === 0 ? '#e11d48' : '#16a34a'}}>{c2 > 0 ? c2 : '0'}</td><td style={{color: c3 === 0 ? '#e11d48' : '#16a34a'}}>{c3 > 0 ? c3 : '0'}</td><td style={{color: c4 === 0 ? '#e11d48' : '#16a34a'}}>{c4 > 0 ? c4 : '0'}</td><td style={{color: c5 === 0 ? '#e11d48' : '#16a34a'}}>{c5 > 0 ? c5 : '0'}</td></>
+                                        <td>{exportSortOrder === 'score' ? item.trueRank : (globalIdx + 1)}</td>
+                                        <td className="text-left"><b>{item.room?.name || 'ไม่ระบุ'}</b></td>
+                                        {guestFilterType === 'zone' || !rInsp ? ( <td colSpan="5" style={{color: '#94a3b8', fontSize: '12px'}}>-</td> ) : isNoDuty ? ( <td colSpan="5" style={{color: '#e11d48', fontWeight: 'bold', fontSize: '13px'}}>ไม่ปฏิบัติหน้าที่ (-5 / 10)</td> ) : isSkip ? ( <td colSpan="5" style={{color: '#64748b', fontWeight: 'bold', fontSize: '13px'}}>ข้ามการตรวจ</td> ) : (
+                                            <><td style={{color: c1 === 0 ? '#e11d48' : '#16a34a', fontWeight: 'bold'}}>{c1 > 0 ? c1 : '0'}</td><td style={{color: c2 === 0 ? '#e11d48' : '#16a34a', fontWeight: 'bold'}}>{c2 > 0 ? c2 : '0'}</td><td style={{color: c3 === 0 ? '#e11d48' : '#16a34a', fontWeight: 'bold'}}>{c3 > 0 ? c3 : '0'}</td><td style={{color: c4 === 0 ? '#e11d48' : '#16a34a', fontWeight: 'bold'}}>{c4 > 0 ? c4 : '0'}</td><td style={{color: c5 === 0 ? '#e11d48' : '#16a34a', fontWeight: 'bold'}}>{c5 > 0 ? c5 : '0'}</td></>
                                         )}
-                                        <td className="col-purple" style={rScore==='ข้าม'?{color:'#94a3b8'}:{}}>{rScore > 0 ? `+${rScore}` : rScore}</td>
-                                        <td className="col-purple" style={zScore==='ไม่มี'||zScore==='ข้าม'?{color:'#94a3b8'}:{}}>{zScore > 0 ? `+${zScore}` : zScore}</td>
-                                        <td><b style={{fontSize: '15px'}}>{totalScore > 0 ? `+${totalScore}` : totalScore}</b></td><td className="text-left" style={{color: '#64748b', fontSize: '11px'}}>{finalComment}</td>
+                                        <td className="col-purple" style={rDisplay==='ข้าม'||rDisplay==='-'?{color:'#94a3b8', fontWeight:'normal'}:{}}>{rDisplay}</td>
+                                        <td className="col-purple" style={zDisplay==='ไม่มีเขต'||zDisplay==='ข้าม'||zDisplay==='-'?{color:'#94a3b8', fontWeight:'normal'}:{}}>{zDisplay}</td>
+                                        <td><b style={{fontSize: '14px', color: '#4c1d95'}}>{totalDisplay}</b></td>
+                                        <td className="text-left" style={{color: '#64748b', fontSize: '11px'}}>{finalComment}</td>
                                     </tr>
                                 )})}
                             </tbody>
@@ -2682,7 +2748,7 @@
                                         </div>
                                         <div>
                                             <div className="font-black text-sm sm:text-base leading-tight">ตรวจรวดเดียว (กรณีฉุกเฉิน)</div>
-                                            <div className="text-[11px] text-white/85 font-medium mt-0.5">ใช้เฉพาะกรณีฉุกเฉิน เพื่อให้คะแนนทุกห้องที่เหลือพร้อมกัน</div>
+                                            <div className="text-[11px] text-white/90 font-medium mt-0.5">ต้องได้รับอนุญาตจากผู้ดูแลระบบก่อน • ใช้เพื่อให้คะแนนทุกห้องที่เหลือพร้อมกัน</div>
                                         </div>
                                     </div>
                                     <div className="bg-white text-[#C8102E] px-3 py-1.5 rounded-xl font-bold text-xs shrink-0 shadow-sm">
@@ -3448,7 +3514,7 @@
                         </div>
                     )}
 
-                    {/* Paper Answer Sheet Modal (แบบประเมินความเรียบร้อย A4 แนวนอน แผ่นเดียวจบ 2 คอลัมน์) */}
+                    {/* Paper Answer Sheet Modal (แบบประเมินความสะอาดเรียบร้อย) */}
                     {showPaperSheetModal && (
                         <div className="fixed inset-0 z-[9998] bg-gray-900/80 backdrop-blur-sm flex flex-col items-center justify-center p-2 sm:p-5 animate-in fade-in">
                             <div className="bg-white rounded-[2rem] w-full max-w-6xl max-h-[94vh] shadow-2xl flex flex-col overflow-hidden">
@@ -3459,7 +3525,7 @@
                                             <i className="ph ph-clipboard-text text-xl"></i>
                                         </div>
                                         <div>
-                                            <h3 className="font-black text-gray-800 text-sm sm:text-base">พิมพ์แบบประเมินความเรียบร้อย (A4 แนวนอน แผ่นเดียวจบ)</h3>
+                                            <h3 className="font-black text-gray-800 text-sm sm:text-base">พิมพ์แบบประเมินความสะอาดเรียบร้อย</h3>
                                             <p className="text-[11px] text-gray-500 font-medium">เลือกเปิด/ปิดชื่อและวันที่ได้ตามต้องการ สำหรับพิมพ์ไว้ใช้ประเมินและสแกนเข้าระบบ</p>
                                         </div>
                                     </div>
