@@ -236,9 +236,16 @@
             return `${thaiMonths[d.getMonth()]} ${d.getFullYear() + 543}`;
         };
 
+        const getPodiumFontSize = (name, isFirst = false) => {
+            const len = (name || '').length;
+            if (len > 7) return isFirst ? 'text-xs md:text-sm' : 'text-[10px] md:text-xs';
+            if (len > 5) return isFirst ? 'text-sm md:text-base' : 'text-xs md:text-sm';
+            return isFirst ? 'text-base md:text-xl' : 'text-sm md:text-lg';
+        };
+
         function ZoneCheckApp() {
-            const [appMode, setAppMode] = useState('guest'); 
-            const [currentRoute, setCurrentRoute] = useState('dashboard'); 
+            const [appMode, setAppMode] = useState(() => safeGetItem('zc26_session_mode') || 'guest'); 
+            const [currentRoute, setCurrentRoute] = useState(() => safeGetItem('zc26_session_route') || 'dashboard'); 
             const [showSplash, setShowSplash] = useState(true); 
             const [toastObj, setToastObj] = useState({ msg: '', type: 'info' });
             const [isSyncing, setIsSyncing] = useState(false);
@@ -250,13 +257,16 @@
             const [inputPasscode, setInputPasscode] = useState('');
             const [loginInspector, setLoginInspector] = useState(() => safeGetItem('zc26_last_user') || '');
             const [selectedLoginName, setSelectedLoginName] = useState(() => safeGetItem('zc26_last_user') || ''); 
-            const [coInspectors, setCoInspectors] = useState([]);
+            const [coInspectors, setCoInspectors] = useState(() => safeParse(safeGetItem('zc26_session_coinspectors'), []));
             const [showCoInspectorPicker, setShowCoInspectorPicker] = useState(false);
             const [coInspectorSearch, setCoInspectorSearch] = useState('');
             const [loginError, setLoginError] = useState('');
             const [showPasscode, setShowPasscode] = useState(false);
-            const [currentUser, setCurrentUser] = useState(null);
+            const [currentUser, setCurrentUser] = useState(() => safeParse(safeGetItem('zc26_session_user'), null));
             const [showLoginSuggestions, setShowLoginSuggestions] = useState(false);
+
+            // State สำหรับแสดงตัวอย่างไฟล์ที่ส่งออกในแอป (ป้องกันการเด้งออกนอกแอปบน iPad/iOS)
+            const [exportedFilePreview, setExportedFilePreview] = useState(null);
 
             const loadDataSafe = (key, fallback) => {
                 const data = safeGetItem(key);
@@ -628,6 +638,36 @@
                     safeSetItem('zc26_settings', JSON.stringify(settings));
                 } catch (error) { console.warn('LocalStorage Blocked'); }
             }, [rooms, inspectors, inspections, settings]);
+
+            useEffect(() => {
+                if (appMode !== 'guest' && currentUser) {
+                    safeSetItem('zc26_session_mode', appMode);
+                    safeSetItem('zc26_session_user', JSON.stringify(currentUser));
+                    safeSetItem('zc26_session_coinspectors', JSON.stringify(coInspectors || []));
+                    safeSetItem('zc26_session_route', currentRoute);
+                } else {
+                    safeRemoveItem('zc26_session_mode');
+                    safeRemoveItem('zc26_session_user');
+                    safeRemoveItem('zc26_session_coinspectors');
+                    safeRemoveItem('zc26_session_route');
+                }
+            }, [appMode, currentUser, coInspectors, currentRoute]);
+
+            useEffect(() => {
+                try {
+                    window.history.pushState({ zcStayInApp: true }, '', window.location.href);
+                    const handlePopState = () => {
+                        window.history.pushState({ zcStayInApp: true }, '', window.location.href);
+                        if (exportedFilePreview) {
+                            setExportedFilePreview(null);
+                        } else if (currentRoute !== 'dashboard') {
+                            setCurrentRoute('dashboard');
+                        }
+                    };
+                    window.addEventListener('popstate', handlePopState);
+                    return () => window.removeEventListener('popstate', handlePopState);
+                } catch (e) {}
+            }, [exportedFilePreview, currentRoute]);
 
             const syncToGASAsync = async (action, data) => {
                 const payload = { action, data };
@@ -1260,24 +1300,46 @@
                         if (i.type === 'zone') zoneDoneSet.add(i.roomId);
                     }
                 });
-                const roomDone = roomDoneSet.size; const zoneDone = zoneDoneSet.size;
-                const roomPct = roomTotal === 0 ? 0 : Math.round((roomDone / roomTotal) * 100);
-                const zonePct = zoneTotal === 0 ? 0 : Math.round((zoneDone / zoneTotal) * 100);
-                return { roomTotal, roomDone, roomPct, zoneTotal, zoneDone, zonePct, dateStr: targetDateStr };
-            }, [inspections, rooms, filterDate]);
+                const roomDone = roomDoneSet.size;
+                const zoneDone = zoneDoneSet.size;
+                return {
+                    dateStr: targetDateStr,
+                    roomDone, roomTotal, roomPct: roomTotal > 0 ? Math.min(100, Math.round((roomDone / roomTotal) * 100)) : 0,
+                    zoneDone, zoneTotal, zonePct: zoneTotal > 0 ? Math.min(100, Math.round((zoneDone / zoneTotal) * 100)) : 0
+                };
+            }, [rooms, inspections, filterDate]);
 
             const groupedRoomsForInspect = useMemo(() => {
-                const searchLower = (inspectSearchRoom || '').toLowerCase(); const groups = [];
                 const validRooms = Array.isArray(rooms) ? rooms : [];
-                validRooms.filter(r => (r?.name||'').toLowerCase().includes(searchLower)).forEach(r => {
+                const filtered = validRooms.filter(r => (r?.name || '').toLowerCase().includes((inspectSearchRoom || '').toLowerCase()));
+                const groups = [];
+                filtered.forEach(r => {
                     const match = (r.name || '').match(/(\d+)/);
-                    const gradeNum = match ? match[1] : 'อื่นๆ'; const gradeName = match ? `มัธยมศึกษาปีที่ ${gradeNum}` : 'ระดับชั้นอื่นๆ';
-                    let groupObj = groups.find(g => g.grade === gradeName);
-                    if(!groupObj) { groupObj = { grade: gradeName, rooms: [] }; groups.push(groupObj); }
+                    const gradeLabel = match ? `มัธยมศึกษาปีที่ ${match[1]}` : 'อื่นๆ';
+                    let groupObj = groups.find(g => g.grade === gradeLabel);
+                    if (!groupObj) {
+                        groupObj = { grade: gradeLabel, rooms: [] };
+                        groups.push(groupObj);
+                    }
                     groupObj.rooms.push(r);
                 });
                 return groups;
             }, [rooms, inspectSearchRoom]);
+
+            const paperSheetSplitColumns = useMemo(() => {
+                const validRooms = Array.isArray(rooms) ? rooms : [];
+                const filtered = validRooms.filter(r => {
+                    if (paperSheetGradeFilter === 'all') return true;
+                    const match = (r.name || '').match(/(\d+)/);
+                    return match && match[1] === paperSheetGradeFilter;
+                });
+                const indexed = filtered.map((room, idx) => ({ room, num: idx + 1 }));
+                const half = Math.ceil(indexed.length / 2);
+                return {
+                    left: indexed.slice(0, half),
+                    right: indexed.slice(half)
+                };
+            }, [rooms, paperSheetGradeFilter]);
 
             const calendarData = useMemo(() => {
                 const [year, month] = historyCalendarMonth.split('-');
@@ -1313,31 +1375,32 @@
                 return days;
             }, [historyCalendarMonth, rooms, inspections, calendarTypeFilter]);
 
-            const getPodiumFontSize = (name = '', isFirst = false) => {
-                const clean = String(name).replace('ม.', '');
-                if (clean.length > 6) return isFirst ? 'text-xs md:text-sm' : 'text-[10px] md:text-xs';
-                if (clean.length > 4) return isFirst ? 'text-sm md:text-base' : 'text-xs md:text-sm';
-                return isFirst ? 'text-lg md:text-2xl' : 'text-base md:text-xl';
+            const triggerSafeLocalDownload = (blob, fileName, format, previewDataUrl = null) => {
+                const blobUrl = URL.createObjectURL(blob);
+                const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+                if (isIOS && (format === 'pdf' || format === 'png')) {
+                    setExportedFilePreview({
+                        url: blobUrl,
+                        dataUrl: previewDataUrl || blobUrl,
+                        fileName,
+                        format,
+                        blob
+                    });
+                    showToast('เตรียมไฟล์สำเร็จ! สามารถดูตัวอย่างหรือกดบันทึกได้ทันทีโดยไม่หลุดจากแอป', 'success');
+                } else {
+                    const link = document.createElement('a');
+                    link.href = blobUrl;
+                    link.download = fileName;
+                    link.target = '_blank';
+                    link.rel = 'noopener noreferrer';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+                    showToast(`ดาวน์โหลดไฟล์ ${format.toUpperCase()} สำเร็จ`, 'success');
+                }
             };
-
-            const paperSheetRooms = useMemo(() => {
-                const validRooms = Array.isArray(rooms) ? rooms : [];
-                if (paperSheetGradeFilter === 'all') return validRooms;
-                return validRooms.filter(r => {
-                    const match = (r.name || '').match(/(\d+)/);
-                    const gGrade = match ? match[1] : '';
-                    return gGrade === paperSheetGradeFilter;
-                });
-            }, [rooms, paperSheetGradeFilter]);
-
-            const paperSheetSplitColumns = useMemo(() => {
-                const list = paperSheetRooms.map((room, idx) => ({ room, num: idx + 1 }));
-                const half = Math.ceil(list.length / 2);
-                return {
-                    left: list.slice(0, half),
-                    right: list.slice(half)
-                };
-            }, [paperSheetRooms]);
 
             const handleExportPaperSheet = async (format) => {
                 if (format === 'print') {
@@ -1351,11 +1414,10 @@
                     const canvas = await window.html2canvas(element, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
                     const fileName = `แบบประเมินความสะอาดเรียบร้อย_ZoneCheck_${formatThaiDateForFile(filterDate)}.${format}`;
                     if (format === 'png') {
-                        const link = document.createElement('a');
-                        link.download = fileName;
-                        link.href = canvas.toDataURL('image/png');
-                        link.click();
-                        showToast('ดาวน์โหลดรูปภาพแบบประเมินสำเร็จ', 'success');
+                        const dataUrl = canvas.toDataURL('image/png');
+                        const res = await fetch(dataUrl);
+                        const blob = await res.blob();
+                        triggerSafeLocalDownload(blob, fileName, 'png', dataUrl);
                     } else if (format === 'pdf') {
                         const opt = {
                             margin: 0,
@@ -1364,8 +1426,8 @@
                             html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
                             jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
                         };
-                        await window.html2pdf().set(opt).from(element).save();
-                        showToast('ดาวน์โหลด PDF แบบประเมินสำเร็จ', 'success');
+                        const pdfBlob = await window.html2pdf().set(opt).from(element).outputPdf('blob');
+                        triggerSafeLocalDownload(pdfBlob, fileName, 'pdf');
                     }
                 } catch (e) {
                     showToast('เกิดข้อผิดพลาดในการสร้างไฟล์แบบประเมิน', 'error');
@@ -2240,9 +2302,9 @@
                             if (exportDestination === 'drive') {
                                 await uploadFileToGoogleDrive(fileName, dataUrl.split(',')[1], 'image/png');
                             } else {
-                                const link = document.createElement('a');
-                                link.download = fileName; link.href = dataUrl; link.click();
-                                showToast("ดาวน์โหลดรูปภาพ PNG สำเร็จ", 'success');
+                                const res = await fetch(dataUrl);
+                                const blob = await res.blob();
+                                triggerSafeLocalDownload(blob, fileName, 'png', dataUrl);
                             }
                         } else if (format === 'pdf') {
                             const opt = {
@@ -2259,8 +2321,8 @@
                                 const pdfBase64 = pdfDataUri.split(',')[1];
                                 await uploadFileToGoogleDrive(fileName, pdfBase64, 'application/pdf');
                             } else {
-                                await window.html2pdf().set(opt).from(element).save();
-                                showToast("ดาวน์โหลด PDF สำเร็จ", 'success');
+                                const pdfBlob = await window.html2pdf().set(opt).from(element).outputPdf('blob');
+                                triggerSafeLocalDownload(pdfBlob, fileName, 'pdf');
                             }
                         }
                     } catch(e) {
@@ -2441,45 +2503,46 @@
                         </div>
                     </div>
 
-                    {/* Header สำหรับ Desktop */}
-                    <header className="hidden md:flex items-center justify-between bg-white border-b border-gray-200 h-[70px] px-6 shrink-0 z-40 shadow-sm relative">
-                        <div className="flex items-center gap-4 cursor-pointer" onClick={handleLogoClick}>
+                    {}
+                    {/* Header สำหรับ Desktop และ iPad แนวนอน (lg ขึ้นไป) */}
+                    <header className="hidden lg:flex items-center justify-between bg-white border-b border-gray-200 h-[70px] px-4 xl:px-6 shrink-0 z-40 shadow-sm relative gap-2">
+                        <div className="flex items-center gap-3 cursor-pointer min-w-0 shrink" onClick={handleLogoClick}>
                             <div className="w-10 h-10 rounded-full flex items-center justify-center shadow-sm overflow-hidden bg-white flex-shrink-0 border border-gray-200">
                                 <img src={settings?.app_logo_url || HARDCODED_LOGO} className="w-full h-full object-cover" crossOrigin="anonymous"/>
                             </div>
-                            <div className="overflow-hidden">
-                                <h1 className="font-bold text-gray-800 text-[15px] leading-tight whitespace-nowrap">ZoneCheck V2.1</h1>
-                                <p className="text-[11px] text-gray-500 leading-tight whitespace-nowrap tracking-wider">{HARDCODED_NAME}</p>
+                            <div className="overflow-hidden min-w-0">
+                                <h1 className="font-bold text-gray-800 text-[15px] leading-tight truncate">ZoneCheck V2.1</h1>
+                                <p className="text-[10px] text-gray-500 leading-tight truncate tracking-wider">{HARDCODED_NAME}</p>
                             </div>
                         </div>
 
-                        <nav className="flex items-center gap-1 lg:gap-2">
-                            <button onClick={()=>setCurrentRoute('dashboard')} className={`px-4 py-2 rounded-xl text-[13px] font-medium nav-item flex items-center gap-2 ${currentRoute === 'dashboard' ? 'bg-[#FFF5F6] text-[#C8102E] font-bold' : 'text-gray-600 hover:bg-gray-50'}`}><i className={`ph ${currentRoute === 'dashboard' ? 'ph-house ph-fill' : 'ph-house'} text-lg`}></i> หน้าแรก</button>
-                            <button onClick={()=>setCurrentRoute('leaderboard')} className={`px-4 py-2 rounded-xl text-[13px] font-medium nav-item flex items-center gap-2 ${currentRoute === 'leaderboard' ? 'bg-[#FFF5F6] text-[#C8102E] font-bold' : 'text-gray-600 hover:bg-gray-50'}`}><i className={`ph ${currentRoute === 'leaderboard' ? 'ph-trophy ph-fill' : 'ph-trophy'} text-lg`}></i> อันดับ</button>
-                            <button onClick={()=>setCurrentRoute('history')} className={`px-4 py-2 rounded-xl text-[13px] font-medium nav-item flex items-center gap-2 ${currentRoute === 'history' ? 'bg-[#FFF5F6] text-[#C8102E] font-bold' : 'text-gray-600 hover:bg-gray-50'}`}><i className={`ph ${currentRoute === 'history' ? 'ph-clock-counter-clockwise ph-fill' : 'ph-clock-counter-clockwise'} text-lg`}></i> ประวัติ</button>
+                        <nav className="flex items-center gap-1 xl:gap-2 shrink-0">
+                            <button onClick={()=>setCurrentRoute('dashboard')} className={`px-3.5 py-2 rounded-xl text-[13px] font-medium nav-item flex items-center gap-1.5 whitespace-nowrap ${currentRoute === 'dashboard' ? 'bg-[#FFF5F6] text-[#C8102E] font-bold' : 'text-gray-600 hover:bg-gray-50'}`}><i className={`ph ${currentRoute === 'dashboard' ? 'ph-house ph-fill' : 'ph-house'} text-lg`}></i> หน้าแรก</button>
+                            <button onClick={()=>setCurrentRoute('leaderboard')} className={`px-3.5 py-2 rounded-xl text-[13px] font-medium nav-item flex items-center gap-1.5 whitespace-nowrap ${currentRoute === 'leaderboard' ? 'bg-[#FFF5F6] text-[#C8102E] font-bold' : 'text-gray-600 hover:bg-gray-50'}`}><i className={`ph ${currentRoute === 'leaderboard' ? 'ph-trophy ph-fill' : 'ph-trophy'} text-lg`}></i> อันดับ</button>
+                            <button onClick={()=>setCurrentRoute('history')} className={`px-3.5 py-2 rounded-xl text-[13px] font-medium nav-item flex items-center gap-1.5 whitespace-nowrap ${currentRoute === 'history' ? 'bg-[#FFF5F6] text-[#C8102E] font-bold' : 'text-gray-600 hover:bg-gray-50'}`}><i className={`ph ${currentRoute === 'history' ? 'ph-clock-counter-clockwise ph-fill' : 'ph-clock-counter-clockwise'} text-lg`}></i> ประวัติ</button>
                             {(appMode === 'admin' || appMode === 'inspector') && (
-                                <button onClick={()=>setCurrentRoute('inspect')} className={`px-4 py-2 rounded-xl text-[13px] font-medium nav-item flex items-center gap-2 ${currentRoute === 'inspect' ? 'bg-[#FFF5F6] text-[#C8102E] font-bold' : 'text-gray-600 hover:bg-gray-50'}`}><i className={`ph ${currentRoute === 'inspect' ? 'ph-clipboard-text ph-fill' : 'ph-clipboard-text'} text-lg`}></i> ประเมินผล</button>
+                                <button onClick={()=>setCurrentRoute('inspect')} className={`px-3.5 py-2 rounded-xl text-[13px] font-medium nav-item flex items-center gap-1.5 whitespace-nowrap ${currentRoute === 'inspect' ? 'bg-[#FFF5F6] text-[#C8102E] font-bold' : 'text-gray-600 hover:bg-gray-50'}`}><i className={`ph ${currentRoute === 'inspect' ? 'ph-clipboard-text ph-fill' : 'ph-clipboard-text'} text-lg`}></i> ประเมินผล</button>
                             )}
                             {appMode === 'admin' && (
-                                <button onClick={()=>setCurrentRoute('settings')} className={`px-4 py-2 rounded-xl text-[13px] font-medium nav-item flex items-center gap-2 ${currentRoute === 'settings' ? 'bg-[#FFF5F6] text-[#C8102E] font-bold' : 'text-gray-600 hover:bg-gray-50'}`}><i className={`ph ${currentRoute === 'settings' ? 'ph-gear ph-fill' : 'ph-gear'} text-lg`}></i> ตั้งค่า</button>
+                                <button onClick={()=>setCurrentRoute('settings')} className={`px-3.5 py-2 rounded-xl text-[13px] font-medium nav-item flex items-center gap-1.5 whitespace-nowrap ${currentRoute === 'settings' ? 'bg-[#FFF5F6] text-[#C8102E] font-bold' : 'text-gray-600 hover:bg-gray-50'}`}><i className={`ph ${currentRoute === 'settings' ? 'ph-gear ph-fill' : 'ph-gear'} text-lg`}></i> ตั้งค่า</button>
                             )}
                         </nav>
 
-                        <div className="flex items-center gap-2.5">
+                        <div className="flex items-center gap-2 shrink-0">
                             <button onClick={()=>setShowAnnouncement(true)} className="w-9 h-9 rounded-full bg-red-50 text-[#C8102E] hover:bg-red-100 flex items-center justify-center transition-colors shadow-sm" title="ประกาศสภาฯ"><i className="ph ph-megaphone text-lg"></i></button>
                             <button onClick={handleSync} className="w-9 h-9 rounded-full bg-gray-50 border border-gray-200 text-gray-500 hover:bg-gray-100 flex items-center justify-center transition-colors shadow-sm" title="ซิงค์ข้อมูล"><i className={`ph ph-arrows-clockwise text-lg ${isSyncing ? "animate-spin text-[#C8102E]" : ""}`}></i></button>
                             <button onClick={()=>setShowInfoModal(true)} className="w-9 h-9 rounded-full bg-gray-50 text-gray-500 border border-gray-200 hover:bg-gray-100 flex items-center justify-center transition-colors shadow-sm" title="ช่วยเหลือ"><i className="ph ph-question text-lg"></i></button>
                             {appMode !== 'guest' && (
-                                <button onClick={() => showConfirm('ต้องการออกจากระบบใช่หรือไม่?', () => { setAppMode('guest'); setInputPasscode(''); setCurrentUser(null); setCurrentRoute('dashboard'); setCoInspectors([]); })} className="w-9 h-9 rounded-full bg-gray-900 text-white hover:bg-black flex items-center justify-center transition-colors shadow-sm" title="ออกจากระบบ"><i className="ph ph-sign-out text-lg"></i></button>
+                                <button onClick={() => showConfirm('ต้องการออกจากระบบใช่หรือไม่?', () => { safeRemoveItem('zc26_session_mode'); safeRemoveItem('zc26_session_user'); safeRemoveItem('zc26_session_coinspectors'); safeRemoveItem('zc26_session_route'); setAppMode('guest'); setInputPasscode(''); setCurrentUser(null); setCurrentRoute('dashboard'); setCoInspectors([]); })} className="w-9 h-9 rounded-full bg-gray-900 text-white hover:bg-black flex items-center justify-center transition-colors shadow-sm" title="ออกจากระบบ"><i className="ph ph-sign-out text-lg"></i></button>
                             )}
                         </div>
                     </header>
 
-                    {/* Header สำหรับ Mobile */}
-                    <header className="md:hidden bg-white/90 backdrop-blur-xl sticky top-0 z-30 border-b border-gray-100/80 shrink-0">
-                        <div className="max-w-[480px] mx-auto px-3.5 h-[66px] flex justify-between items-center">
-                            <div className="flex items-center gap-2.5 cursor-pointer no-select relative overflow-visible min-w-0" onClick={handleLogoClick}>
-                                <div className="w-[42px] h-[42px] rounded-full flex items-center justify-center shadow-sm flex-shrink-0 overflow-hidden bg-white border border-gray-200">
+                    {/* Header สำหรับ Mobile และ iPad แนวตั้ง */}
+                    <header className="lg:hidden bg-white/95 backdrop-blur-xl sticky top-0 z-30 border-b border-gray-100/80 shrink-0 w-full">
+                        <div className="max-w-3xl mx-auto px-3.5 h-[66px] flex justify-between items-center gap-2">
+                            <div className="flex items-center gap-2.5 cursor-pointer no-select relative min-w-0 flex-1" onClick={handleLogoClick}>
+                                <div className="w-[40px] h-[40px] rounded-full flex items-center justify-center shadow-sm flex-shrink-0 overflow-hidden bg-white border border-gray-200">
                                     <img src={settings?.app_logo_url || HARDCODED_LOGO} className="w-full h-full object-cover" crossOrigin="anonymous"/>
                                 </div>
                                 <div className="flex flex-col flex-1 min-w-0 justify-center">
@@ -2488,20 +2551,22 @@
                                 </div>
                             </div>
                             
-                            <div className="flex items-center gap-1.5 ml-1 flex-shrink-0">
-                                <button onClick={() => setShowAnnouncement(true)} className="w-8 h-8 flex items-center justify-center rounded-full bg-red-50 text-[#C8102E] border border-red-100 shadow-sm active:scale-95 transition-colors"><i className="ph ph-megaphone text-base"></i></button>
-                                <button onClick={handleSync} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-50 text-gray-400 border border-gray-100 shadow-sm active:scale-95 transition-colors hover:text-[#C8102E]"><i className={`ph ph-arrows-clockwise text-base ${isSyncing ? "animate-spin text-[#C8102E]" : ""}`}></i></button>
-                                {appMode === 'guest' ? (
-                                    <button onClick={() => setShowInfoModal(true)} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-50 text-gray-500 border border-gray-100 shadow-sm active:scale-95 transition-colors"><i className="ph ph-question text-base"></i></button>
-                                ) : (
-                                    <button onClick={() => { showConfirm('ต้องการออกจากระบบใช่หรือไม่?', () => { setAppMode('guest'); setInputPasscode(''); setCurrentUser(null); setCurrentRoute('dashboard'); setCoInspectors([]); }); }} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-900 text-white shadow-sm active:scale-95 transition-colors hover:bg-black"><i className="ph ph-sign-out text-base"></i></button>
+                            <div className="flex items-center gap-1.5 flex-shrink-0">
+                                <button onClick={() => setShowAnnouncement(true)} className="w-8 h-8 flex items-center justify-center rounded-full bg-red-50 text-[#C8102E] border border-red-100 shadow-sm active:scale-95 transition-colors" title="ประกาศ"><i className="ph ph-megaphone text-base"></i></button>
+                                <button onClick={handleSync} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-50 text-gray-500 border border-gray-200 shadow-sm active:scale-95 transition-colors hover:text-[#C8102E]" title="ซิงค์ข้อมูล"><i className={`ph ph-arrows-clockwise text-base ${isSyncing ? "animate-spin text-[#C8102E]" : ""}`}></i></button>
+                                <button onClick={() => setShowInfoModal(true)} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-50 text-gray-500 border border-gray-200 shadow-sm active:scale-95 transition-colors" title="ช่วยเหลือ"><i className="ph ph-question text-base"></i></button>
+                                {appMode !== 'guest' && (
+                                    <button onClick={() => { showConfirm('ต้องการออกจากระบบใช่หรือไม่?', () => { safeRemoveItem('zc26_session_mode'); safeRemoveItem('zc26_session_user'); safeRemoveItem('zc26_session_coinspectors'); safeRemoveItem('zc26_session_route'); setAppMode('guest'); setInputPasscode(''); setCurrentUser(null); setCurrentRoute('dashboard'); setCoInspectors([]); }); }} className="px-2.5 h-8 flex items-center justify-center gap-1 rounded-full bg-gray-900 text-white shadow-sm active:scale-95 transition-colors hover:bg-black text-[11px] font-bold" title="ออกจากระบบ">
+                                        <i className="ph ph-sign-out text-sm"></i>
+                                        <span className="hidden sm:inline">ออก</span>
+                                    </button>
                                 )}
                             </div>
                         </div>
                     </header>
 
                     {/* การแสดงผลหน้าต่างๆ */}
-                    <main className="flex-1 flex flex-col overflow-y-auto relative pb-[100px] md:pb-12 custom-scrollbar p-4 md:p-8 max-w-5xl mx-auto w-full">
+                    <main className="flex-1 flex flex-col overflow-y-auto relative pb-[100px] lg:pb-12 custom-scrollbar p-4 md:p-6 lg:p-8 max-w-5xl mx-auto w-full">
                         
                         {/* แถบการ์ดโปรไฟล์ทักทายผู้ตรวจ (แสดงเฉพาะเมื่อเข้าสู่ระบบแล้ว แทนการเด้งแจ้งเตือนบังหน้าจอ) */}
                         {appMode !== 'guest' && currentUser && (
@@ -3709,283 +3774,170 @@
                         </div>
                     )}
 
-                    {/* Modal แก้ไขรูปโปรไฟล์ผู้ตรวจแต่ละคน */}
+                    {/* Modal แก้ไขรูปโปรไฟล์ผู้ตรวจ */}
                     {editingInspectorAvatar && (
-                        <div className="fixed inset-0 z-[99998] bg-gray-900/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+                        <div className="fixed inset-0 z-[99998] bg-gray-900/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
                             <div className="bg-white rounded-[2rem] w-full max-w-sm p-6 shadow-2xl relative">
-                                <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-3">
-                                    <h3 className="font-black text-gray-800 text-sm flex items-center gap-2">
-                                        <i className="ph ph-user-circle-gear text-[#C8102E] text-lg"></i> ตั้งค่ารูปโปรไฟล์ผู้ตรวจ
-                                    </h3>
-                                    <button onClick={() => setEditingInspectorAvatar(null)} className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center"><i className="ph ph-x"></i></button>
+                                <button onClick={() => setEditingInspectorAvatar(null)} className="absolute top-4 right-4 w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center hover:bg-gray-200"><i className="ph ph-x"></i></button>
+                                <h3 className="text-base font-black text-gray-800 text-center mb-1">ตั้งค่ารูปโปรไฟล์ผู้ตรวจ</h3>
+                                <p className="text-xs font-bold text-[#C8102E] text-center mb-4">{editingInspectorAvatar.name}</p>
+                                <div className="w-24 h-24 rounded-full mx-auto mb-4 overflow-hidden border-2 border-[#C8102E] shadow-md bg-gray-50">
+                                    <img src={inspectorAvatarUrlInput || settings?.app_logo_url || HARDCODED_LOGO} className="w-full h-full object-cover" onError={(e) => { e.target.src = settings?.app_logo_url || HARDCODED_LOGO; }} />
                                 </div>
-
-                                <div className="flex flex-col items-center mb-4">
-                                    <img 
-                                        src={inspectorAvatarUrlInput || settings?.app_logo_url || HARDCODED_LOGO} 
-                                        className="w-24 h-24 rounded-full object-cover border-4 border-[#C8102E]/20 shadow-md mb-2 bg-gray-50"
-                                        onError={(e) => { e.target.src = settings?.app_logo_url || HARDCODED_LOGO; }}
-                                    />
-                                    <p className="font-black text-gray-800 text-sm">{editingInspectorAvatar.name}</p>
-                                </div>
-
-                                <div className="space-y-3 mb-5">
-                                    <div>
-                                        <label className="text-[11px] font-bold text-gray-500 mb-1 block">วางลิงก์รูปภาพ (URL)</label>
-                                        <input 
-                                            type="text" 
-                                            value={inspectorAvatarUrlInput} 
-                                            onChange={e => setInspectorAvatarUrlInput(e.target.value)} 
-                                            placeholder="https://..." 
-                                            className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-xs font-medium outline-none focus:border-[#C8102E]" 
-                                        />
-                                    </div>
-                                    <label className={`w-full py-2.5 border-2 border-dashed border-blue-200 bg-blue-50/50 text-blue-600 rounded-xl font-bold text-xs flex items-center justify-center gap-2 cursor-pointer hover:bg-blue-50 transition-colors ${isUploadingAvatar ? 'opacity-50 pointer-events-none' : ''}`}>
-                                        <i className={`ph ${isUploadingAvatar ? 'ph-spinner animate-spin' : 'ph-upload-simple'} text-base`}></i>
-                                        <span>{isUploadingAvatar ? 'กำลังอัปโหลดรูปลง Google Drive...' : 'หรือเลือกรูปจากเครื่อง (อัปโหลดอัตโนมัติ)'}</span>
+                                <div className="space-y-3">
+                                    <label className="w-full py-2.5 px-4 rounded-xl bg-blue-50 text-blue-600 border border-blue-200 font-bold text-xs flex items-center justify-center gap-2 cursor-pointer hover:bg-blue-100 transition-colors">
+                                        <i className="ph ph-upload-simple text-base"></i> {isUploadingAvatar ? 'กำลังเตรียมรูปภาพ...' : 'เลือกรูปจากเครื่อง'}
                                         <input type="file" accept="image/*" onChange={handleUploadInspectorAvatarFile} className="hidden" />
                                     </label>
-                                </div>
-
-                                <div className="flex gap-2">
-                                    <button onClick={() => setEditingInspectorAvatar(null)} className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-600 font-bold text-xs">ยกเลิก</button>
-                                    <button onClick={handleSaveInspectorAvatar} disabled={isUploadingAvatar} className="flex-1 py-3 rounded-xl bg-[#C8102E] text-white font-bold text-xs shadow-md hover:bg-red-800 disabled:opacity-50">บันทึกรูปหน้า</button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Help / Info Modal */}
-                    {showInfoModal && (
-                        <div className="fixed inset-0 z-[9997] bg-gray-900/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-                            <div className="bg-white rounded-[2rem] w-full max-w-md p-6 shadow-2xl relative">
-                                <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-3">
-                                    <h3 className="font-black text-gray-800 text-base flex items-center gap-2"><i className="ph ph-question text-[#C8102E] text-xl"></i> ศูนย์ช่วยเหลือและติดต่อผู้ดูแล</h3>
-                                    <button onClick={() => setShowInfoModal(false)} className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center"><i className="ph ph-x"></i></button>
-                                </div>
-                                <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 flex items-center gap-4 mb-4">
-                                    <img src={settings?.admin_avatar_url || ADMIN_AVATAR_URL} className="w-16 h-16 rounded-full object-cover border-2 border-[#C8102E] shrink-0" onError={(e)=>{e.target.src=HARDCODED_LOGO}} />
-                                    <div className="flex-1 min-w-0">
-                                        <p className="font-black text-gray-800 text-sm truncate">{settings?.admin_name || 'นายภูธนากร หงษ์ทอง (พี่ภีม)'}</p>
-                                        <p className="text-xs text-gray-500 font-medium mb-2">{settings?.admin_role || 'เลขานุการสภานักเรียนโรงเรียนคำม่วง'}</p>
-                                        {settings?.admin_line_url && (
-                                            <a href={settings.admin_line_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#06C755] text-white font-bold text-xs shadow-sm">
-                                                <i className="ph ph-chat-circle-dots ph-fill"></i> ติดต่อทาง LINE
-                                            </a>
-                                        )}
+                                    <input type="text" value={inspectorAvatarUrlInput} onChange={e => setInspectorAvatarUrlInput(e.target.value)} placeholder="หรือวางลิงก์รูปภาพ (URL)..." className="w-full p-2.5 rounded-xl border border-gray-200 bg-gray-50 text-xs font-medium outline-none focus:border-[#C8102E]" />
+                                    <div className="flex gap-2 pt-2">
+                                        <button onClick={() => setInspectorAvatarUrlInput('')} className="px-4 py-2.5 rounded-xl bg-gray-100 text-gray-600 font-bold text-xs hover:bg-gray-200">ล้างรูป</button>
+                                        <button onClick={handleSaveInspectorAvatar} className="flex-1 py-2.5 rounded-xl bg-[#C8102E] text-white font-bold text-xs shadow-md hover:bg-red-800">บันทึกรูปหน้า</button>
                                     </div>
                                 </div>
-                                <button onClick={() => setShowInfoModal(false)} className="w-full py-3 rounded-xl bg-gray-100 text-gray-700 font-bold text-xs">ปิดหน้าต่าง</button>
                             </div>
                         </div>
                     )}
 
-                    {/* Announcement Modal */}
-                    {showAnnouncement && (
-                        <div className="fixed inset-0 z-[9997] bg-gray-900/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-                            <div className="bg-white rounded-[2rem] w-full max-w-md p-6 shadow-2xl relative">
-                                <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-3">
-                                    <h3 className="font-black text-gray-800 text-base flex items-center gap-2"><i className="ph ph-megaphone text-[#C8102E] text-xl"></i> ประกาศจากสภานักเรียน</h3>
-                                    <button onClick={() => setShowAnnouncement(false)} className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center"><i className="ph ph-x"></i></button>
+                    {/* Modal แสดงตัวอย่างไฟล์ที่ส่งออกในแอป (ป้องกันการเด้งหลุดออกจากแอปบน iPad/iPhone) */}
+                    {exportedFilePreview && (
+                        <div className="fixed inset-0 z-[99997] bg-gray-900/85 backdrop-blur-md flex flex-col items-center justify-center p-4 animate-in fade-in">
+                            <div className="bg-white rounded-[2rem] w-full max-w-4xl p-5 shadow-2xl flex flex-col max-h-[90vh]">
+                                <div className="flex justify-between items-center border-b border-gray-100 pb-3 mb-3 shrink-0">
+                                    <div className="min-w-0">
+                                        <h3 className="font-black text-gray-800 text-sm sm:text-base truncate">{exportedFilePreview.fileName}</h3>
+                                        <p className="text-[11px] text-gray-400 font-bold">กดปุ่มแชร์/บันทึกด้านล่าง หรือกดปิดเพื่อกลับสู่แอปทันที</p>
+                                    </div>
+                                    <button onClick={() => setExportedFilePreview(null)} className="w-9 h-9 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center hover:bg-gray-200 shrink-0"><i className="ph ph-x text-lg"></i></button>
                                 </div>
-                                {(settings?.announce_banner_url || settings?.banner_url) && (
-                                    <img src={settings.announce_banner_url || settings.banner_url} className="w-full rounded-xl mb-3 max-h-56 object-cover" />
-                                )}
-                                <h4 className="font-bold text-gray-800 text-sm mb-1">{settings?.announcement_title || 'แจ้งข่าวสารประชาสัมพันธ์'}</h4>
-                                <p className="text-xs text-gray-600 whitespace-pre-line leading-relaxed mb-4">{settings?.announcement_msg || 'ยังไม่มีประกาศใหม่ในขณะนี้'}</p>
-                                <button onClick={() => setShowAnnouncement(false)} className="w-full py-3 rounded-xl bg-gray-100 text-gray-700 font-bold text-xs">รับทราบ</button>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Room Map & Zone Map Modals */}
-                    {(showRoomMap || showZoneMap) && (
-                        <div className="fixed inset-0 z-[9997] bg-gray-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-                            <div className="bg-white rounded-[2rem] w-full max-w-3xl p-5 shadow-2xl flex flex-col max-h-[90vh]">
-                                <div className="flex justify-between items-center mb-3 pb-2 border-b border-gray-100">
-                                    <h3 className="font-black text-gray-800 text-base">{showRoomMap ? 'แผนผังห้องเรียน' : 'แผนผังเขตพื้นที่รับผิดชอบ'}</h3>
-                                    <button onClick={() => { setShowRoomMap(false); setShowZoneMap(false); }} className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center"><i className="ph ph-x"></i></button>
-                                </div>
-                                <div className="flex-1 overflow-auto flex items-center justify-center bg-gray-50 rounded-xl p-2">
-                                    {(showRoomMap ? settings?.room_map_url : settings?.zone_map_url) ? (
-                                        <img src={showRoomMap ? settings.room_map_url : settings.zone_map_url} className="max-w-full max-h-[75vh] object-contain rounded-lg" />
+                                <div className="flex-1 overflow-auto bg-gray-100 rounded-xl p-2 flex items-center justify-center min-h-[300px]">
+                                    {exportedFilePreview.format === 'png' ? (
+                                        <img src={exportedFilePreview.dataUrl} className="max-w-full max-h-[65vh] object-contain rounded-lg shadow-sm" />
                                     ) : (
-                                        <p className="text-xs font-bold text-gray-400 py-16">ยังไม่ได้ตั้งค่ารูปแผนผังในระบบ</p>
+                                        <iframe src={exportedFilePreview.url} className="w-full h-[65vh] rounded-lg border-0 bg-white" title="PDF Preview"></iframe>
                                     )}
                                 </div>
+                                <div className="pt-3 mt-3 border-t border-gray-100 flex flex-wrap gap-2 justify-end shrink-0">
+                                    {navigator.share && exportedFilePreview.blob && (
+                                        <button onClick={async () => {
+                                            try {
+                                                const file = new File([exportedFilePreview.blob], exportedFilePreview.fileName, { type: exportedFilePreview.blob.type });
+                                                await navigator.share({ files: [file], title: exportedFilePreview.fileName });
+                                            } catch (err) {}
+                                        }} className="px-4 py-2.5 rounded-xl bg-blue-600 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm hover:bg-blue-700">
+                                            <i className="ph ph-share-network text-base"></i> แชร์ / บันทึกลงเครื่อง
+                                        </button>
+                                    )}
+                                    <a href={exportedFilePreview.url} download={exportedFilePreview.fileName} className="px-4 py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm hover:bg-emerald-700">
+                                        <i className="ph ph-download-simple text-base"></i> ดาวน์โหลดไฟล์
+                                    </a>
+                                    <button onClick={() => setExportedFilePreview(null)} className="px-5 py-2.5 rounded-xl bg-gray-900 text-white font-bold text-xs hover:bg-black">ปิดหน้าต่าง</button>
+                                </div>
                             </div>
                         </div>
                     )}
 
-                    {/* Paper Answer Sheet Modal (แบบประเมินความสะอาดเรียบร้อย) */}
+                    {/* Modal พิมพ์แบบประเมินความสะอาดเรียบร้อย */}
                     {showPaperSheetModal && (
-                        <div className="fixed inset-0 z-[9998] bg-gray-900/80 backdrop-blur-sm flex flex-col items-center justify-center p-2 sm:p-5 animate-in fade-in">
-                            <div className="bg-white rounded-[2rem] w-full max-w-6xl max-h-[94vh] shadow-2xl flex flex-col overflow-hidden">
-                                {/* แถบเครื่องมือด้านบน */}
-                                <div className="p-4 border-b border-gray-200 flex flex-wrap items-center justify-between gap-3 bg-gray-50 shrink-0">
-                                    <div className="flex items-center gap-2.5">
-                                        <div className="w-10 h-10 rounded-xl bg-red-50 text-[#C8102E] flex items-center justify-center">
-                                            <i className="ph ph-clipboard-text text-xl"></i>
-                                        </div>
-                                        <div>
-                                            <h3 className="font-black text-gray-800 text-sm sm:text-base">พิมพ์แบบประเมินความสะอาดเรียบร้อย</h3>
-                                            <p className="text-[11px] text-gray-500 font-medium">เลือกเปิด/ปิดชื่อและวันที่ได้ตามต้องการ สำหรับพิมพ์ไว้ใช้ประเมินและสแกนเข้าระบบ</p>
-                                        </div>
+                        <div className="fixed inset-0 z-[9996] bg-gray-900/80 backdrop-blur-sm flex flex-col items-center justify-center p-2 sm:p-4 animate-in fade-in">
+                            <div className="bg-white rounded-[2rem] w-full max-w-6xl p-4 sm:p-6 shadow-2xl flex flex-col max-h-[95vh]">
+                                <div className="flex flex-wrap justify-between items-center gap-2 border-b border-gray-100 pb-3 mb-3 shrink-0">
+                                    <div>
+                                        <h3 className="font-black text-gray-800 text-base flex items-center gap-2"><i className="ph ph-printer text-[#C8102E]"></i> พิมพ์แบบประเมินความสะอาดเรียบร้อย</h3>
                                     </div>
-
                                     <div className="flex flex-wrap items-center gap-2">
-                                        {/* ตัวเลือกใส่หรือไม่ใส่วันที่และชื่อผู้ตรวจ */}
-                                        <label className={`px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 cursor-pointer select-none transition-all ${paperIncludeDate ? 'bg-red-50 border-[#C8102E] text-[#C8102E]' : 'bg-white border-gray-300 text-gray-600'}`}>
-                                            <input type="checkbox" checked={paperIncludeDate} onChange={e => setPaperIncludeDate(e.target.checked)} className="accent-[#C8102E]" />
-                                            <span>ใส่วันที่</span>
+                                        <label className="flex items-center gap-1.5 text-xs font-bold text-gray-600 bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-200 cursor-pointer">
+                                            <input type="checkbox" checked={paperIncludeDate} onChange={e => setPaperIncludeDate(e.target.checked)} className="accent-[#C8102E]" /> ใส่วันที่
                                         </label>
-                                        <label className={`px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 cursor-pointer select-none transition-all ${paperIncludeInspector ? 'bg-red-50 border-[#C8102E] text-[#C8102E]' : 'bg-white border-gray-300 text-gray-600'}`}>
-                                            <input type="checkbox" checked={paperIncludeInspector} onChange={e => setPaperIncludeInspector(e.target.checked)} className="accent-[#C8102E]" />
-                                            <span>ใส่ชื่อผู้ตรวจ</span>
+                                        <label className="flex items-center gap-1.5 text-xs font-bold text-gray-600 bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-200 cursor-pointer">
+                                            <input type="checkbox" checked={paperIncludeInspector} onChange={e => setPaperIncludeInspector(e.target.checked)} className="accent-[#C8102E]" /> ใส่ชื่อผู้ตรวจ
                                         </label>
-
-                                        <button onClick={() => { setShowPaperSheetModal(false); handleOpenOmrScanner(); }} className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 px-3.5 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all">
-                                            <i className="ph ph-scan text-base"></i> ไปหน้าสแกนแบบประเมิน
-                                        </button>
-                                        <button onClick={() => handleExportPaperSheet('png')} className="bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 px-3.5 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all">
-                                            <i className="ph ph-image text-base"></i> โหลด PNG
-                                        </button>
-                                        <button onClick={() => handleExportPaperSheet('pdf')} className="bg-red-50 hover:bg-red-100 text-[#C8102E] border border-red-200 px-3.5 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all">
-                                            <i className="ph ph-file-pdf text-base"></i> โหลด PDF
-                                        </button>
-                                        <button onClick={() => handleExportPaperSheet('print')} className="bg-gray-900 hover:bg-black text-white px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all">
-                                            <i className="ph ph-printer text-base"></i> สั่งพิมพ์ (A4)
-                                        </button>
-                                        <button onClick={() => setShowPaperSheetModal(false)} className="w-9 h-9 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center hover:bg-gray-300">
-                                            <i className="ph ph-x text-base"></i>
-                                        </button>
+                                        <button onClick={() => handleExportPaperSheet('png')} className="bg-blue-50 text-blue-600 border border-blue-200 px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1 hover:bg-blue-100"><i className="ph ph-image"></i> รูปภาพ</button>
+                                        <button onClick={() => handleExportPaperSheet('pdf')} className="bg-red-50 text-[#C8102E] border border-red-200 px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1 hover:bg-red-100"><i className="ph ph-file-pdf"></i> PDF</button>
+                                        <button onClick={() => setShowPaperSheetModal(false)} className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center hover:bg-gray-200"><i className="ph ph-x"></i></button>
                                     </div>
                                 </div>
 
-                                {/* พื้นที่แสดงตัวอย่างแบบประเมิน A4 แนวนอน แผ่นเดียวจบ (1122 x 793 px) */}
-                                <div className="flex-1 overflow-auto bg-gray-200 p-3 sm:p-5 custom-scrollbar flex justify-center items-start">
-                                    <div id="omr-print-area" className="shadow-xl bg-white overflow-x-auto">
-                                        <div id="omr-sheet-export-box" className="omr-sheet-wrapper relative">
-                                            {/* มาร์คเกอร์มุมบนซ้าย-ขวา */}
-                                            <div>
-                                                <div className="flex justify-between items-center mb-1.5">
-                                                    <div className="omr-corner-mark"></div>
-                                                    <div className="text-[10px] font-bold text-gray-500">แบบบันทึกผลการตรวจความเรียบร้อย • สภานักเรียนโรงเรียนคำม่วง</div>
-                                                    <div className="omr-corner-mark"></div>
-                                                </div>
+                                <div className="flex-1 overflow-auto bg-gray-200 p-2 sm:p-4 rounded-xl custom-scrollbar">
+                                    <div id="omr-print-area">
+                                        <div id="omr-sheet-export-box" className="omr-sheet-wrapper shadow-md">
+                                            <div className="flex justify-between items-center mb-1">
+                                                <div className="omr-corner-mark"></div>
+                                                <span className="text-[10px] font-bold text-gray-500">แบบประเมินความสะอาดเรียบร้อย • สภานักเรียนโรงเรียนคำม่วง</span>
+                                                <div className="omr-corner-mark"></div>
+                                            </div>
 
-                                                {/* ส่วนหัวแบบประเมิน (รองรับทั้งระบายทึบและกากบาท) */}
-                                                <div className="border-2 border-gray-900 rounded-lg px-3.5 py-2 mb-2 flex items-center justify-between gap-4 bg-white">
-                                                    <div className="flex items-center gap-3">
-                                                        <img src={settings?.school_logo_url || settings?.app_logo_url || HARDCODED_LOGO} className="w-11 h-11 object-contain" crossOrigin="anonymous" />
-                                                        <div>
-                                                            <h1 className="text-base font-bold text-gray-900 leading-tight">แบบประเมินความสะอาดเรียบร้อย</h1>
-                                                            <p className="text-xs font-semibold text-gray-700">สภานักเรียนโรงเรียนคำม่วง อำเภอคำม่วง จังหวัดกาฬสินธุ์</p>
-                                                            <p className="text-[10.5px] text-gray-700 mt-0.5"><b>คำชี้แจง:</b> ให้ระบายทึบ ● หรือทำเครื่องหมายกากบาท ✕ ลงในวงกลม ○ ให้ชัดเจน</p>
-                                                        </div>
+                                            <div className="border-2 border-gray-800 rounded-xl p-2.5 mb-2 flex justify-between items-center">
+                                                <div className="flex items-center gap-3">
+                                                    <img src={settings?.school_logo_url || HARDCODED_LOGO} className="w-11 h-11 object-contain" crossOrigin="anonymous" />
+                                                    <div>
+                                                        <h1 className="text-sm font-bold text-gray-900 leading-tight">แบบประเมินความสะอาดเรียบร้อย</h1>
+                                                        <p className="text-[11px] font-semibold text-gray-700 leading-tight">สภานักเรียนโรงเรียนคำม่วง อำเภอคำม่วง จังหวัดกาฬสินธุ์</p>
+                                                        <p className="text-[10px] font-bold text-[#C8102E] mt-0.5">คำชี้แจง: ให้ระบายทึบ ● หรือทำเครื่องหมายกากบาท ✕ ลงในวงกลม ○ ให้ชัดเจน</p>
                                                     </div>
-                                                    <div className="text-right text-xs space-y-1 shrink-0 bg-gray-50 px-3 py-1.5 rounded-md border border-gray-300 min-w-[215px]">
-                                                        <div className="flex items-center justify-between gap-2">
-                                                            <span className="font-bold text-gray-700">ประจำวันที่:</span>
-                                                            <span className="font-bold text-gray-900 border-b border-dotted border-gray-500 min-w-[125px] text-center inline-block">
-                                                                {paperIncludeDate ? formatDateObj(filterDate) : '..........................................'}
-                                                            </span>
-                                                        </div>
-                                                        <div className="flex items-center justify-between gap-2">
-                                                            <span className="font-bold text-gray-700">คณะผู้ตรวจ:</span>
-                                                            <span className="font-bold text-gray-900 border-b border-dotted border-gray-500 min-w-[125px] text-center inline-block truncate max-w-[155px]">
-                                                                {paperIncludeInspector ? getActiveInspectorTeamString() : '..........................................'}
-                                                            </span>
-                                                        </div>
-                                                    </div>
+                                                </div>
+                                                <div className="border border-gray-400 rounded-lg px-3 py-1.5 text-[11px] min-w-[230px] space-y-1">
+                                                    <div className="flex justify-between"><b>ประจำวันที่:</b> <span>{paperIncludeDate ? formatDateObj(filterDate) : '................................................'}</span></div>
+                                                    <div className="flex justify-between"><b>คณะผู้ตรวจ:</b> <span className="truncate max-w-[150px]">{paperIncludeInspector ? getActiveInspectorTeamString() : '................................................'}</span></div>
                                                 </div>
                                             </div>
 
-                                            {/* ตารางกระดาษคำตอบ แบ่ง 2 ฝั่ง ซ้าย-ขวา พอดีแผ่นเดียว */}
-                                            <div className="grid grid-cols-2 gap-2.5 flex-1 items-start w-full">
+                                            <div className="grid grid-cols-2 gap-3 flex-1 items-start">
                                                 {[paperSheetSplitColumns.left, paperSheetSplitColumns.right].map((colItems, colIdx) => (
                                                     <table key={colIdx} className="omr-table">
-                                                        <colgroup>
-                                                            <col style={{width: '5.5%'}} />
-                                                            <col style={{width: '13.5%'}} />
-                                                            <col style={{width: '6%'}} />
-                                                            <col style={{width: '6%'}} />
-                                                            <col style={{width: '6%'}} />
-                                                            <col style={{width: '6%'}} />
-                                                            <col style={{width: '7%'}} />
-                                                            <col style={{width: '6%'}} />
-                                                            <col style={{width: '5.5%'}} />
-                                                            <col style={{width: '7%'}} />
-                                                            <col style={{width: '5.5%'}} />
-                                                            <col style={{width: '6.5%'}} />
-                                                            <col style={{width: '7.5%'}} />
-                                                            <col style={{width: '6%'}} />
-                                                            <col style={{width: '6%'}} />
-                                                        </colgroup>
                                                         <thead>
                                                             <tr>
-                                                                <th rowSpan="2">ที่</th>
-                                                                <th rowSpan="2">ห้อง</th>
-                                                                <th colSpan="7" style={{backgroundColor: '#eff6ff !important'}}>หมวดห้องเรียน</th>
-                                                                <th colSpan="6" style={{backgroundColor: '#fdf4ff !important'}}>หมวดเขตพื้นที่</th>
+                                                                <th rowSpan="2" style={{width: '6%'}}>ที่</th>
+                                                                <th rowSpan="2" style={{width: '13%'}}>ห้อง</th>
+                                                                <th colSpan="7" style={{backgroundColor: '#eff6ff', width: '43%'}}>หมวดห้องเรียน</th>
+                                                                <th colSpan="6" style={{backgroundColor: '#fdf4ff', width: '38%'}}>หมวดเขตพื้นที่</th>
                                                             </tr>
-                                                            <tr style={{fontSize: '8.5px'}}>
-                                                                <th>โต๊ะ</th>
-                                                                <th>ขยะ</th>
-                                                                <th>ไฟ</th>
-                                                                <th>พื้น</th>
-                                                                <th>กระดาน</th>
-                                                                <th style={{color: '#b91c1c'}}>ไม่ทำ</th>
-                                                                <th>ข้าม</th>
-
-                                                                <th>ดีเยี่ยม</th>
-                                                                <th>ดี</th>
-                                                                <th>พอใช้</th>
-                                                                <th>ปรับปรุง</th>
-                                                                <th style={{color: '#b91c1c'}}>ไม่ทำ</th>
-                                                                <th>ข้าม</th>
+                                                            <tr>
+                                                                <th>โต๊ะ</th><th>ขยะ</th><th>ไฟ</th><th>พื้น</th><th>กระดาน</th><th style={{color:'#dc2626'}}>ไม่ทำ</th><th>ข้าม</th>
+                                                                <th>ดีเยี่ยม</th><th>ดี</th><th>พอใช้</th><th>ปรับปรุง</th><th style={{color:'#dc2626'}}>ไม่ทำ</th><th>ข้าม</th>
                                                             </tr>
                                                         </thead>
                                                         <tbody>
-                                                            {colItems.map(({ room: r, num }) => (
-                                                                <tr key={r.id || num}>
-                                                                    <td className="font-bold">{num}</td>
-                                                                    <td className="font-black text-left pl-1.5 truncate">{(r.name || '').replace(/\s*\(.*?\)/g, '').trim()}</td>
-                                                                    <td><span className="omr-bubble">2</span></td>
-                                                                    <td><span className="omr-bubble">2</span></td>
-                                                                    <td><span className="omr-bubble">2</span></td>
-                                                                    <td><span className="omr-bubble">2</span></td>
-                                                                    <td><span className="omr-bubble">2</span></td>
-                                                                    <td><span className="omr-bubble" style={{color: '#ef4444', borderColor: '#fca5a5'}}>-5</span></td>
-                                                                    <td><span className="omr-bubble">-</span></td>
-
-                                                                    {r.hasZone !== false ? (
-                                                                        <>
-                                                                            <td><span className="omr-bubble">10</span></td>
-                                                                            <td><span className="omr-bubble">8</span></td>
-                                                                            <td><span className="omr-bubble">5</span></td>
-                                                                            <td><span className="omr-bubble">2</span></td>
-                                                                            <td><span className="omr-bubble" style={{color: '#ef4444', borderColor: '#fca5a5'}}>-5</span></td>
-                                                                            <td><span className="omr-bubble">-</span></td>
-                                                                        </>
-                                                                    ) : (
-                                                                        <td colSpan="6" className="text-[8px] text-gray-400 font-bold bg-gray-100">ไม่มีเขตพื้นที่รับผิดชอบ</td>
-                                                                    )}
-                                                                </tr>
-                                                            ))}
+                                                            {colItems.map(({ room, num }) => {
+                                                                const cleanRoomName = (room.name || '').replace(/\s*\(.*?\)/g, '').trim();
+                                                                return (
+                                                                    <tr key={room.id}>
+                                                                        <td><b>{num}</b></td>
+                                                                        <td style={{textAlign: 'left', paddingLeft: '4px'}}><b>{cleanRoomName}</b></td>
+                                                                        <td><span className="omr-bubble">2</span></td>
+                                                                        <td><span className="omr-bubble">2</span></td>
+                                                                        <td><span className="omr-bubble">2</span></td>
+                                                                        <td><span className="omr-bubble">2</span></td>
+                                                                        <td><span className="omr-bubble">2</span></td>
+                                                                        <td><span className="omr-bubble" style={{borderColor:'#fca5a5', color:'#fca5a5'}}>-5</span></td>
+                                                                        <td><span className="omr-bubble">-</span></td>
+                                                                        {room.hasZone !== false ? (
+                                                                            <>
+                                                                                <td><span className="omr-bubble">10</span></td>
+                                                                                <td><span className="omr-bubble">8</span></td>
+                                                                                <td><span className="omr-bubble">5</span></td>
+                                                                                <td><span className="omr-bubble">2</span></td>
+                                                                                <td><span className="omr-bubble" style={{borderColor:'#fca5a5', color:'#fca5a5'}}>-5</span></td>
+                                                                                <td><span className="omr-bubble">-</span></td>
+                                                                            </>
+                                                                        ) : (
+                                                                            <td colSpan="6" style={{fontSize: '8px', color: '#9ca3af', backgroundColor: '#f3f4f6'}}>ไม่มีเขตพื้นที่รับผิดชอบ</td>
+                                                                        )}
+                                                                    </tr>
+                                                                );
+                                                            })}
                                                         </tbody>
                                                     </table>
                                                 ))}
                                             </div>
 
-                                            {/* มาร์คเกอร์มุมล่างซ้าย-ขวา พร้อมคำเตือนห้ามขีดเขียนนอกกรอบ */}
-                                            <div className="flex justify-between items-center mt-1.5 pt-1">
+                                            <div className="flex justify-between items-center mt-1 pt-1">
                                                 <div className="flex items-center gap-2">
                                                     <div className="omr-corner-mark"></div>
-                                                    <span className="text-[9.5px] font-bold text-red-700">คำเตือน: ห้ามขีดเขียน วาดรูป หรือทำสัญลักษณ์ใดๆ นอกวงกลม ○ และบริเวณจุดสี่เหลี่ยมสีดำทั้ง 4 มุมโดยเด็ดขาด (ถ่ายภาพให้เห็นจุดสี่เหลี่ยมครบทั้ง 4 มุม)</span>
+                                                    <span className="text-[9.5px] font-bold text-red-600">คำเตือน: ห้ามขีดเขียน วาดรูป หรือทำสัญลักษณ์ใดๆ นอกวงกลม ○ และบริเวณจุดสี่เหลี่ยมสีดำทั้ง 4 มุมโดยเด็ดขาด</span>
                                                 </div>
-                                                <div className="flex items-center gap-5 text-[10.5px] font-bold text-gray-700 shrink-0">
-                                                    <span>ลงชื่อ ................................................. ผู้ตรวจประเมิน</span>
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-[10px] font-bold text-gray-700">ลงชื่อ..........................................................ผู้ตรวจประเมิน</span>
                                                     <div className="omr-corner-mark"></div>
                                                 </div>
                                             </div>
@@ -3996,232 +3948,142 @@
                         </div>
                     )}
 
-                    {/* OMR Scanner Modal (เครื่องสแกนตรวจแบบประเมินและยืนยันผล) */}
+                    {/* Modal สแกนแบบประเมิน (OMR Scanner) */}
                     {omrScannerModal.isOpen && (
-                        <div className="fixed inset-0 z-[9998] bg-gray-900/85 backdrop-blur-sm flex flex-col items-center justify-center p-3 sm:p-6 animate-in fade-in">
-                            <div className="bg-white rounded-[2rem] w-full max-w-5xl max-h-[92vh] shadow-2xl flex flex-col overflow-hidden">
-                                {/* Header */}
-                                <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gray-50 shrink-0">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-xl bg-gray-900 text-amber-300 flex items-center justify-center">
-                                            <i className="ph ph-scan text-xl"></i>
-                                        </div>
-                                        <div>
-                                            <h3 className="font-black text-gray-800 text-sm sm:text-base">สแกนแบบประเมินความสะอาดเรียบร้อย</h3>
-                                            <p className="text-[11px] text-gray-500 font-medium">ประจำวันที่ {formatDateObj(filterDate)} • รองรับทั้งรอยระบายทึบ ● และรอยกากบาท ✕ (กรุณาถ่ายให้เห็นจุดสี่เหลี่ยมสีดำครบทั้ง 4 มุม)</p>
-                                        </div>
+                        <div className="fixed inset-0 z-[9996] bg-gray-900/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-in fade-in">
+                            <div className="bg-white rounded-[2rem] w-full max-w-4xl p-5 shadow-2xl flex flex-col max-h-[92vh]">
+                                <div className="flex justify-between items-center border-b border-gray-100 pb-3 mb-3 shrink-0">
+                                    <div>
+                                        <h3 className="font-black text-gray-800 text-base flex items-center gap-2"><i className="ph ph-scan text-[#C8102E]"></i> สแกนแบบประเมินความสะอาดเรียบร้อย</h3>
+                                        <p className="text-[11px] text-gray-400 font-bold">ถ่ายรูปให้เห็นจุดสี่เหลี่ยมสีดำทั้ง 4 มุม ระบบจะอ่านค่าและให้ตรวจสอบก่อนบันทึก</p>
                                     </div>
-                                    <button onClick={() => setOmrScannerModal(prev => ({ ...prev, isOpen: false }))} className="w-9 h-9 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center hover:bg-gray-300">
-                                        <i className="ph ph-x text-base"></i>
-                                    </button>
+                                    <button onClick={() => setOmrScannerModal(prev => ({ ...prev, isOpen: false }))} className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center hover:bg-gray-200"><i className="ph ph-x"></i></button>
                                 </div>
 
-                                {/* แถบอัปโหลดรูปแบบประเมิน + ปรับความไวแสง */}
-                                <div className="p-4 bg-white border-b border-gray-100 flex flex-wrap items-center justify-between gap-3 shrink-0">
-                                    <div className="flex flex-wrap items-center gap-3">
-                                        <label className="bg-[#C8102E] hover:bg-red-800 text-white px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 cursor-pointer shadow-sm transition-all active:scale-95">
-                                            <i className="ph ph-camera text-base"></i> ถ่ายภาพ / เลือกรูปแบบประเมิน
+                                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-4 pr-1">
+                                    <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-gray-50 p-3.5 rounded-2xl border border-gray-200">
+                                        <label className="w-full sm:w-auto px-4 py-2.5 bg-[#C8102E] text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-sm hover:bg-red-800">
+                                            <i className="ph ph-camera text-base"></i> เลือกรูปถ่ายแบบประเมิน
                                             <input type="file" accept="image/*" ref={omrFileInputRef} onChange={handleOmrImageUpload} className="hidden" />
                                         </label>
-                                        {omrScannerModal.imagePreview && (
-                                            <div className="flex items-center gap-2 bg-gray-100 px-3 py-1.5 rounded-xl border border-gray-200">
-                                                <span className="text-[11px] font-bold text-gray-700 whitespace-nowrap">ความไวการจับรอยขีด:</span>
-                                                <input
-                                                    type="range"
-                                                    min="15"
-                                                    max="85"
-                                                    value={omrScannerModal.sensitivity}
-                                                    onChange={(e) => {
-                                                        const val = parseInt(e.target.value);
-                                                        setOmrScannerModal(prev => ({ ...prev, sensitivity: val }));
-                                                        if (omrRawImageRef.current) processOmrImageWithSensitivity(omrRawImageRef.current, val);
-                                                    }}
-                                                    className="w-24 accent-[#C8102E] cursor-pointer"
-                                                />
-                                                <span className="text-[11px] font-black text-[#C8102E] w-8 text-right">{omrScannerModal.sensitivity}%</span>
+                                        {omrRawImageRef.current && (
+                                            <div className="flex items-center gap-2 w-full sm:w-auto">
+                                                <span className="text-xs font-bold text-gray-600 whitespace-nowrap">ความไวแสง: {omrScannerModal.sensitivity}%</span>
+                                                <input type="range" min="10" max="90" value={omrScannerModal.sensitivity} onChange={e => {
+                                                    const val = Number(e.target.value);
+                                                    setOmrScannerModal(prev => ({ ...prev, sensitivity: val }));
+                                                    processOmrImageWithSensitivity(omrRawImageRef.current, val);
+                                                }} className="w-full sm:w-36 accent-[#C8102E]" />
                                             </div>
                                         )}
                                     </div>
 
-                                    <div className="flex items-center gap-2">
-                                        <button onClick={() => setOmrScannerModal(prev => ({
-                                            ...prev,
-                                            results: prev.results.map(r => ({ ...r, includeRoom: true, includeZone: r.room.hasZone !== false }))
-                                        }))} className="px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold">
-                                            เลือกทั้งหมด
-                                        </button>
-                                        <button onClick={handleSaveOmrScannedResults} className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-md flex items-center gap-1.5 transition-all active:scale-95">
-                                            <i className="ph ph-check-fat ph-fill text-sm"></i> ยืนยันบันทึกผลทั้งหมดลงระบบ
-                                        </button>
+                                    {omrScannerModal.annotatedPreview && (
+                                        <div className="rounded-xl overflow-hidden border border-gray-200 bg-black/5 p-2">
+                                            <img src={omrScannerModal.annotatedPreview} className="w-full max-h-60 object-contain mx-auto rounded-lg" />
+                                        </div>
+                                    )}
+
+                                    <div className="space-y-2">
+                                        {omrScannerModal.results.map(item => (
+                                            <div key={item.room.id} className="p-3 bg-gray-50 rounded-xl border border-gray-200 flex flex-wrap items-center justify-between gap-2 text-xs">
+                                                <span className="font-black text-gray-800 w-20">{item.index}. {item.room.name}</span>
+                                                <div className="flex flex-wrap items-center gap-1">
+                                                    {ROOM_CRITERIA.map(c => (
+                                                        <button key={c.id} onClick={() => toggleOmrResultCriterion(item.room.id, c.id)} className={`px-2 py-1 rounded-lg font-bold ${!item.roomScores.noDuty && !item.roomScores.skip && item.roomScores[c.id] === 2 ? 'bg-emerald-500 text-white' : 'bg-white text-gray-500 border border-gray-200'}`}>{c.name}</button>
+                                                    ))}
+                                                    <button onClick={() => toggleOmrResultCriterion(item.room.id, 'noDuty')} className={`px-2 py-1 rounded-lg font-bold ${item.roomScores.noDuty ? 'bg-red-500 text-white' : 'bg-white text-red-500 border border-red-200'}`}>ไม่ทำ (-5)</button>
+                                                    <button onClick={() => toggleOmrResultCriterion(item.room.id, 'skip')} className={`px-2 py-1 rounded-lg font-bold ${item.roomScores.skip ? 'bg-gray-600 text-white' : 'bg-white text-gray-500 border border-gray-200'}`}>ข้าม</button>
+                                                </div>
+                                                {item.room.hasZone !== false && (
+                                                    <div className="flex items-center gap-1">
+                                                        {[10, 8, 5, 2, -5].map(z => (
+                                                            <button key={z} onClick={() => setOmrResultZone(item.room.id, z)} className={`px-2 py-1 rounded-lg font-bold ${!item.zoneSkip && item.zoneScore === z ? 'bg-fuchsia-600 text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>{z}</button>
+                                                        ))}
+                                                        <button onClick={() => setOmrResultZone(item.room.id, 'skip')} className={`px-2 py-1 rounded-lg font-bold ${item.zoneSkip ? 'bg-gray-600 text-white' : 'bg-white text-gray-500 border border-gray-200'}`}>ข้ามเขต</button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
                                     </div>
                                 </div>
 
-                                {/* ตารางแสดงผลลัพธ์ที่สแกนได้ พร้อมภาพตัวอย่างจุดที่ระบบตรวจพบ */}
-                                <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-3 bg-gray-50">
-                                    {omrScannerModal.annotatedPreview && !omrScannerModal.isScanning && (
-                                        <div className="bg-white p-3 rounded-2xl border border-gray-200 shadow-sm">
-                                            <div className="flex items-center justify-between mb-2">
-                                                <span className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
-                                                    <i className="ph ph-eye text-[#C8102E]"></i> ภาพตรวจสอบตำแหน่งที่สแกนพบ (วงกลมสีเขียว/ชมพู = จุดที่ระบบอ่านค่าได้)
-                                                </span>
-                                                <span className="text-[10px] text-gray-400 font-medium">เลื่อนแถบ "ความไวการจับรอยขีด" ด้านบนได้หากขีดเส้นบางเกินไป</span>
-                                            </div>
-                                            <img src={omrScannerModal.annotatedPreview} className="w-full max-h-56 object-contain rounded-xl border border-gray-100 bg-gray-900/5" />
-                                        </div>
-                                    )}
-                                    {omrScannerModal.isScanning ? (
-                                        <div className="py-16 flex flex-col items-center justify-center text-center">
-                                            <i className="ph ph-spinner animate-spin text-4xl text-[#C8102E] mb-3"></i>
-                                            <p className="font-bold text-gray-700 text-sm">กำลังประมวลผลภาพกระดาษคำตอบและอ่านค่าวงกลม...</p>
-                                        </div>
-                                    ) : (
-                                        <div className="bg-white rounded-2xl border border-gray-200 overflow-x-auto shadow-sm">
-                                            <table className="w-full text-xs text-center border-collapse">
-                                                <thead className="bg-gray-100 text-gray-700 font-bold border-b border-gray-200">
-                                                    <tr>
-                                                        <th className="py-2.5 px-2">ที่</th>
-                                                        <th className="py-2.5 px-3 text-left">ห้องเรียน</th>
-                                                        <th className="py-2.5 px-2 bg-blue-50/70">หมวดห้องเรียน (แตะวงกลมเพื่อปรับค่า)</th>
-                                                        <th className="py-2.5 px-2 bg-blue-50/70">รวมห้อง</th>
-                                                        <th className="py-2.5 px-2 bg-fuchsia-50/70">หมวดเขตพื้นที่ (แตะวงกลมเพื่อปรับค่า)</th>
-                                                        <th className="py-2.5 px-2 bg-fuchsia-50/70">รวมเขต</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-gray-100">
-                                                    {omrScannerModal.results.map((item) => {
-                                                        const rs = item.roomScores;
-                                                        const roomTotal = rs.skip ? 'ข้าม' : rs.noDuty ? -5 : (rs.c1 + rs.c2 + rs.c3 + rs.c4 + rs.c5);
-                                                        const zoneTotal = item.room.hasZone === false ? 'ไม่มี' : item.zoneSkip ? 'ข้าม' : item.zoneScore;
-                                                        return (
-                                                            <tr key={item.room.id} className="hover:bg-gray-50/80">
-                                                                <td className="py-2 px-2 font-bold text-gray-400">{item.index}</td>
-                                                                <td className="py-2 px-3 font-black text-gray-800 text-left whitespace-nowrap">{item.room.name}</td>
-                                                                <td className="py-2 px-2">
-                                                                    <div className="flex items-center justify-center gap-1 flex-wrap">
-                                                                        {ROOM_CRITERIA.map(c => (
-                                                                            <button
-                                                                                key={c.id}
-                                                                                type="button"
-                                                                                onClick={() => toggleOmrResultCriterion(item.room.id, c.id)}
-                                                                                className={`px-2 py-1 rounded-full text-[10px] font-bold border transition-all ${!rs.skip && !rs.noDuty && rs[c.id] === 2 ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-500 border-gray-300'}`}
-                                                                            >
-                                                                                {c.name}
-                                                                            </button>
-                                                                        ))}
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() => toggleOmrResultCriterion(item.room.id, 'noDuty')}
-                                                                            className={`px-2 py-1 rounded-full text-[10px] font-bold border transition-all ${rs.noDuty ? 'bg-red-600 text-white border-red-600' : 'bg-white text-red-500 border-red-200'}`}
-                                                                        >
-                                                                            ไม่ทำ (-5)
-                                                                        </button>
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() => toggleOmrResultCriterion(item.room.id, 'skip')}
-                                                                            className={`px-2 py-1 rounded-full text-[10px] font-bold border transition-all ${rs.skip ? 'bg-gray-600 text-white border-gray-600' : 'bg-white text-gray-500 border-gray-200'}`}
-                                                                        >
-                                                                            ข้าม
-                                                                        </button>
-                                                                    </div>
-                                                                </td>
-                                                                <td className="py-2 px-2 font-black text-blue-600">{roomTotal}</td>
-                                                                <td className="py-2 px-2">
-                                                                    {item.room.hasZone === false ? (
-                                                                        <span className="text-[11px] text-gray-400 font-bold">ไม่มีเขตพื้นที่</span>
-                                                                    ) : (
-                                                                        <div className="flex items-center justify-center gap-1 flex-wrap">
-                                                                            {[{v:10, l:'ดีเยี่ยม'}, {v:8, l:'ดี'}, {v:5, l:'พอใช้'}, {v:2, l:'ปรับปรุง'}, {v:-5, l:'ไม่ทำ'}].map(z => (
-                                                                                <button
-                                                                                    key={z.v}
-                                                                                    type="button"
-                                                                                    onClick={() => setOmrResultZone(item.room.id, z.v)}
-                                                                                    className={`px-2 py-1 rounded-full text-[10px] font-bold border transition-all ${!item.zoneSkip && item.zoneScore === z.v ? (z.v < 0 ? 'bg-red-600 text-white border-red-600' : 'bg-fuchsia-600 text-white border-fuchsia-600') : 'bg-white text-gray-500 border-gray-300'}`}
-                                                                                >
-                                                                                    {z.l}
-                                                                                </button>
-                                                                            ))}
-                                                                            <button
-                                                                                type="button"
-                                                                                onClick={() => setOmrResultZone(item.room.id, 'skip')}
-                                                                                className={`px-2 py-1 rounded-full text-[10px] font-bold border transition-all ${item.zoneSkip ? 'bg-gray-600 text-white border-gray-600' : 'bg-white text-gray-500 border-gray-200'}`}
-                                                                            >
-                                                                                ข้าม
-                                                                            </button>
-                                                                        </div>
-                                                                    )}
-                                                                </td>
-                                                                <td className="py-2 px-2 font-black text-fuchsia-600">{zoneTotal}</td>
-                                                            </tr>
-                                                        );
-                                                    })}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    )}
+                                <div className="pt-3 mt-3 border-t border-gray-100 flex justify-end gap-2 shrink-0">
+                                    <button onClick={() => setOmrScannerModal(prev => ({ ...prev, isOpen: false }))} className="px-5 py-3 rounded-xl bg-gray-100 text-gray-600 font-bold text-xs">ยกเลิก</button>
+                                    <button onClick={handleSaveOmrScannedResults} className="px-6 py-3 rounded-xl bg-[#C8102E] text-white font-bold text-xs shadow-lg hover:bg-red-800">บันทึกผลสแกนทั้งหมด</button>
                                 </div>
                             </div>
                         </div>
                     )}
 
-                    {/* Loading Overlay (พร้อมตัวนับเวลาถอยหลังและแถบเปอร์เซ็นต์) */}
-                    {isSavingData && (
-                        <div className="fixed inset-0 z-[99999] bg-gray-900/85 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center">
-                            <div className="relative w-24 h-24 flex items-center justify-center mb-4">
-                                <i className="ph ph-spinner text-[#C8102E] text-7xl animate-spin"></i>
-                                {savingCountdown > 0 && (
-                                    <span className="absolute text-white font-black text-xl">{savingCountdown}s</span>
+                    {/* Modal แผนผังห้องเรียน / เขตพื้นที่ */}
+                    {(showRoomMap || showZoneMap) && (
+                        <div className="fixed inset-0 z-[9997] bg-gray-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in" onClick={() => { setShowRoomMap(false); setShowZoneMap(false); }}>
+                            <div className="bg-white rounded-[2rem] w-full max-w-3xl p-5 shadow-2xl relative" onClick={e => e.stopPropagation()}>
+                                <div className="flex justify-between items-center mb-3">
+                                    <h3 className="font-black text-gray-800 text-base">{showRoomMap ? 'แผนผังห้องเรียน' : 'แผนผังเขตพื้นที่รับผิดชอบ'}</h3>
+                                    <button onClick={() => { setShowRoomMap(false); setShowZoneMap(false); }} className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center"><i className="ph ph-x"></i></button>
+                                </div>
+                                {(showRoomMap ? settings?.room_map_url : settings?.zone_map_url) ? (
+                                    <img src={showRoomMap ? settings.room_map_url : settings.zone_map_url} className="w-full max-h-[75vh] object-contain rounded-xl" />
+                                ) : (
+                                    <p className="text-center text-gray-400 font-bold py-16 text-xs">ยังไม่ได้ตั้งค่ารูปแผนผังในระบบ</p>
                                 )}
                             </div>
-                            <h2 className="text-xl sm:text-2xl font-black text-white mt-1">
-                                {savingStatusText || 'กำลังบันทึกข้อมูล...'}
-                            </h2>
-                            {savingCountdown > 0 && (
-                                <div className="w-full max-w-xs mt-4 space-y-2">
-                                    <div className="w-full bg-white/15 h-2.5 rounded-full overflow-hidden">
-                                        <div
-                                            className="bg-gradient-to-r from-[#C8102E] to-amber-400 h-full rounded-full transition-all duration-500"
-                                            style={{ width: `${Math.min(95, Math.max(10, Math.round(((savingTotalTime - savingCountdown + 1) / Math.max(savingTotalTime, 1)) * 100)))}%` }}
-                                        ></div>
-                                    </div>
-                                    <p className="text-xs font-bold text-amber-300">
-                                        เหลือเวลาประมาณ {savingCountdown} วินาที • กรุณาอย่าเพิ่งปิดหรือออกจากหน้านี้
-                                    </p>
-                                </div>
-                            )}
                         </div>
                     )}
-                    
-                    {/* Top-Right Modern Toast Notification */}
-                    {toastObj.msg && (
-                        <div className="fixed top-4 right-4 left-4 sm:left-auto sm:w-auto sm:min-w-[300px] z-[999999] animate-in slide-in-from-top-4 fade-in duration-200 pointer-events-none flex justify-end">
-                            <div className={`px-4 py-3.5 rounded-2xl shadow-xl border backdrop-blur-xl flex items-center gap-3 text-xs sm:text-sm font-bold ${
-                                toastObj.type === 'success' ? 'bg-white/95 border-emerald-200 text-emerald-700' :
-                                toastObj.type === 'error' ? 'bg-white/95 border-red-200 text-red-600' :
-                                toastObj.type === 'warning' ? 'bg-white/95 border-amber-200 text-amber-700' :
-                                'bg-white/95 border-gray-200 text-gray-800'
-                            }`}>
-                                <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
-                                    toastObj.type === 'success' ? 'bg-emerald-100 text-emerald-600' :
-                                    toastObj.type === 'error' ? 'bg-red-100 text-red-600' :
-                                    toastObj.type === 'warning' ? 'bg-amber-100 text-amber-600' :
-                                    'bg-red-50 text-[#C8102E]'
-                                }`}>
-                                    <i className={`ph ${
-                                        toastObj.type === 'success' ? 'ph-check-circle ph-fill' :
-                                        toastObj.type === 'error' ? 'ph-x-circle ph-fill' :
-                                        toastObj.type === 'warning' ? 'ph-warning ph-fill' :
-                                        'ph-bell-ringing ph-fill'
-                                    } text-base`}></i>
+
+                    {/* Modal ประกาศสภานักเรียน */}
+                    {showAnnouncement && (
+                        <div className="fixed inset-0 z-[9997] bg-gray-900/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in" onClick={() => setShowAnnouncement(false)}>
+                            <div className="bg-white rounded-[2rem] w-full max-w-md p-6 shadow-2xl relative" onClick={e => e.stopPropagation()}>
+                                <button onClick={() => setShowAnnouncement(false)} className="absolute top-4 right-4 w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center"><i className="ph ph-x"></i></button>
+                                <div className="flex items-center gap-2.5 mb-4">
+                                    <div className="w-10 h-10 rounded-full bg-red-50 text-[#C8102E] flex items-center justify-center"><i className="ph ph-megaphone text-xl"></i></div>
+                                    <div>
+                                        <h3 className="font-black text-gray-800 text-base">{settings?.announcement_title || 'ประกาศสภานักเรียน'}</h3>
+                                        <p className="text-[10px] text-gray-400 font-bold">สภานักเรียนโรงเรียนคำม่วง</p>
+                                    </div>
                                 </div>
-                                <span>{toastObj.msg}</span>
+                                {(settings?.announce_banner_url || settings?.banner_url) && (
+                                    <img src={settings.announce_banner_url || settings.banner_url} className="w-full rounded-xl mb-3 object-cover max-h-56" />
+                                )}
+                                <p className="text-xs font-medium text-gray-700 whitespace-pre-line leading-relaxed bg-gray-50 p-4 rounded-xl border border-gray-100">
+                                    {settings?.announcement_msg || 'ยังไม่มีประกาศใหม่ในขณะนี้'}
+                                </p>
                             </div>
                         </div>
                     )}
 
-                    {/* Bottom Nav สำหรับ Mobile */}
-                    <div className="md:hidden fixed bottom-0 w-full z-50">
+                    {/* Modal ช่วยเหลือ / ติดต่อผู้ดูแลระบบ */}
+                    {showInfoModal && (
+                        <div className="fixed inset-0 z-[9997] bg-gray-900/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in" onClick={() => setShowInfoModal(false)}>
+                            <div className="bg-white rounded-[2rem] w-full max-w-sm p-6 shadow-2xl relative text-center" onClick={e => e.stopPropagation()}>
+                                <button onClick={() => setShowInfoModal(false)} className="absolute top-4 right-4 w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center"><i className="ph ph-x"></i></button>
+                                <img src={settings?.admin_avatar_url || ADMIN_AVATAR_URL} className="w-20 h-20 rounded-full object-cover mx-auto mb-3 border-2 border-[#C8102E] shadow-md" onError={(e)=>{e.target.src=HARDCODED_LOGO}} />
+                                <h3 className="font-black text-gray-800 text-base">{settings?.admin_name || 'นายภูธนากร หงษ์ทอง (พี่ภีม)'}</h3>
+                                <p className="text-xs font-bold text-gray-500 mt-0.5 mb-4">{settings?.admin_role || 'เลขานุการสภานักเรียนโรงเรียนคำม่วง'}</p>
+                                {settings?.admin_line_url && (
+                                    <a href={settings.admin_line_url} target="_blank" rel="noreferrer" className="w-full py-3 rounded-xl bg-[#06C755] text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md hover:opacity-95">
+                                        ติดต่อสอบถามผ่าน LINE
+                                    </a>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Toast แจ้งเตือนสั้นๆ */}
+                    {toastObj.msg && (
+                        <div className="fixed top-20 right-4 z-[99999] bg-gray-900/90 backdrop-blur-md text-white px-4 py-2.5 rounded-2xl shadow-xl text-xs font-bold flex items-center gap-2 animate-in fade-in">
+                            <span>{toastObj.msg}</span>
+                        </div>
+                    )}
+
+                    {}
+                    {/* Bottom Nav สำหรับ Mobile และ iPad แนวตั้ง */}
+                    <div className="lg:hidden fixed bottom-0 w-full z-50">
                         <div className="absolute inset-0 bg-white/95 backdrop-blur-xl border-t border-gray-200 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]"></div>
-                        <div className="relative flex justify-around items-center px-2 py-1.5 pb-safe">
+                        <div className="relative max-w-3xl mx-auto flex justify-around items-center px-2 py-1.5 pb-safe">
                             <button onClick={() => setCurrentRoute('dashboard')} className={`flex flex-col items-center p-1.5 flex-1 transition-all ${currentRoute === 'dashboard' ? 'text-[#C8102E]' : 'text-gray-500'}`}>
                                 <div className={`p-1.5 rounded-xl mb-0.5 flex items-center justify-center ${currentRoute === 'dashboard' ? 'bg-[#FDECEF]' : 'bg-transparent'}`}><i className={`ph ${currentRoute === 'dashboard' ? 'ph-house ph-fill' : 'ph-house'} text-[22px]`}></i></div>
                                 <span className="text-[10px] font-bold">หน้าแรก</span>
