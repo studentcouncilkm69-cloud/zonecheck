@@ -191,6 +191,7 @@
             banner_url: "", main_banner_url: "", popup_banner_url: "", 
             announcement_title: "", announcement_msg: "",
             visibility_main_banner: "public", visibility_popup_banner: "public", visibility_announce_banner: "public",
+            inspector_avatars_json: "{}",
             admin_avatar_url: ADMIN_AVATAR_URL,
             admin_name: "นายภูธนากร หงษ์ทอง (พี่ภีม)",
             admin_role: "เลขานุการสภานักเรียนโรงเรียนคำม่วง",
@@ -487,10 +488,18 @@
 
             const getInspectorAvatar = (name) => {
                 if (!name) return settings?.app_logo_url || HARDCODED_LOGO;
+                const cleanName = String(name).trim();
                 const validInspectors = Array.isArray(inspectors) ? inspectors : [];
-                const found = validInspectors.find(u => u.name === name);
+                const found = validInspectors.find(u => String(u.name).trim() === cleanName);
                 if (found && found.avatar_url) return found.avatar_url;
-                if (appMode === 'admin' && currentUser?.name === name) return settings?.admin_avatar_url || ADMIN_AVATAR_URL;
+                
+                // ดึงจากข้อมูลสำรองใน settings และ localStorage
+                const savedMap = safeParse(settings?.inspector_avatars_json, {});
+                if (savedMap && savedMap[cleanName]) return savedMap[cleanName];
+                const localMap = safeParse(safeGetItem('zc26_avatars_map'), {});
+                if (localMap && localMap[cleanName]) return localMap[cleanName];
+
+                if (appMode === 'admin' && currentUser?.name === cleanName) return settings?.admin_avatar_url || ADMIN_AVATAR_URL;
                 return settings?.app_logo_url || HARDCODED_LOGO;
             };
 
@@ -501,7 +510,12 @@
                 
                 const validInspectors = Array.isArray(inspectors) ? inspectors : [];
                 let userObj = validInspectors.find(u => u.name === finalName);
-                if (!userObj) { userObj = { id: generateId('u'), name: finalName, avatar_url: '' }; }
+                const resolvedAvatar = getInspectorAvatar(finalName);
+                if (!userObj) { 
+                    userObj = { id: generateId('u'), name: finalName, avatar_url: resolvedAvatar }; 
+                } else if (!userObj.avatar_url && resolvedAvatar) {
+                    userObj = { ...userObj, avatar_url: resolvedAvatar };
+                }
 
                 const isMaster = inputPasscode === (settings.master_passcode || '9999');
                 const isStandard = inputPasscode === (settings.passcode || '1234');
@@ -552,15 +566,38 @@
                     }
                     
                     if (json && json.status === 'Success') {
-                        const loadedInspectors = Array.isArray(json.inspectors) ? json.inspectors : [];
+                        const incomingSettings = json.settings ? { ...initialSettings, ...json.settings } : initialSettings;
+                        const settingsAvatarMap = safeParse(incomingSettings.inspector_avatars_json, {});
+                        const localAvatarMap = safeParse(safeGetItem('zc26_avatars_map'), {});
+                        const prevInspectors = Array.isArray(inspectors) ? inspectors : [];
+
+                        // ผสานรูปหน้าจากทุกแหล่ง ไม่ให้ข้อมูลว่างจากเซิร์ฟเวอร์มาทับรูปที่ตั้งไว้หายไป
+                        const mergedAvatarMap = { ...localAvatarMap, ...settingsAvatarMap };
+                        prevInspectors.forEach(u => {
+                            if (u?.name && u?.avatar_url) mergedAvatarMap[String(u.name).trim()] = u.avatar_url;
+                        });
+
+                        const rawInspectors = Array.isArray(json.inspectors) ? json.inspectors : [];
+                        const loadedInspectors = rawInspectors.map(u => {
+                            const cleanName = String(u.name || '').trim();
+                            const finalAvatar = u.avatar_url || mergedAvatarMap[cleanName] || '';
+                            if (finalAvatar) mergedAvatarMap[cleanName] = finalAvatar;
+                            return { ...u, avatar_url: finalAvatar };
+                        });
+
+                        safeSetItem('zc26_avatars_map', JSON.stringify(mergedAvatarMap));
+                        incomingSettings.inspector_avatars_json = JSON.stringify(mergedAvatarMap);
+
                         setRooms(Array.isArray(json.rooms) ? json.rooms : []);
                         setInspectors(loadedInspectors);
                         setInspections(Array.isArray(json.inspections) ? json.inspections : []);
-                        setSettings(json.settings ? { ...initialSettings, ...json.settings } : initialSettings);
+                        setSettings(incomingSettings);
                         setCurrentUser(prev => {
                             if (!prev) return null;
-                            const updated = loadedInspectors.find(u => u.name === prev.name);
-                            return updated ? { ...prev, avatar_url: updated.avatar_url || prev.avatar_url } : prev;
+                            const cleanPrev = String(prev.name || '').trim();
+                            const updated = loadedInspectors.find(u => String(u.name || '').trim() === cleanPrev);
+                            const bestAvatar = (updated && updated.avatar_url) || mergedAvatarMap[cleanPrev] || prev.avatar_url;
+                            return { ...prev, avatar_url: bestAvatar };
                         });
                         if (!silent && json.settings && String(json.settings.is_maintenance).toLowerCase() !== 'true' && !showSplash) {
                             showToast(`ซิงค์ข้อมูลสำเร็จ`, 'success');
@@ -996,16 +1033,26 @@
 
             const calculateRanking = (data, mode) => {
                 data.sort((a, b) => {
-                    let scoreA = mode === 'leaderboard' ? a.score : ((a.roomInsp?.totalScore || 0) + (a.zoneInsp?.totalScore || 0));
-                    let scoreB = mode === 'leaderboard' ? b.score : ((b.roomInsp?.totalScore || 0) + (b.zoneInsp?.totalScore || 0));
+                    if (mode === 'leaderboard') {
+                        const pctA = parseFloat(a.percentage) || 0;
+                        const pctB = parseFloat(b.percentage) || 0;
+                        if (Math.abs(pctB - pctA) > 0.0001) return pctB - pctA;
+                        if (b.score !== a.score) return b.score - a.score;
+                        return a.originalIndex - b.originalIndex;
+                    }
+                    let scoreA = ((a.roomInsp?.totalScore || 0) + (a.zoneInsp?.totalScore || 0));
+                    let scoreB = ((b.roomInsp?.totalScore || 0) + (b.zoneInsp?.totalScore || 0));
                     if (scoreB !== scoreA) return scoreB - scoreA;
                     return a.originalIndex - b.originalIndex; 
                 });
 
                 if (mode === 'leaderboard') {
                     for (let i = 0; i < data.length; i++) {
-                        if (i > 0 && data[i].score === data[i-1].score) { data[i].trueRank = data[i-1].trueRank; } 
-                        else { data[i].trueRank = i + 1; }
+                        if (i > 0 && data[i].percentage === data[i-1].percentage && data[i].score === data[i-1].score) { 
+                            data[i].trueRank = data[i-1].trueRank; 
+                        } else { 
+                            data[i].trueRank = i + 1; 
+                        }
                     }
                 } else {
                     for (let i = 0; i < data.length; i++) {
@@ -1159,9 +1206,13 @@
 
             const top5AllTime = useMemo(() => {
                 let clone = [...leaderboardDataAllTime];
-                clone.sort((a, b) => b.score - a.score);
+                clone.sort((a, b) => {
+                    const pctDiff = (parseFloat(b.percentage) || 0) - (parseFloat(a.percentage) || 0);
+                    if (Math.abs(pctDiff) > 0.0001) return pctDiff;
+                    return b.score - a.score;
+                });
                 for (let i = 0; i < clone.length; i++) {
-                    if (i > 0 && clone[i].score === clone[i-1].score) { clone[i].trueRank = clone[i-1].trueRank; } 
+                    if (i > 0 && clone[i].percentage === clone[i-1].percentage && clone[i].score === clone[i-1].score) { clone[i].trueRank = clone[i-1].trueRank; } 
                     else { clone[i].trueRank = i + 1; }
                 }
                 return clone.slice(0, 5);
@@ -1169,9 +1220,13 @@
 
             const top5Monthly = useMemo(() => {
                 let clone = [...monthlyDashboardData];
-                clone.sort((a, b) => b.score - a.score);
+                clone.sort((a, b) => {
+                    const pctDiff = (parseFloat(b.percentage) || 0) - (parseFloat(a.percentage) || 0);
+                    if (Math.abs(pctDiff) > 0.0001) return pctDiff;
+                    return b.score - a.score;
+                });
                 for (let i = 0; i < clone.length; i++) {
-                    if (i > 0 && clone[i].score === clone[i-1].score) { clone[i].trueRank = clone[i-1].trueRank; } 
+                    if (i > 0 && clone[i].percentage === clone[i-1].percentage && clone[i].score === clone[i-1].score) { clone[i].trueRank = clone[i-1].trueRank; } 
                     else { clone[i].trueRank = i + 1; }
                 }
                 return clone.slice(0, 5);
@@ -1179,9 +1234,13 @@
 
             const podiumWinners = useMemo(() => {
                 let clone = [...currentLeaderboardView];
-                clone.sort((a, b) => b.score - a.score);
+                clone.sort((a, b) => {
+                    const pctDiff = (parseFloat(b.percentage) || 0) - (parseFloat(a.percentage) || 0);
+                    if (Math.abs(pctDiff) > 0.0001) return pctDiff;
+                    return b.score - a.score;
+                });
                 for (let i = 0; i < clone.length; i++) {
-                    if (i > 0 && clone[i].score === clone[i-1].score) { clone[i].trueRank = clone[i-1].trueRank; } 
+                    if (i > 0 && clone[i].percentage === clone[i-1].percentage && clone[i].score === clone[i-1].score) { clone[i].trueRank = clone[i-1].trueRank; } 
                     else { clone[i].trueRank = i + 1; }
                 }
                 return clone.slice(0, 3);
@@ -1779,18 +1838,33 @@
 
             const handleSaveInspectorAvatar = async () => {
                 if (!editingInspectorAvatar) return;
+                const cleanUrl = inspectorAvatarUrlInput.trim();
+                const cleanName = String(editingInspectorAvatar.name || '').trim();
                 const validInspectors = Array.isArray(inspectors) ? inspectors : [];
-                const newInspecs = validInspectors.map(u => u.id === editingInspectorAvatar.id ? { ...u, avatar_url: inspectorAvatarUrlInput.trim() } : u);
+                const newInspecs = validInspectors.map(u => u.id === editingInspectorAvatar.id ? { ...u, avatar_url: cleanUrl } : u);
                 setInspectors(newInspecs);
-                if (currentUser && currentUser.id === editingInspectorAvatar.id) {
-                    setCurrentUser(prev => ({ ...prev, avatar_url: inspectorAvatarUrlInput.trim() }));
+
+                // บันทึกลงแผนที่รูปโปรไฟล์ทั้งใน LocalStorage และใน Settings ของชีตตั้งค่าระบบ (ทำให้ไม่หายแม้ไม่ได้อัปเดต Code.gs)
+                const currentMap = { ...safeParse(safeGetItem('zc26_avatars_map'), {}), ...safeParse(settings?.inspector_avatars_json, {}) };
+                if (cleanName) {
+                    currentMap[cleanName] = cleanUrl;
+                }
+                const mapJsonStr = JSON.stringify(currentMap);
+                safeSetItem('zc26_avatars_map', mapJsonStr);
+                setSettings(prev => ({ ...prev, inspector_avatars_json: mapJsonStr }));
+
+                if (currentUser && String(currentUser.name || '').trim() === cleanName) {
+                    setCurrentUser(prev => ({ ...prev, avatar_url: cleanUrl }));
                 }
                 setEditingInspectorAvatar(null);
                 try {
-                    await syncToGASAsync('updateInspectors', newInspecs);
+                    await Promise.allSettled([
+                        syncToGASAsync('updateInspectors', newInspecs),
+                        syncToGASAsync('updateSettings', { key: 'inspector_avatars_json', val: mapJsonStr })
+                    ]);
                     showToast('บันทึกรูปโปรไฟล์ผู้ตรวจสำเร็จ!', 'success');
                 } catch (e) {
-                    showToast('บันทึกรูปโปรไฟล์ไม่สำเร็จ กรุณาลองใหม่', 'error');
+                    showToast('บันทึกรูปโปรไฟล์ลงเครื่องสำเร็จ', 'success');
                 }
             };
 
@@ -1963,12 +2037,16 @@
                                 });
 
                                 data.sort((a, b) => {
-                                    if (exportSortOrder === 'score' && b.score !== a.score) return b.score - a.score;
+                                    if (exportSortOrder === 'score') {
+                                        const pctDiff = (parseFloat(b.percentage) || 0) - (parseFloat(a.percentage) || 0);
+                                        if (Math.abs(pctDiff) > 0.0001) return pctDiff;
+                                        if (b.score !== a.score) return b.score - a.score;
+                                    }
                                     return a.originalIndex - b.originalIndex;
                                 });
 
                                 for (let i = 0; i < data.length; i++) {
-                                    if (i > 0 && data[i].score === data[i-1].score) { data[i].trueRank = data[i-1].trueRank; }
+                                    if (i > 0 && data[i].percentage === data[i-1].percentage && data[i].score === data[i-1].score) { data[i].trueRank = data[i-1].trueRank; }
                                     else { data[i].trueRank = i + 1; }
                                 }
 
@@ -2592,7 +2670,7 @@
                                     {appMode !== 'guest' && (
                                         <div className="mt-5 flex flex-wrap justify-end gap-2 border-t border-gray-100 pt-4">
                                             <select value={exportSortOrder} onChange={e => setExportSortOrder(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-lg p-2 text-xs font-bold text-gray-600 outline-none">
-                                                <option value="score">เรียงตามคะแนน</option><option value="room">เรียงตามห้อง</option>
+                                                <option value="score">เรียงตามเปอร์เซ็นต์ (%)</option><option value="room">เรียงตามห้อง</option>
                                             </select>
                                             <select value={exportDestination} onChange={e => setExportDestination(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-lg p-2 text-xs font-bold text-gray-600 outline-none hidden md:block">
                                                 <option value="local">💻 โหลดลงเครื่อง</option><option value="drive">☁️ เซฟลง Drive</option>
@@ -2618,6 +2696,7 @@
                                 )}
                                 {currentLeaderboardView.length === 0 ? ( <div className="bg-white p-6 rounded-[2.5rem] mt-4 text-center text-gray-400 font-medium py-16">ยังไม่มีข้อมูล</div> ) : (
                                     <>
+                                        {}
                                         <div className="flex justify-center items-end gap-2 sm:gap-6 px-4 pt-6 pb-6 relative z-10 md:pt-10">
                                             {podiumWinners[1] && ( 
                                                 <div className="flex flex-col items-center flex-1 max-w-[110px] md:max-w-[140px]">
@@ -3263,7 +3342,7 @@
                                                                 >
                                                                     <div className="flex items-center gap-2.5 min-w-0">
                                                                         <img 
-                                                                            src={u.avatar_url || settings?.app_logo_url || HARDCODED_LOGO} 
+                                                                            src={getInspectorAvatar(u.name)} 
                                                                             className="w-6 h-6 rounded-full object-cover border border-gray-200 shrink-0 bg-gray-50"
                                                                             onError={(e) => { e.target.src = settings?.app_logo_url || HARDCODED_LOGO; }}
                                                                         />
