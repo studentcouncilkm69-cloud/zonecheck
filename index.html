@@ -503,7 +503,12 @@
                 const found = validInspectors.find(u => String(u.name).trim() === cleanName);
                 if (found && found.avatar_url) return found.avatar_url;
                 
-                // ดึงจากข้อมูลสำรองใน settings และ localStorage
+                // 1. ดึงจาก Key รายบุคคลใน settings (ป้องกันปัญหาเกิน 50,000 ตัวอักษรต่อช่องใน Google Sheets)
+                if (settings && settings[`avatar_u_${cleanName}`]) {
+                    return settings[`avatar_u_${cleanName}`];
+                }
+
+                // 2. ดึงจากข้อมูลสำรองใน settings และ localStorage
                 const savedMap = safeParse(settings?.inspector_avatars_json, {});
                 if (savedMap && savedMap[cleanName]) return savedMap[cleanName];
                 const localMap = safeParse(safeGetItem('zc26_avatars_map'), {});
@@ -581,16 +586,28 @@
                         const localAvatarMap = safeParse(safeGetItem('zc26_avatars_map'), {});
                         const prevInspectors = Array.isArray(inspectors) ? inspectors : [];
 
+                        // ดึงรูปหน้าจาก Key รายบุคคล (avatar_u_ชื่อ) ในชีตตั้งค่าระบบมารวมด้วย
+                        const perUserSettingsMap = {};
+                        Object.keys(incomingSettings).forEach(k => {
+                            if (k.startsWith('avatar_u_') && incomingSettings[k]) {
+                                const uName = k.replace('avatar_u_', '').trim();
+                                perUserSettingsMap[uName] = incomingSettings[k];
+                            }
+                        });
+
                         // ผสานรูปหน้าจากทุกแหล่ง ไม่ให้ข้อมูลว่างจากเซิร์ฟเวอร์มาทับรูปที่ตั้งไว้หายไป
-                        const mergedAvatarMap = { ...localAvatarMap, ...settingsAvatarMap };
+                        const mergedAvatarMap = { ...localAvatarMap, ...settingsAvatarMap, ...perUserSettingsMap };
                         prevInspectors.forEach(u => {
-                            if (u?.name && u?.avatar_url) mergedAvatarMap[String(u.name).trim()] = u.avatar_url;
+                            if (u?.name && u?.avatar_url) {
+                                const cName = String(u.name).trim();
+                                if (!mergedAvatarMap[cName]) mergedAvatarMap[cName] = u.avatar_url;
+                            }
                         });
 
                         const rawInspectors = Array.isArray(json.inspectors) ? json.inspectors : [];
                         const loadedInspectors = rawInspectors.map(u => {
                             const cleanName = String(u.name || '').trim();
-                            const finalAvatar = u.avatar_url || mergedAvatarMap[cleanName] || '';
+                            const finalAvatar = u.avatar_url || perUserSettingsMap[cleanName] || mergedAvatarMap[cleanName] || '';
                             if (finalAvatar) mergedAvatarMap[cleanName] = finalAvatar;
                             return { ...u, avatar_url: finalAvatar };
                         });
@@ -1906,25 +1923,29 @@
                 const newInspecs = validInspectors.map(u => u.id === editingInspectorAvatar.id ? { ...u, avatar_url: cleanUrl } : u);
                 setInspectors(newInspecs);
 
-                // บันทึกลงแผนที่รูปโปรไฟล์ทั้งใน LocalStorage และใน Settings ของชีตตั้งค่าระบบ (ทำให้ไม่หายแม้ไม่ได้อัปเดต Code.gs)
+                // บันทึกลงแผนที่รูปโปรไฟล์ทั้งใน LocalStorage และแยกเป็น Key รายบุคคลในชีตตั้งค่าระบบ (ไม่เกิน 50,000 ตัวอักษรต่อเซลล์ 100%)
                 const currentMap = { ...safeParse(safeGetItem('zc26_avatars_map'), {}), ...safeParse(settings?.inspector_avatars_json, {}) };
                 if (cleanName) {
-                    currentMap[cleanName] = cleanUrl;
+                    if (cleanUrl) currentMap[cleanName] = cleanUrl;
+                    else delete currentMap[cleanName];
                 }
                 const mapJsonStr = JSON.stringify(currentMap);
                 safeSetItem('zc26_avatars_map', mapJsonStr);
-                setSettings(prev => ({ ...prev, inspector_avatars_json: mapJsonStr }));
+                const perUserKey = `avatar_u_${cleanName}`;
+                setSettings(prev => ({ ...prev, [perUserKey]: cleanUrl, inspector_avatars_json: mapJsonStr }));
 
                 if (currentUser && String(currentUser.name || '').trim() === cleanName) {
                     setCurrentUser(prev => ({ ...prev, avatar_url: cleanUrl }));
                 }
                 setEditingInspectorAvatar(null);
                 try {
-                    await Promise.allSettled([
-                        syncToGASAsync('updateInspectors', newInspecs),
-                        syncToGASAsync('updateSettings', { key: 'inspector_avatars_json', val: mapJsonStr })
-                    ]);
-                    showToast('บันทึกรูปโปรไฟล์ผู้ตรวจสำเร็จ!', 'success');
+                    // ส่งบันทึกแยกเป็นรายคน (perUserKey) ทำให้ Google Sheets บันทึกผ่าน 100% และซิงค์เข้าโทรศัพท์ทุกเครื่องได้ทันที
+                    await syncToGASAsync('updateSettings', { key: perUserKey, val: cleanUrl });
+                    await syncToGASAsync('updateInspectors', newInspecs);
+                    if (mapJsonStr.length < 45000) {
+                        await syncToGASAsync('updateSettings', { key: 'inspector_avatars_json', val: mapJsonStr });
+                    }
+                    showToast('บันทึกรูปโปรไฟล์ผู้ตรวจขึ้นระบบออนไลน์สำเร็จ!', 'success');
                 } catch (e) {
                     showToast('บันทึกรูปโปรไฟล์ลงเครื่องสำเร็จ', 'success');
                 }
@@ -1940,18 +1961,18 @@
                     img.onload = () => {
                         try {
                             const canvas = document.createElement('canvas');
-                            const SIZE = 140;
+                            const SIZE = 96;
                             canvas.width = SIZE;
                             canvas.height = SIZE;
                             const ctx = canvas.getContext('2d');
                             
-                            // ครอปตรงกลางภาพให้เป็นสี่เหลี่ยมจัตุรัสพอดี
+                            // ครอปตรงกลางภาพให้เป็นสี่เหลี่ยมจัตุรัสพอดีและขนาดเบาซิงค์ไว
                             const minDim = Math.min(img.width, img.height);
                             const sx = (img.width - minDim) / 2;
                             const sy = (img.height - minDim) / 2;
                             ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, SIZE, SIZE);
                             
-                            const dataUrl = canvas.toDataURL('image/jpeg', 0.78);
+                            const dataUrl = canvas.toDataURL('image/jpeg', 0.72);
                             setInspectorAvatarUrlInput(dataUrl);
                             showToast('เตรียมรูปโปรไฟล์สำเร็จ กดบันทึกรูปหน้าได้เลย!', 'success');
                         } catch (err) {
@@ -2070,28 +2091,46 @@
                             sortedMonths.forEach(ym => {
                                 const [year, month] = ym.split('-');
                                 const stats = {};
-                                filteredRooms.forEach((r, idx) => { stats[r.id] = { room: r, score: 0, roomScore: 0, zoneScore: 0, originalIndex: idx }; });
+                                filteredRooms.forEach((r, idx) => {
+                                    stats[r.id] = { room: r, score: 0, roomScore: 0, zoneScore: 0, maxRoomScore: 0, maxZoneScore: 0, maxScore: 0, originalIndex: idx };
+                                });
 
-                                const uniqueDaysSet = new Set();
+                                const monthlyDayMap = {};
                                 validInspections.forEach(insp => {
-                                    if(!insp?.date || !insp?.roomId || insp.totalScore === null) return;
+                                    if(!insp?.date || !insp?.roomId || insp.totalScore === null || insp.totalScore === undefined) return;
                                     const d = new Date(insp.date);
                                     if (isNaN(d.getTime())) return;
                                     if(d.getFullYear() === parseInt(year) && (d.getMonth() + 1) === parseInt(month)) {
-                                        uniqueDaysSet.add(insp.date.split('T')[0]);
-                                        if(stats[insp.roomId]) {
-                                            const room = stats[insp.roomId].room;
-                                            if (guestFilterType !== 'all' && insp.type !== guestFilterType) return;
-                                            if (insp.type === 'room') { stats[insp.roomId].score += insp.totalScore; stats[insp.roomId].roomScore += insp.totalScore; }
-                                            if (insp.type === 'zone' && room.hasZone !== false) { stats[insp.roomId].score += insp.totalScore; stats[insp.roomId].zoneScore += insp.totalScore; }
-                                        }
+                                        if (guestFilterType !== 'all' && insp.type !== guestFilterType) return;
+                                        const dateStr = String(insp.date).split('T')[0];
+                                        const key = `${insp.roomId}_${dateStr}`;
+                                        if (!monthlyDayMap[key]) monthlyDayMap[key] = { roomId: insp.roomId, roomInsp: null, zoneInsp: null };
+                                        if (insp.type === 'room') monthlyDayMap[key].roomInsp = insp;
+                                        if (insp.type === 'zone') monthlyDayMap[key].zoneInsp = insp;
                                     }
                                 });
 
-                                const totalDays = uniqueDaysSet.size;
+                                Object.values(monthlyDayMap).forEach(dayRecord => {
+                                    if (!stats[dayRecord.roomId]) return;
+                                    const room = stats[dayRecord.roomId].room;
+                                    if (dayRecord.roomInsp && dayRecord.roomInsp.totalScore !== null) {
+                                        const s = Number(dayRecord.roomInsp.totalScore) || 0;
+                                        stats[dayRecord.roomId].score += s;
+                                        stats[dayRecord.roomId].roomScore += s;
+                                        stats[dayRecord.roomId].maxRoomScore += 10;
+                                        stats[dayRecord.roomId].maxScore += 10;
+                                    }
+                                    if (dayRecord.zoneInsp && dayRecord.zoneInsp.totalScore !== null && room.hasZone !== false) {
+                                        const s = Number(dayRecord.zoneInsp.totalScore) || 0;
+                                        stats[dayRecord.roomId].score += s;
+                                        stats[dayRecord.roomId].zoneScore += s;
+                                        stats[dayRecord.roomId].maxZoneScore += 10;
+                                        stats[dayRecord.roomId].maxScore += 10;
+                                    }
+                                });
+
                                 let data = Object.values(stats).map(item => {
-                                    let max = totalDays * 10;
-                                    if (guestFilterType === 'all') max = totalDays * (item.room.hasZone !== false ? 20 : 10);
+                                    let max = item.maxScore;
                                     let pct = max > 0 ? (item.score / max) * 100 : 0;
                                     let medal = '';
                                     if (pct >= 80) medal = '🥇 ทอง'; else if (pct >= 70) medal = '🥈 เงิน'; else if (pct >= 60) medal = '🥉 ทองแดง';
@@ -2115,10 +2154,18 @@
                                 const formattedDataForMonth = data.map((item, index) => {
                                     let rankDisplay = exportSortOrder === 'score' ? item.trueRank : (index + 1);
                                     let baseObj = { 'ที่': rankDisplay, 'ห้องเรียน': (item.room?.name || 'ไม่ทราบ') };
-                                    if (showCombinedColumns) baseObj = { ...baseObj, 'คะแนนห้อง': item.roomScore, 'คะแนนเขต': item.zoneScore, 'รวมคะแนน': item.score };
-                                    else baseObj = { ...baseObj, 'คะแนน': item.score };
+                                    if (showCombinedColumns) {
+                                        baseObj = {
+                                            ...baseObj,
+                                            'คะแนนห้อง': item.maxRoomScore > 0 ? `${item.roomScore} / ${item.maxRoomScore}` : `${item.roomScore}`,
+                                            'คะแนนเขต': item.room?.hasZone === false ? 'ไม่มีเขต' : (item.maxZoneScore > 0 ? `${item.zoneScore} / ${item.maxZoneScore}` : `${item.zoneScore}`),
+                                            'รวมคะแนน': item.maxScore > 0 ? `${item.score} / ${item.maxScore}` : `${item.score}`
+                                        };
+                                    } else {
+                                        baseObj = { ...baseObj, 'คะแนน': item.maxScore > 0 ? `${item.score} / ${item.maxScore}` : `${item.score}` };
+                                    }
                                     if (appMode !== 'guest') {
-                                        baseObj['ร้อยละ (%)'] = item.percentage;
+                                        baseObj['ร้อยละ (%)'] = `${item.percentage}%`;
                                         baseObj['เกณฑ์ประเมิน'] = item.medal;
                                     }
                                     return baseObj;
@@ -2133,6 +2180,8 @@
                         } else {
                             let dataToExport = mode === 'leaderboard' ? [...currentLeaderboardView] : [...mergedHistoryData];
                             let formattedData = [];
+                            let roomOnlyData = [];
+                            let zoneOnlyData = [];
 
                             if (mode === 'leaderboard') {
                                 const isMonth = leaderboardTab === 'monthly';
@@ -2150,6 +2199,22 @@
                                         baseObj['เกณฑ์ประเมิน'] = item.medal;
                                     }
                                     return baseObj;
+                                });
+
+                                roomOnlyData = dataToExport.map((item, index) => {
+                                    const rPct = item.maxRoomScore > 0 ? ((item.roomScore / item.maxRoomScore) * 100).toFixed(2) : '0.00';
+                                    const rMedal = rPct >= 80 ? '🥇 ทอง' : rPct >= 70 ? '🥈 เงิน' : rPct >= 60 ? '🥉 ทองแดง' : '';
+                                    let obj = { 'ที่': index + 1, 'ห้องเรียน': (item.room?.name || 'ไม่ทราบ'), 'คะแนนห้อง': item.roomScore };
+                                    if (appMode !== 'guest') { obj['ร้อยละ (%)'] = rPct; obj['เกณฑ์ประเมิน'] = rMedal; }
+                                    return obj;
+                                });
+
+                                zoneOnlyData = dataToExport.filter(item => item.room?.hasZone !== false).map((item, index) => {
+                                    const zPct = item.maxZoneScore > 0 ? ((item.zoneScore / item.maxZoneScore) * 100).toFixed(2) : '0.00';
+                                    const zMedal = zPct >= 80 ? '🥇 ทอง' : zPct >= 70 ? '🥈 เงิน' : zPct >= 60 ? '🥉 ทองแดง' : '';
+                                    let obj = { 'ที่': index + 1, 'ห้องเรียน': (item.room?.name || 'ไม่ทราบ'), 'คะแนนเขต': item.zoneScore };
+                                    if (appMode !== 'guest') { obj['ร้อยละ (%)'] = zPct; obj['เกณฑ์ประเมิน'] = zMedal; }
+                                    return obj;
                                 });
                             } else {
                                 const fDateStrFile = dateMode === 'today' ? todayStrFile : formatThaiDateForFile(filterDate);
@@ -2193,6 +2258,24 @@
                                     if (showCombinedColumns) return { 'ที่': exportSortOrder === 'score' ? item.trueRank : (index + 1), 'วันที่': formatDateObj(item.dateStr), 'ห้องเรียน': roomName, 'คะแนนห้อง': rScore, 'คะแนนเขต': zScore, 'รวมคะแนน': totalScore, 'หมายเหตุ': finalComment }; 
                                     else return { 'ที่': exportSortOrder === 'score' ? item.trueRank : (index + 1), 'วันที่': formatDateObj(item.dateStr), 'ห้องเรียน': roomName, 'คะแนน': guestFilterType==='room'?rScore:zScore, 'หมายเหตุ': finalComment };
                                 });
+
+                                roomOnlyData = dataToExport.map((item, index) => ({
+                                    'ที่': index + 1,
+                                    'วันที่': formatDateObj(item.dateStr),
+                                    'ห้องเรียน': item.room ? item.room.name : 'ไม่ระบุ',
+                                    'คะแนนห้อง': item.roomInsp ? (item.roomInsp.totalScore === null ? 'ข้าม' : item.roomInsp.totalScore) : '-',
+                                    'ผู้ตรวจห้อง': item.roomInsp?.inspector || '-',
+                                    'หมายเหตุ': item.roomInsp?.comment || ''
+                                }));
+
+                                zoneOnlyData = dataToExport.filter(item => item.room?.hasZone !== false).map((item, index) => ({
+                                    'ที่': index + 1,
+                                    'วันที่': formatDateObj(item.dateStr),
+                                    'ห้องเรียน': item.room ? item.room.name : 'ไม่ระบุ',
+                                    'คะแนนเขต': item.zoneInsp ? (item.zoneInsp.totalScore === null ? 'ข้าม' : item.zoneInsp.totalScore) : '-',
+                                    'ผู้ตรวจเขต': item.zoneInsp?.inspector || '-',
+                                    'หมายเหตุ': item.zoneInsp?.comment || ''
+                                }));
                             }
 
                             if(formattedData.length === 0) { 
@@ -2210,10 +2293,7 @@
                                 });
                             }
 
-                            if (excelMode === 'single') {
-                                const ws = XLSX.utils.json_to_sheet(formattedData);
-                                XLSX.utils.book_append_sheet(wb, ws, "สรุปผล");
-                            } else if (excelMode === 'grade') {
+                            const appendGradeSheets = () => {
                                 const grades = ['1', '2', '3', '4', '5', '6'];
                                 grades.forEach(g => {
                                     const gradeData = formattedData.filter(row => {
@@ -2230,6 +2310,35 @@
                                      const ws = XLSX.utils.json_to_sheet(otherData);
                                      XLSX.utils.book_append_sheet(wb, ws, "อื่นๆ");
                                 }
+                            };
+
+                            const appendRoomZoneSheets = () => {
+                                if (roomOnlyData.length > 0) {
+                                    const wsRoom = XLSX.utils.json_to_sheet(roomOnlyData);
+                                    XLSX.utils.book_append_sheet(wb, wsRoom, "เฉพาะห้องเรียน");
+                                }
+                                if (zoneOnlyData.length > 0) {
+                                    const wsZone = XLSX.utils.json_to_sheet(zoneOnlyData);
+                                    XLSX.utils.book_append_sheet(wb, wsZone, "เฉพาะเขตพื้นที่");
+                                }
+                            };
+
+                            if (excelMode === 'single') {
+                                const ws = XLSX.utils.json_to_sheet(formattedData);
+                                XLSX.utils.book_append_sheet(wb, ws, "สรุปผล");
+                            } else if (excelMode === 'grade') {
+                                const ws = XLSX.utils.json_to_sheet(formattedData);
+                                XLSX.utils.book_append_sheet(wb, ws, "สรุปผลรวม");
+                                appendGradeSheets();
+                            } else if (excelMode === 'room_zone') {
+                                const ws = XLSX.utils.json_to_sheet(formattedData);
+                                XLSX.utils.book_append_sheet(wb, ws, "สรุปผลรวม");
+                                appendRoomZoneSheets();
+                            } else if (excelMode === 'all_sheets') {
+                                const ws = XLSX.utils.json_to_sheet(formattedData);
+                                XLSX.utils.book_append_sheet(wb, ws, "สรุปผลรวม");
+                                appendRoomZoneSheets();
+                                appendGradeSheets();
                             }
                         }
 
@@ -2420,14 +2529,14 @@
                                     
                                     let totalDisplay = '-';
                                     if (rInsp || zInsp) {
-                                       if (rInsp?.totalScore === null && (!zInsp || zInsp?.totalScore === null)) {
-                                           totalDisplay = 'ข้าม';
-                                       } else {
-                                           let rTotal = hasRoomScore ? Number(rInsp.totalScore) : 0;
-                                           let zTotal = hasZoneScore ? Number(zInsp.totalScore) : 0;
-                                           let maxTotal = (hasRoomScore ? 10 : 0) + (hasZoneScore ? 10 : 0);
-                                           totalDisplay = maxTotal > 0 ? `${rTotal + zTotal} / ${maxTotal}` : '-';
-                                       }
+                                         if (rInsp?.totalScore === null && (!zInsp || zInsp?.totalScore === null)) {
+                                             totalDisplay = 'ข้าม';
+                                         } else {
+                                             let rTotal = hasRoomScore ? Number(rInsp.totalScore) : 0;
+                                             let zTotal = hasZoneScore ? Number(zInsp.totalScore) : 0;
+                                             let maxTotal = (hasRoomScore ? 10 : 0) + (hasZoneScore ? 10 : 0);
+                                             totalDisplay = maxTotal > 0 ? `${rTotal + zTotal} / ${maxTotal}` : '-';
+                                         }
                                     }
                                     if (!rInsp && item.room?.hasZone === false) totalDisplay = '-';
 
@@ -2737,6 +2846,13 @@
                                             <select value={exportSortOrder} onChange={e => setExportSortOrder(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-lg p-2 text-xs font-bold text-gray-600 outline-none">
                                                 <option value="score">เรียงตามเปอร์เซ็นต์ (%)</option><option value="room">เรียงตามห้อง</option>
                                             </select>
+                                            <select value={excelMode} onChange={e => setExcelMode(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-lg p-2 text-xs font-bold text-gray-600 outline-none">
+                                                <option value="single">Excel: รวมชีตเดียว</option>
+                                                <option value="grade">Excel: แยกชีต ม.1-ม.6</option>
+                                                <option value="room_zone">Excel: แยกชีต ห้อง/เขต</option>
+                                                <option value="all_sheets">Excel: รวม + ห้อง/เขต + ม.1-ม.6</option>
+                                                <option value="months">Excel: แยกชีตรายเดือนทั้งหมด</option>
+                                            </select>
                                             <select value={exportDestination} onChange={e => setExportDestination(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-lg p-2 text-xs font-bold text-gray-600 outline-none hidden md:block">
                                                 <option value="local">💻 โหลดลงเครื่อง</option><option value="drive">☁️ เซฟลง Drive</option>
                                             </select>
@@ -2761,7 +2877,6 @@
                                 )}
                                 {currentLeaderboardView.length === 0 ? ( <div className="bg-white p-6 rounded-[2.5rem] mt-4 text-center text-gray-400 font-medium py-16">ยังไม่มีข้อมูล</div> ) : (
                                     <>
-                                        {}
                                         <div className="flex justify-center items-end gap-2 sm:gap-6 px-4 pt-6 pb-6 relative z-10 md:pt-10">
                                             {podiumWinners[1] && ( 
                                                 <div className="flex flex-col items-center flex-1 max-w-[110px] md:max-w-[140px]">
@@ -2907,6 +3022,15 @@
                                             {/* ปุ่มดาวน์โหลด Export History (เฉพาะเจ้าหน้าที่) */}
                                             {appMode !== 'guest' && (
                                                 <div className="mt-6 flex flex-wrap justify-end gap-2 border-t pt-4">
+                                                    <select value={exportSortOrder} onChange={e => setExportSortOrder(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-lg p-2 text-xs font-bold text-gray-600 outline-none">
+                                                        <option value="room">เรียงตามห้อง</option><option value="score">เรียงตามคะแนน</option>
+                                                    </select>
+                                                    <select value={excelMode} onChange={e => setExcelMode(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-lg p-2 text-xs font-bold text-gray-600 outline-none">
+                                                        <option value="single">Excel: รวมชีตเดียว</option>
+                                                        <option value="grade">Excel: แยกชีต ม.1-ม.6</option>
+                                                        <option value="room_zone">Excel: แยกชีต ห้อง/เขต</option>
+                                                        <option value="all_sheets">Excel: รวม + ห้อง/เขต + ม.1-ม.6</option>
+                                                    </select>
                                                     <select value={exportDestination} onChange={e => setExportDestination(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-lg p-2 text-xs font-bold text-gray-600 outline-none hidden md:block">
                                                         <option value="local">💻 โหลดลงเครื่อง</option><option value="drive">☁️ เซฟลง Drive</option>
                                                     </select>
@@ -3016,8 +3140,6 @@
                         {/* --- เส้นทาง: ประเมินผล (Inspect) --- */}
                         {(appMode === 'admin' || appMode === 'inspector') && currentRoute === 'inspect' && (
                              <div className="animate-in fade-in space-y-4 pb-12">
-                                {}
-                                {/* ปุ่มดูแผนผัง + พิมพ์แบบประเมิน + สแกนแบบประเมิน */}
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-2">
                                     <button onClick={() => setShowRoomMap(true)} className="bg-white border border-blue-200 text-blue-600 font-bold py-3.5 px-3 rounded-2xl flex items-center justify-center gap-2 shadow-sm hover:bg-blue-50 active:scale-95 transition-all text-xs sm:text-sm">
                                         <i className="ph ph-buildings text-lg"></i> แผนผังห้องเรียน
@@ -3033,7 +3155,6 @@
                                     </button>
                                 </div>
 
-                                {/* ปุ่มใหญ่ตรวจรวดเดียว (กรณีฉุกเฉิน) */}
                                 <button onClick={() => setBatchModal({ isOpen: true, type: 'room', isSkipped: false, roomScores: { c1: 2, c2: 2, c3: 2, c4: 2, c5: 2, noDuty: false }, zoneScore: 10, gradeFilter: 'all', comment: '' })} className="w-full bg-gradient-to-r from-[#C8102E] via-rose-600 to-amber-600 text-white p-4 rounded-2xl shadow-lg shadow-red-500/20 flex items-center justify-between hover:opacity-95 active:scale-[0.99] transition-all">
                                     <div className="flex items-center gap-3 text-left">
                                         <div className="w-11 h-11 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center shrink-0">
@@ -3122,7 +3243,6 @@
                              <div className="animate-in fade-in space-y-6 pb-12 lg:grid lg:grid-cols-2 lg:gap-6 lg:space-y-0">
                                 <div className="col-span-full mb-2 px-2"><h1 className="text-2xl font-black text-gray-800 flex items-center gap-2"><i className="ph ph-gear text-gray-500"></i> ตั้งค่าระบบ (แอดมิน)</h1></div>
                                 
-                                {}
                                 <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 col-span-full">
                                    <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2 text-sm"><i className="ph ph-image text-[#C8102E]"></i> ตั้งค่ารูปภาพและประกาศ</h3>
                                    <div className="space-y-4">
@@ -3191,7 +3311,6 @@
                                    </div>
                                 </div>
 
-                                {}
                                 <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 flex flex-col">
                                    <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2 text-sm"><i className="ph ph-buildings text-blue-600"></i> จัดการห้องเรียน ({rooms.length})</h3>
                                    <div className="space-y-3 mb-4">
@@ -3200,15 +3319,15 @@
                                    </div>
                                    <div className="max-h-64 overflow-y-auto custom-scrollbar divide-y divide-gray-100 border border-gray-100 rounded-xl p-2">
                                       {rooms.map((r, idx) => (
-                                         <div key={r.id} className="py-2 px-2 flex items-center justify-between text-xs">
-                                            <span className="font-bold text-gray-700">{r.name}</span>
-                                            <div className="flex items-center gap-1.5">
-                                               <button onClick={()=>toggleRoomZone(r.id, r.name, r.hasZone)} className={`px-2 py-1 rounded-md font-bold text-[10px] ${r.hasZone !== false ? 'bg-fuchsia-50 text-fuchsia-700 border border-fuchsia-200' : 'bg-gray-100 text-gray-400'}`}>{r.hasZone !== false ? 'มีเขต' : 'ไม่มีเขต'}</button>
-                                               <button onClick={()=>moveRoomUp(idx)} className="p-1 text-gray-400 hover:text-gray-700"><i className="ph ph-caret-up"></i></button>
-                                               <button onClick={()=>moveRoomDown(idx)} className="p-1 text-gray-400 hover:text-gray-700"><i className="ph ph-caret-down"></i></button>
-                                               <button onClick={()=>handleDeleteRoom(r.id)} className="p-1 text-red-400 hover:text-red-600"><i className="ph ph-trash"></i></button>
-                                            </div>
-                                         </div>
+                                          <div key={r.id} className="py-2 px-2 flex items-center justify-between text-xs">
+                                             <span className="font-bold text-gray-700">{r.name}</span>
+                                             <div className="flex items-center gap-1.5">
+                                                <button onClick={()=>toggleRoomZone(r.id, r.name, r.hasZone)} className={`px-2 py-1 rounded-md font-bold text-[10px] ${r.hasZone !== false ? 'bg-fuchsia-50 text-fuchsia-700 border border-fuchsia-200' : 'bg-gray-100 text-gray-400'}`}>{r.hasZone !== false ? 'มีเขต' : 'ไม่มีเขต'}</button>
+                                                <button onClick={()=>moveRoomUp(idx)} className="p-1 text-gray-400 hover:text-gray-700"><i className="ph ph-caret-up"></i></button>
+                                                <button onClick={()=>moveRoomDown(idx)} className="p-1 text-gray-400 hover:text-gray-700"><i className="ph ph-caret-down"></i></button>
+                                                <button onClick={()=>handleDeleteRoom(r.id)} className="p-1 text-red-400 hover:text-red-600"><i className="ph ph-trash"></i></button>
+                                             </div>
+                                          </div>
                                       ))}
                                    </div>
                                 </div>
@@ -3221,30 +3340,29 @@
                                    </div>
                                    <div className="max-h-72 overflow-y-auto custom-scrollbar divide-y divide-gray-100 border border-gray-100 rounded-xl p-2">
                                       {inspectors.map(u => (
-                                         <div key={u.id} className="py-2 px-2 flex items-center justify-between text-xs gap-2">
-                                            <div className="flex items-center gap-2.5 min-w-0">
-                                                <img 
-                                                    src={u.avatar_url || settings?.app_logo_url || HARDCODED_LOGO} 
-                                                    className="w-8 h-8 rounded-full object-cover border border-gray-200 shrink-0 bg-gray-50"
-                                                    onError={(e) => { e.target.src = settings?.app_logo_url || HARDCODED_LOGO; }}
-                                                />
-                                                <span className="font-bold text-gray-700 truncate">{u.name}</span>
-                                            </div>
-                                            <div className="flex items-center gap-1 shrink-0">
-                                                <button 
-                                                    onClick={() => { setEditingInspectorAvatar(u); setInspectorAvatarUrlInput(u.avatar_url || ''); }} 
-                                                    className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 font-bold text-[10px] flex items-center gap-1"
-                                                >
-                                                    <i className="ph ph-user-circle-gear text-sm"></i> รูปหน้า
-                                                </button>
-                                                <button onClick={()=>handleDeleteInspector(u.id)} className="p-1.5 text-red-400 hover:text-red-600"><i className="ph ph-trash"></i></button>
-                                            </div>
-                                         </div>
+                                          <div key={u.id} className="py-2 px-2 flex items-center justify-between text-xs gap-2">
+                                             <div className="flex items-center gap-2.5 min-w-0">
+                                                 <img 
+                                                     src={u.avatar_url || settings?.app_logo_url || HARDCODED_LOGO} 
+                                                     className="w-8 h-8 rounded-full object-cover border border-gray-200 shrink-0 bg-gray-50"
+                                                     onError={(e) => { e.target.src = settings?.app_logo_url || HARDCODED_LOGO; }}
+                                                 />
+                                                 <span className="font-bold text-gray-700 truncate">{u.name}</span>
+                                             </div>
+                                             <div className="flex items-center gap-1 shrink-0">
+                                                 <button 
+                                                     onClick={() => { setEditingInspectorAvatar(u); setInspectorAvatarUrlInput(u.avatar_url || ''); }} 
+                                                     className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 font-bold text-[10px] flex items-center gap-1"
+                                                 >
+                                                     <i className="ph ph-user-circle-gear text-sm"></i> รูปหน้า
+                                                 </button>
+                                                 <button onClick={()=>handleDeleteInspector(u.id)} className="p-1.5 text-red-400 hover:text-red-600"><i className="ph ph-trash"></i></button>
+                                             </div>
+                                          </div>
                                       ))}
                                    </div>
                                 </div>
 
-                                {}
                                 <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 col-span-full">
                                    <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2 text-sm"><i className="ph ph-shield-check text-amber-600"></i> รหัสผ่านและโหมดปิดปรับปรุง</h3>
                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
@@ -3268,7 +3386,8 @@
                         )}
                     </main>
 
-                    {/* Login Modal (พร้อมปุ่มบวกเพิ่มเพื่อนร่วมทีม และค้นหาติ๊กเลือกหลายคน) */}
+                    {}
+                    {/* Login Modal */}
                     {isLoginModalOpen && (
                         <div className="fixed inset-0 z-[9999] bg-gray-900/50 backdrop-blur-md flex items-start sm:items-center justify-center p-4 pt-10 sm:pt-4 overflow-y-auto animate-in fade-in zoom-in duration-200">
                             <div className="bg-white w-full max-w-sm rounded-[2.25rem] p-7 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.25)] border border-gray-100 relative max-h-[88vh] overflow-y-auto custom-scrollbar my-auto">
@@ -3282,7 +3401,6 @@
 
                                 <form onSubmit={handleLoginSubmit} autoComplete="off">
                                     <div className="space-y-3.5 mt-5">
-                                        {/* ช่องเลือกชื่อผู้ตรวจหลัก */}
                                         <div className="relative">
                                             <div className="relative flex items-center">
                                                 <i className="ph ph-user text-gray-400 absolute left-4 text-lg pointer-events-none"></i>
@@ -3341,9 +3459,7 @@
                                             )}
                                         </div>
 
-                                        {/* ส่วนเพิ่มเพื่อน (ปุ่มบวกด้านล่าง + ค้นหาและติ๊กเลือกได้หลายคน) */}
                                         <div className="space-y-2">
-                                            {/* แสดงรายชื่อเพื่อนที่ติ๊กเลือกไว้แล้ว */}
                                             {coInspectors.length > 0 && (
                                                 <div className="bg-red-50/60 border border-red-100 rounded-2xl p-3 space-y-2">
                                                     <div className="flex items-center justify-between">
@@ -3365,7 +3481,6 @@
                                                 </div>
                                             )}
 
-                                            {/* ปุ่มกด + เพิ่มเพื่อน */}
                                             <button 
                                                 type="button" 
                                                 onClick={() => setShowCoInspectorPicker(!showCoInspectorPicker)} 
@@ -3377,7 +3492,6 @@
                                                 <span>{showCoInspectorPicker ? 'ซ่อนรายชื่อเพื่อน' : 'เพิ่มเพื่อนที่เดินตรวจด้วยกัน (ถ้ามี)'}</span>
                                             </button>
 
-                                            {/* กล่องค้นหาและติ๊กเลือกเพื่อนหลายคน */}
                                             {showCoInspectorPicker && (
                                                 <div className="bg-gray-50 p-3 rounded-2xl border border-gray-200 space-y-2.5 animate-in fade-in">
                                                     <div className="relative flex items-center">
@@ -3445,7 +3559,6 @@
                                             )}
                                         </div>
 
-                                        {/* ช่องรหัสผ่าน ขนาดพอดีสวยงาม เริ่มต้นปิดซ่อนเป็นจุดเสมอ */}
                                         <div className="relative flex items-center">
                                             <input 
                                                 type="text" 
@@ -3458,7 +3571,7 @@
                                                 value={inputPasscode} 
                                                 onChange={(e) => setInputPasscode(e.target.value)} 
                                                 style={!showPasscode && inputPasscode ? { WebkitTextSecurity: 'disc', textSecurity: 'disc' } : {}}
-                                                className={`w-full py-3.5 px-11 rounded-2xl border border-gray-200 bg-gray-50/80 focus:bg-white focus:outline-none focus:border-[#C8102E] text-center font-bold text-gray-800 placeholder:text-gray-400 placeholder:text-sm placeholder: font-medium placeholder:tracking-normal transition-all ${showPasscode ? 'text-base tracking-wide' : (inputPasscode ? 'masked-pin-input text-lg tracking-[0.18em]' : 'text-sm tracking-normal')}`} 
+                                                className={`w-full py-3.5 px-11 rounded-2xl border border-gray-200 bg-gray-50/80 focus:bg-white focus:outline-none focus:border-[#C8102E] text-center font-bold text-gray-800 placeholder:text-gray-400 placeholder:text-sm placeholder:font-medium placeholder:tracking-normal transition-all ${showPasscode ? 'text-base tracking-wide' : (inputPasscode ? 'masked-pin-input text-lg tracking-[0.18em]' : 'text-sm tracking-normal')}`} 
                                             />
                                             <button 
                                                 type="button" 
@@ -3485,7 +3598,7 @@
                         </div>
                     )}
 
-                    {/* Batch Inspect Modal (หน้าต่างปุ่มใหญ่ ตรวจรวดเดียว กรณีฉุกเฉิน ใช้ปุ่มเหมือนหน้าตรวจจริง 100%) */}
+                    {/* Batch Inspect Modal */}
                     {batchModal.isOpen && (
                         <div className="fixed inset-0 z-[9995] bg-gray-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
                             <div className="bg-white rounded-[2rem] w-full max-w-md p-5 relative shadow-2xl animate-in zoom-in-95 flex flex-col max-h-[92vh]">
@@ -3529,7 +3642,6 @@
                                     <div>
                                         <label className="text-xs font-bold text-gray-700 mb-2 block">3. เลือกคะแนนการตรวจ (ใช้เกณฑ์เดียวกับหน้าตรวจจริง)</label>
                                         
-                                        {/* ปุ่มข้ามการตรวจ */}
                                         <div onClick={handleToggleBatchSkip} className={`flex items-center justify-between p-3.5 rounded-xl border-2 transition-all cursor-pointer select-none mb-3 ${batchModal.isSkipped ? 'border-gray-400 bg-gray-100 shadow-sm' : 'border-gray-100 bg-white hover:bg-gray-50'}`}>
                                             <div className="flex flex-col">
                                                 <span className={`font-bold text-sm ${batchModal.isSkipped ? 'text-gray-700' : 'text-gray-500'}`}>ข้ามการตรวจ (ไม่มีคะแนน)</span>
@@ -3538,7 +3650,6 @@
                                             <div className={`w-6 h-6 rounded-full flex items-center justify-center transition-colors border-2 ${batchModal.isSkipped ? 'bg-gray-500 border-gray-500 text-white' : 'bg-transparent border-gray-300 text-transparent'}`}><i className="ph ph-check-circle text-sm ph-fill"></i></div>
                                         </div>
 
-                                        {/* รายการปุ่มให้คะแนนเหมือนหน้าตรวจจริงทุกประการ */}
                                         <div className={`transition-all duration-300 ${batchModal.isSkipped ? 'opacity-30 pointer-events-none grayscale' : 'opacity-100'}`}>
                                             {batchModal.type === 'room' ? (
                                                 <>
@@ -3672,7 +3783,7 @@
                         </div>
                     )}
 
-                    {/* Inspect Modal (ไม่มีรายชื่อเพื่อนกวนใจ เปลี่ยนเป็น ไม่ปฏิบัติหน้าที่ เรียบร้อย) */}
+                    {/* Inspect Modal */}
                     {inspectModal.isOpen && inspectModal.room && (
                         <div className="fixed inset-0 z-[9995] bg-gray-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
                             <div className="bg-white rounded-[1.5rem] w-full max-w-md p-5 relative shadow-2xl animate-in zoom-in-95 flex flex-col max-h-[95vh]">
@@ -3785,13 +3896,12 @@
                                     <img src={inspectorAvatarUrlInput || settings?.app_logo_url || HARDCODED_LOGO} className="w-full h-full object-cover" onError={(e) => { e.target.src = settings?.app_logo_url || HARDCODED_LOGO; }} />
                                 </div>
                                 <div className="space-y-3">
-                                    <label className="w-full py-2.5 px-4 rounded-xl bg-blue-50 text-blue-600 border border-blue-200 font-bold text-xs flex items-center justify-center gap-2 cursor-pointer hover:bg-blue-100 transition-colors">
-                                        <i className="ph ph-upload-simple text-base"></i> {isUploadingAvatar ? 'กำลังเตรียมรูปภาพ...' : 'เลือกรูปจากเครื่อง'}
-                                        <input type="file" accept="image/*" onChange={handleUploadInspectorAvatarFile} className="hidden" />
-                                    </label>
-                                    <input type="text" value={inspectorAvatarUrlInput} onChange={e => setInspectorAvatarUrlInput(e.target.value)} placeholder="หรือวางลิงก์รูปภาพ (URL)..." className="w-full p-2.5 rounded-xl border border-gray-200 bg-gray-50 text-xs font-medium outline-none focus:border-[#C8102E]" />
+                                    <div>
+                                        <label className="text-[10px] font-bold text-gray-500 mb-1 block">ลิงก์รูปภาพโดยตรง (Direct Image URL เช่น Postimages)</label>
+                                        <input type="text" value={inspectorAvatarUrlInput} onChange={e => setInspectorAvatarUrlInput(e.target.value)} placeholder="วางลิงก์รูปภาพ https://i.postimg.cc/..." className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-xs font-medium outline-none focus:border-[#C8102E]" />
+                                    </div>
                                     <div className="flex gap-2 pt-2">
-                                        <button onClick={() => setInspectorAvatarUrlInput('')} className="px-4 py-2.5 rounded-xl bg-gray-100 text-gray-600 font-bold text-xs hover:bg-gray-200">ล้างรูป</button>
+                                        <button onClick={() => setInspectorAvatarUrlInput('')} className="px-4 py-2.5 rounded-xl bg-gray-100 text-gray-600 font-bold text-xs hover:bg-gray-200">ล้างลิงก์</button>
                                         <button onClick={handleSaveInspectorAvatar} className="flex-1 py-2.5 rounded-xl bg-[#C8102E] text-white font-bold text-xs shadow-md hover:bg-red-800">บันทึกรูปหน้า</button>
                                     </div>
                                 </div>
@@ -3799,7 +3909,7 @@
                         </div>
                     )}
 
-                    {/* Modal แสดงตัวอย่างไฟล์ที่ส่งออกในแอป (ป้องกันการเด้งหลุดออกจากแอปบน iPad/iPhone) */}
+                    {/* Modal แสดงตัวอย่างไฟล์ที่ส่งออกในแอป */}
                     {exportedFilePreview && (
                         <div className="fixed inset-0 z-[99997] bg-gray-900/85 backdrop-blur-md flex flex-col items-center justify-center p-4 animate-in fade-in">
                             <div className="bg-white rounded-[2rem] w-full max-w-4xl p-5 shadow-2xl flex flex-col max-h-[90vh]">
@@ -4079,7 +4189,6 @@
                         </div>
                     )}
 
-                    {}
                     {/* Bottom Nav สำหรับ Mobile และ iPad แนวตั้ง */}
                     <div className="lg:hidden fixed bottom-0 w-full z-50">
                         <div className="absolute inset-0 bg-white/95 backdrop-blur-xl border-t border-gray-200 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]"></div>
@@ -4093,7 +4202,6 @@
                                 <span className="text-[10px] font-bold">อันดับ</span>
                             </button>
 
-                            {/* ปุ่มประเมินสีแดงกลมตรงกลาง (เฉพาะตอนล็อกอินแล้ว) */}
                             {(appMode === 'admin' || appMode === 'inspector') && (
                                 <button onClick={() => setCurrentRoute('inspect')} className="flex flex-col items-center justify-center flex-1 py-1">
                                     <div className={`w-11 h-11 rounded-full flex items-center justify-center shadow-md transition-transform active:scale-95 ${currentRoute === 'inspect' ? 'bg-[#C8102E] text-white ring-4 ring-red-100' : 'bg-[#C8102E] text-white'}`}>
