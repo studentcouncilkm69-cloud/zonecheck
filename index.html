@@ -239,6 +239,7 @@
             const [showCoInspectorPicker, setShowCoInspectorPicker] = useState(false);
             const [coInspectorSearch, setCoInspectorSearch] = useState('');
             const [loginError, setLoginError] = useState('');
+            const [showPasscode, setShowPasscode] = useState(false);
             const [currentUser, setCurrentUser] = useState(null);
             const [showLoginSuggestions, setShowLoginSuggestions] = useState(false);
 
@@ -490,12 +491,16 @@
 
             const handleSync = async () => {
                 setIsSyncing(true);
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 5000);
                 try {
                     const response = await fetch(`${GOOGLE_SCRIPT_URL}?action=getInitialData&_t=${Date.now()}`, {
                         method: 'GET',
                         redirect: 'follow',
-                        headers: { 'Accept': 'application/json' }
+                        headers: { 'Accept': 'application/json' },
+                        signal: controller.signal
                     });
+                    clearTimeout(timeoutId);
                     const textData = await response.text();
                     let json = null;
                     try {
@@ -518,12 +523,17 @@
                 } catch (err) {
                     if (!showSplash) showToast('เชื่อมต่อฐานข้อมูลล้มเหลว กรุณาตรวจสอบลิงก์หรืออินเทอร์เน็ต', 'error');
                 } finally {
+                    clearTimeout(timeoutId);
                     setIsSyncing(false);
-                    setTimeout(() => setShowSplash(false), 600);
+                    setShowSplash(false);
                 }
             };
 
-            useEffect(() => { handleSync(); }, []);
+            useEffect(() => { 
+                handleSync(); 
+                const splashSafetyTimer = setTimeout(() => setShowSplash(false), 1200);
+                return () => clearTimeout(splashSafetyTimer);
+            }, []);
 
             useEffect(() => {
                 try {
@@ -1752,9 +1762,8 @@
                         <div className="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] bg-gray-500 rounded-full mix-blend-screen filter blur-[100px] opacity-20 animate-blob animation-delay-2000"></div>
 
                         <div className="bg-white/10 backdrop-blur-xl w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl relative z-10 border border-white/20 text-center animate-in zoom-in-95">
-                            <div className={`relative w-24 h-24 bg-gradient-to-br from-red-500 to-[#C8102E] rounded-[2rem] mx-auto flex items-center justify-center mb-6 shadow-lg shadow-red-500/50 transform rotate-3 transition-transform duration-150 ${logoTaps > 0 ? 'scale-90' : 'scale-100'}`} onClick={handleLogoClick}>
+                            <div className="relative w-24 h-24 bg-gradient-to-br from-red-500 to-[#C8102E] rounded-[2rem] mx-auto flex items-center justify-center mb-6 shadow-lg shadow-red-500/50 transform rotate-3 cursor-pointer select-none" onClick={handleLogoClick}>
                                 <i className="ph ph-wrench text-white text-5xl -rotate-3"></i>
-                                {logoTaps > 0 && <div className="absolute -bottom-2 -right-2 bg-gray-800 text-white text-xs px-2 py-0.5 rounded-md font-bold shadow-sm z-50 pointer-events-none rotate-3">{logoTaps}/5</div>}
                             </div>
                             <h1 className="text-3xl font-black text-white mb-4 tracking-tight">ปิดปรับปรุงระบบ</h1>
                             <p className="text-white/80 font-medium text-sm leading-relaxed whitespace-pre-line bg-black/20 p-4 rounded-xl border border-white/10">
@@ -1817,11 +1826,6 @@
                                 <div className="w-[42px] h-[42px] rounded-full flex items-center justify-center shadow-sm flex-shrink-0 overflow-hidden bg-white border border-gray-200">
                                     <img src={settings?.app_logo_url || HARDCODED_LOGO} className="w-full h-full object-cover" crossOrigin="anonymous"/>
                                 </div>
-                                {logoTaps > 0 && appMode === 'guest' && (
-                                    <div className="absolute -bottom-2 left-[21px] transform -translate-x-1/2 bg-gray-800 text-white text-[10px] px-1.5 py-0.5 rounded-md shadow-sm z-50 pointer-events-none font-bold">
-                                        {logoTaps}/5
-                                    </div>
-                                )}
                                 <div className="flex flex-col flex-1 min-w-0 justify-center">
                                     <span className="font-black text-[15px] text-gray-800 tracking-tight leading-tight truncate">ZoneCheck V2.1</span>
                                     <span className="text-[9px] text-gray-400 font-bold leading-none truncate mt-0.5 tracking-wider">{HARDCODED_NAME}</span>
@@ -2543,7 +2547,7 @@
                                                 <div className={`w-5 h-5 rounded-full flex items-center justify-center ${showCoInspectorPicker ? 'bg-[#C8102E] text-white' : 'bg-gray-200 text-gray-600'}`}>
                                                     <i className={`ph ${showCoInspectorPicker ? 'ph-minus' : 'ph-plus'} text-xs font-bold`}></i>
                                                 </div>
-                                                <span>{showCoInspectorPicker ? 'ซ่อนรายชื่อเพื่อน' : 'เพิ่มเพื่อนที่เดินตรวจด้วยกัน'}</span>
+                                                <span>{showCoInspectorPicker ? 'ซ่อนรายชื่อเพื่อน' : 'เพิ่มเพื่อนที่เดินตรวจด้วยกัน (ถ้ามี)'}</span>
                                             </button>
 
                                             {/* กล่องค้นหาและติ๊กเลือกเพื่อนหลายคน */}
@@ -2597,7 +2601,7 @@
                                                                         }}
                                                                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#C8102E] text-white text-xs font-bold shadow-sm"
                                                                     >
-                                                                        <i className="ph ph-plus-circle"></i> เพิ่ม "{coInspectorSearch.trim()}" เป็นเพื่อน
+                                                                        <i className="ph ph-plus-circle"></i> เพิ่ม "{coInspectorSearch.trim()}"
                                                                     </button>
                                                                 )}
                                                             </div>
@@ -2607,16 +2611,25 @@
                                             )}
                                         </div>
 
-                                        {/* ช่องรหัสผ่าน แสดงจุด 8 จุด */}
-                                        <div>
+                                        {}
+                                        {/* ช่องรหัสผ่าน แสดงจุด 8 จุดขนาดใหญ่ชัดเจน (แป้นพิมพ์ปกติ กรอกอะไรก็ได้) */}
+                                        <div className="relative flex items-center">
                                             <input 
-                                                type="password" 
-                                                inputMode="numeric"
+                                                type={showPasscode ? "text" : "password"} 
+                                                inputMode="text"
                                                 placeholder="••••••••" 
                                                 value={inputPasscode} 
                                                 onChange={(e) => setInputPasscode(e.target.value)} 
-                                                className="w-full py-3.5 px-4 rounded-2xl border border-gray-200 bg-gray-50/80 focus:bg-white focus:outline-none focus:border-[#C8102E] text-center text-lg font-black tracking-[0.35em] text-gray-800 placeholder:text-gray-400 placeholder:tracking-[0.25em] transition-all" 
+                                                className={`w-full py-3.5 px-11 rounded-2xl border border-gray-200 bg-gray-50/80 focus:bg-white focus:outline-none focus:border-[#C8102E] text-center font-black text-gray-800 placeholder:text-gray-400 placeholder:text-2xl placeholder:tracking-[0.35em] transition-all ${showPasscode ? 'text-base tracking-normal' : 'text-2xl tracking-[0.35em]'}`} 
                                             />
+                                            <button 
+                                                type="button" 
+                                                onClick={() => setShowPasscode(!showPasscode)} 
+                                                className="absolute right-3.5 w-8 h-8 rounded-full text-gray-400 hover:text-gray-600 flex items-center justify-center transition-colors"
+                                                tabIndex="-1"
+                                            >
+                                                <i className={`ph ${showPasscode ? 'ph-eye-slash' : 'ph-eye'} text-lg`}></i>
+                                            </button>
                                         </div>
 
                                         {loginError && (
