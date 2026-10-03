@@ -85,26 +85,26 @@
             height: 793px !important;
             max-width: 1122px !important;
             max-height: 793px !important;
-            padding: 14px 20px !important;
+            padding: 20px 38px !important;
             margin: 0 auto !important;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
             overflow: hidden;
         }
-        .omr-table { width: 100%; border-collapse: collapse; font-size: 9.5px; border: 1.5px solid #111827; table-layout: fixed; }
-        .omr-table th { background-color: #f3f4f6 !important; color: #111827 !important; padding: 3px 1px; border: 1px solid #374151; font-weight: 700; text-align: center; vertical-align: middle; line-height: 1.1; white-space: nowrap; }
-        .omr-table td { padding: 1.5px 1px; border: 1px solid #9ca3af; text-align: center; vertical-align: middle; color: #111827; height: 18px; }
+        .omr-table { width: 100%; border-collapse: collapse; font-size: 9px; border: 1.5px solid #111827; table-layout: fixed; }
+        .omr-table th { background-color: #f3f4f6 !important; color: #111827 !important; padding: 2.5px 1px; border: 1px solid #374151; font-weight: 700; text-align: center; vertical-align: middle; line-height: 1.1; white-space: nowrap; }
+        .omr-table td { padding: 1px 0.5px; border: 1px solid #9ca3af; text-align: center; vertical-align: middle; color: #111827; height: 17px; }
         .omr-table tr:nth-child(even) td { background-color: #f8fafc !important; }
         .omr-bubble {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 14px;
-            height: 14px;
-            border: 1.3px solid #374151;
+            width: 13px;
+            height: 13px;
+            border: 1.2px solid #374151;
             border-radius: 9999px;
-            font-size: 8px;
+            font-size: 7.5px;
             font-weight: 700;
             color: #1f2937;
             background: #ffffff;
@@ -112,8 +112,8 @@
             margin: 0 auto;
         }
         .omr-corner-mark {
-            width: 14px;
-            height: 14px;
+            width: 13px;
+            height: 13px;
             background-color: #111827;
             border: 2px solid #111827;
         }
@@ -3391,24 +3391,24 @@
                                                 {/* ส่วนหัวแบบประเมิน (ภาษาไทยล้วน ไม่มีคำว่ากระดาษคำตอบภาคสนาม) */}
                                                 <div className="border-2 border-gray-900 rounded-lg px-3.5 py-2 mb-2 flex items-center justify-between gap-4 bg-white">
                                                     <div className="flex items-center gap-3">
-                                                        <img src={settings?.school_logo_url || settings?.app_logo_url || HARDCODED_LOGO} className="w-12 h-12 object-contain" crossOrigin="anonymous" />
+                                                        <img src={settings?.school_logo_url || settings?.app_logo_url || HARDCODED_LOGO} className="w-11 h-11 object-contain" crossOrigin="anonymous" />
                                                         <div>
-                                                            <h1 className="text-base font-bold text-gray-900 leading-tight">แบบประเมินความเรียบร้อยห้องเรียนและเขตพื้นที่รับผิดชอบ</h1>
+                                                            <h1 className="text-base font-bold text-gray-900 leading-tight">แบบประเมินความสะอาดเรียบร้อย</h1>
                                                             <p className="text-xs font-semibold text-gray-700">สภานักเรียนโรงเรียนคำม่วง อำเภอคำม่วง จังหวัดกาฬสินธุ์</p>
-                                                            <p className="text-[11px] text-gray-600 mt-0.5"><b>คำชี้แจง:</b> ระบายทึบ ● ลงในวงกลม ○ ตามหัวข้อที่ผ่านเกณฑ์ (หมวดห้องเรียน) หรือระดับคะแนนที่ประเมินได้ (หมวดเขตพื้นที่)</p>
+                                                            <p className="text-[10.5px] text-gray-600 mt-0.5"><b>คำชี้แจง:</b> ระบายทึบ ● ลงในวงกลม ○ ตามหัวข้อที่ผ่านเกณฑ์ (หมวดห้องเรียน) หรือระดับคะแนนที่ประเมินได้ (หมวดเขตพื้นที่)</p>
                                                         </div>
                                                     </div>
-                                                    <div className="text-right text-xs space-y-1 shrink-0 bg-gray-50 px-3 py-1.5 rounded-md border border-gray-300 min-w-[225px]">
+                                                    <div className="text-right text-xs space-y-1 shrink-0 bg-gray-50 px-3 py-1.5 rounded-md border border-gray-300 min-w-[215px]">
                                                         <div className="flex items-center justify-between gap-2">
                                                             <span className="font-bold text-gray-700">ประจำวันที่:</span>
-                                                            <span className="font-bold text-gray-900 border-b border-dotted border-gray-500 min-w-[130px] text-center inline-block">
-                                                                {paperIncludeDate ? formatDateObj(filterDate) : '............................................'}
+                                                            <span className="font-bold text-gray-900 border-b border-dotted border-gray-500 min-w-[125px] text-center inline-block">
+                                                                {paperIncludeDate ? formatDateObj(filterDate) : '..........................................'}
                                                             </span>
                                                         </div>
                                                         <div className="flex items-center justify-between gap-2">
                                                             <span className="font-bold text-gray-700">คณะผู้ตรวจ:</span>
-                                                            <span className="font-bold text-gray-900 border-b border-dotted border-gray-500 min-w-[130px] text-center inline-block truncate max-w-[160px]">
-                                                                {paperIncludeInspector ? getActiveInspectorTeamString() : '............................................'}
+                                                            <span className="font-bold text-gray-900 border-b border-dotted border-gray-500 min-w-[125px] text-center inline-block truncate max-w-[155px]">
+                                                                {paperIncludeInspector ? getActiveInspectorTeamString() : '..........................................'}
                                                             </span>
                                                         </div>
                                                     </div>
@@ -3416,23 +3416,23 @@
                                             </div>
 
                                             {/* ตารางกระดาษคำตอบ แบ่ง 2 ฝั่ง ซ้าย-ขวา พอดีแผ่นเดียว */}
-                                            <div className="grid grid-cols-2 gap-3 flex-1 items-start">
+                                            <div className="grid grid-cols-2 gap-2.5 flex-1 items-start w-full">
                                                 {[paperSheetSplitColumns.left, paperSheetSplitColumns.right].map((colItems, colIdx) => (
                                                     <table key={colIdx} className="omr-table">
                                                         <colgroup>
                                                             <col style={{width: '5.5%'}} />
-                                                            <col style={{width: '15.5%'}} />
+                                                            <col style={{width: '13.5%'}} />
                                                             <col style={{width: '6%'}} />
                                                             <col style={{width: '6%'}} />
                                                             <col style={{width: '6%'}} />
-                                                            <col style={{width: '6%'}} />
-                                                            <col style={{width: '6.5%'}} />
-                                                            <col style={{width: '6%'}} />
-                                                            <col style={{width: '5.5%'}} />
-                                                            <col style={{width: '6.5%'}} />
-                                                            <col style={{width: '5.5%'}} />
                                                             <col style={{width: '6%'}} />
                                                             <col style={{width: '7%'}} />
+                                                            <col style={{width: '6%'}} />
+                                                            <col style={{width: '5.5%'}} />
+                                                            <col style={{width: '7%'}} />
+                                                            <col style={{width: '5.5%'}} />
+                                                            <col style={{width: '6.5%'}} />
+                                                            <col style={{width: '7.5%'}} />
                                                             <col style={{width: '6%'}} />
                                                             <col style={{width: '6%'}} />
                                                         </colgroup>
