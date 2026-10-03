@@ -102,11 +102,11 @@
             justify-content: center;
             width: 13px;
             height: 13px;
-            border: 1.2px solid #374151;
+            border: 1.2px solid #4b5563;
             border-radius: 9999px;
             font-size: 7.5px;
-            font-weight: 700;
-            color: #1f2937;
+            font-weight: 600;
+            color: #9ca3af;
             background: #ffffff;
             line-height: 1;
             margin: 0 auto;
@@ -330,9 +330,12 @@
                 isOpen: false,
                 isScanning: false,
                 imagePreview: null,
+                annotatedPreview: null,
+                sensitivity: 50,
                 results: []
             });
             const omrFileInputRef = useRef(null);
+            const omrRawImageRef = useRef(null);
 
             // Admin Settings Inputs
             const [bulkRooms, setBulkRooms] = useState('');
@@ -1196,78 +1199,20 @@
                     
                     let status = 'none'; 
                     if (!isFuture) {
-                        if (checkedRooms.size >= totalRequiredRooms && totalRequiredRooms > 0) status = 'full'; 
-                        else if (checkedRooms.size > 0) status = 'partial'; 
-                        else if (!isWeekend) status = 'missing'; 
+                        if (checkedRooms.size >= totalRequiredRooms && totalRequiredRooms > 0) status = 'full';
+                        else if (checkedRooms.size > 0) status = 'partial';
+                        else if (!isWeekend) status = 'missing';
                     }
-                    days.push({ day: d, dateStr, status, isWeekend, isFuture, checkedCount: checkedRooms.size, totalRequired: totalRequiredRooms });
+                    days.push({ day: d, dateStr, isFuture, isWeekend, status, checkedCount: checkedRooms.size, totalRequired: totalRequiredRooms });
                 }
                 return days;
-            }, [historyCalendarMonth, inspections, rooms, calendarTypeFilter]);
+            }, [historyCalendarMonth, rooms, inspections, calendarTypeFilter]);
 
-            const getPodiumFontSize = (nameStr, isWinner = false) => {
-                const name = String(nameStr || '');
-                if(!name) return isWinner ? 'text-2xl md:text-4xl' : 'text-xl md:text-3xl';
-                if(name.length >= 6) return isWinner ? 'text-[14px] md:text-2xl leading-tight' : 'text-[11px] md:text-lg leading-tight';
-                if(name.length >= 4) return isWinner ? 'text-[18px] md:text-3xl' : 'text-[14px] md:text-xl';
-                return isWinner ? 'text-2xl md:text-4xl' : 'text-xl md:text-3xl';
-            };
-
-            const saveSettingsGroupToServer = async (updatesArray) => {
-                try {
-                    await syncToGASAsync('updateMultipleSettings', updatesArray);
-                } catch (err) {
-                    for (const item of updatesArray) {
-                        await syncToGASAsync('updateSettings', item);
-                    }
-                }
-            };
-
-            const handleSaveMaintenance = async () => { 
-                setSettings({ ...settings, is_maintenance: String(maintenanceToggle), maintenance_msg: maintenanceMsg, passcode: sysPasscode, master_passcode: sysMasterPasscode }); 
-                try {
-                    await saveSettingsGroupToServer([
-                        { key: 'is_maintenance', val: String(maintenanceToggle) },
-                        { key: 'maintenance_msg', val: maintenanceMsg },
-                        { key: 'passcode', val: sysPasscode },
-                        { key: 'master_passcode', val: sysMasterPasscode }
-                    ]);
-                    showToast('บันทึกตั้งค่าความปลอดภัยเรียบร้อย', 'success'); 
-                } catch(e) { showToast('บันทึกล้มเหลว', 'error'); }
-            };
-            
-            const handleSaveMegaphoneAndLogo = async () => { 
-                setSettings({ 
-                    ...settings, app_logo_url: appLogoInput, logo_url: logoInput, school_logo_url: schoolLogoInput, zone_map_url: zoneMapInput, room_map_url: roomMapInput,
-                    banner_url: announceBannerInput, announce_banner_url: announceBannerInput, main_banner_url: mainBannerInput, popup_banner_url: popupBannerInput, 
-                    announcement_title: announcementTitleInput, announcement_msg: announcementInput,
-                    visibility_main_banner: visMainBanner, visibility_popup_banner: visPopupBanner, visibility_announce_banner: visAnnounceBanner,
-                    admin_avatar_url: adminAvatarInput, admin_name: adminNameInput, admin_role: adminRoleInput, admin_line_url: adminLineInput
-                }); 
-                try {
-                    await saveSettingsGroupToServer([
-                        { key: 'app_logo_url', val: appLogoInput },
-                        { key: 'logo_url', val: logoInput },
-                        { key: 'school_logo_url', val: schoolLogoInput },
-                        { key: 'zone_map_url', val: zoneMapInput },
-                        { key: 'room_map_url', val: roomMapInput },
-                        { key: 'banner_url', val: announceBannerInput },
-                        { key: 'announce_banner_url', val: announceBannerInput },
-                        { key: 'main_banner_url', val: mainBannerInput },
-                        { key: 'popup_banner_url', val: popupBannerInput },
-                        { key: 'announcement_title', val: announcementTitleInput },
-                        { key: 'announcement_msg', val: announcementInput },
-                        { key: 'visibility_main_banner', val: visMainBanner },
-                        { key: 'visibility_popup_banner', val: visPopupBanner },
-                        { key: 'visibility_announce_banner', val: visAnnounceBanner },
-                        { key: 'admin_avatar_url', val: adminAvatarInput },
-                        { key: 'admin_name', val: adminNameInput },
-                        { key: 'admin_role', val: adminRoleInput },
-                        { key: 'admin_line_url', val: adminLineInput }
-                    ]);
-                    if(!popupBannerInput) { safeRemoveItem('zc26_hide_banner_until'); }
-                    showToast('บันทึกข้อมูลรูปภาพและประกาศเรียบร้อย', 'success'); 
-                } catch(e) { showToast('บันทึกล้มเหลว กรุณาเช็คการเชื่อมต่อหลังบ้าน', 'error'); }
+            const getPodiumFontSize = (name = '', isFirst = false) => {
+                const clean = String(name).replace('ม.', '');
+                if (clean.length > 6) return isFirst ? 'text-xs md:text-sm' : 'text-[10px] md:text-xs';
+                if (clean.length > 4) return isFirst ? 'text-sm md:text-base' : 'text-xs md:text-sm';
+                return isFirst ? 'text-lg md:text-2xl' : 'text-base md:text-xl';
             };
 
             const paperSheetRooms = useMemo(() => {
@@ -1275,59 +1220,100 @@
                 if (paperSheetGradeFilter === 'all') return validRooms;
                 return validRooms.filter(r => {
                     const match = (r.name || '').match(/(\d+)/);
-                    const gGrade = match ? parseInt(match[1]) : 0;
-                    if (paperSheetGradeFilter === 'm_ton') return gGrade >= 1 && gGrade <= 3;
-                    if (paperSheetGradeFilter === 'm_plai') return gGrade >= 4 && gGrade <= 6;
-                    return String(gGrade) === paperSheetGradeFilter;
+                    const gGrade = match ? match[1] : '';
+                    return gGrade === paperSheetGradeFilter;
                 });
             }, [rooms, paperSheetGradeFilter]);
 
             const paperSheetSplitColumns = useMemo(() => {
-                const list = paperSheetRooms;
-                const half = Math.ceil(Math.max(list.length, 1) / 2);
+                const list = paperSheetRooms.map((room, idx) => ({ room, num: idx + 1 }));
+                const half = Math.ceil(list.length / 2);
                 return {
-                    left: list.slice(0, half).map((r, i) => ({ room: r, num: i + 1 })),
-                    right: list.slice(half).map((r, i) => ({ room: r, num: half + i + 1 }))
+                    left: list.slice(0, half),
+                    right: list.slice(half)
                 };
             }, [paperSheetRooms]);
 
             const handleExportPaperSheet = async (format) => {
-                const element = document.getElementById('omr-sheet-export-box');
-                if (!element) return;
                 if (format === 'print') {
                     window.print();
                     return;
                 }
-                if (typeof window.html2canvas === 'undefined') {
-                    return showToast('กำลังโหลดเครื่องมือสร้างไฟล์ กรุณารอสักครู่...', 'warning');
-                }
-                showToast(`กำลังสร้างไฟล์กระดาษคำตอบ (${format.toUpperCase()})...`, 'info');
+                const element = document.getElementById('omr-sheet-export-box');
+                if (!element) return;
+                showToast(`กำลังสร้างไฟล์แบบประเมิน (${format.toUpperCase()})...`, 'info');
                 try {
-                    const canvas = await window.html2canvas(element, { scale: 2, useCORS: true, width: 1122, height: 793 });
+                    const canvas = await window.html2canvas(element, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+                    const fileName = `แบบประเมินความสะอาดเรียบร้อย_ZoneCheck_${formatThaiDateForFile(filterDate)}.${format}`;
                     if (format === 'png') {
-                        const dataUrl = canvas.toDataURL('image/png');
                         const link = document.createElement('a');
-                        link.download = `แบบประเมินความเรียบร้อย_ZoneCheck_${formatThaiDateForFile(filterDate)}.png`;
-                        link.href = dataUrl;
+                        link.download = fileName;
+                        link.href = canvas.toDataURL('image/png');
                         link.click();
-                        showToast('ดาวน์โหลดแบบประเมิน (PNG) สำเร็จ!', 'success');
-                    } else if (format === 'pdf' && typeof window.html2pdf !== 'undefined') {
+                        showToast('ดาวน์โหลดรูปภาพแบบประเมินสำเร็จ', 'success');
+                    } else if (format === 'pdf') {
                         const opt = {
                             margin: 0,
-                            filename: `แบบประเมินความเรียบร้อย_ZoneCheck_${formatThaiDateForFile(filterDate)}.pdf`,
+                            filename: fileName,
                             image: { type: 'jpeg', quality: 0.98 },
-                            html2canvas: { scale: 2, useCORS: true, width: 1122, height: 793 },
-                            jsPDF: { unit: 'px', format: [1122, 793], orientation: 'landscape' }
+                            html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+                            jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
                         };
                         await window.html2pdf().set(opt).from(element).save();
-                        showToast('ดาวน์โหลดแบบประเมิน (PDF) สำเร็จ!', 'success');
+                        showToast('ดาวน์โหลด PDF แบบประเมินสำเร็จ', 'success');
                     }
-                } catch (err) {
+                } catch (e) {
                     showToast('เกิดข้อผิดพลาดในการสร้างไฟล์แบบประเมิน', 'error');
                 }
             };
 
-            // ฟังก์ชันสแกนและอ่านค่าแบบประเมิน OMR จากรูปถ่าย
+            const handleSaveMegaphoneAndLogo = async () => {
+                const updates = [
+                    { key: 'app_logo_url', val: appLogoInput },
+                    { key: 'logo_url', val: logoInput },
+                    { key: 'school_logo_url', val: schoolLogoInput },
+                    { key: 'zone_map_url', val: zoneMapInput },
+                    { key: 'room_map_url', val: roomMapInput },
+                    { key: 'main_banner_url', val: mainBannerInput },
+                    { key: 'popup_banner_url', val: popupBannerInput },
+                    { key: 'announce_banner_url', val: announceBannerInput },
+                    { key: 'announcement_title', val: announcementTitleInput },
+                    { key: 'announcement_msg', val: announcementInput },
+                    { key: 'admin_avatar_url', val: adminAvatarInput },
+                    { key: 'admin_name', val: adminNameInput },
+                    { key: 'admin_role', val: adminRoleInput },
+                    { key: 'admin_line_url', val: adminLineInput }
+                ];
+                const newSettings = { ...settings };
+                updates.forEach(u => { newSettings[u.key] = u.val; });
+                setSettings(newSettings);
+                try {
+                    await syncToGASAsync('updateMultipleSettings', updates);
+                    showToast('บันทึกข้อมูลรูปภาพและประกาศสำเร็จ!', 'success');
+                } catch (e) {
+                    showToast('บันทึกลงเครื่องแล้ว (แต่ซิงค์ออนไลน์ไม่สำเร็จ)', 'warning');
+                }
+            };
+
+            const handleSaveMaintenance = async () => {
+                const updates = [
+                    { key: 'passcode', val: sysPasscode },
+                    { key: 'master_passcode', val: sysMasterPasscode },
+                    { key: 'is_maintenance', val: String(maintenanceToggle) },
+                    { key: 'maintenance_msg', val: maintenanceMsg }
+                ];
+                const newSettings = { ...settings };
+                updates.forEach(u => { newSettings[u.key] = u.val; });
+                setSettings(newSettings);
+                try {
+                    await syncToGASAsync('updateMultipleSettings', updates);
+                    showToast('บันทึกการตั้งค่าความปลอดภัยสำเร็จ!', 'success');
+                } catch (e) {
+                    showToast('บันทึกไม่สำเร็จ กรุณาลองใหม่', 'error');
+                }
+            };
+
+            // ฟังก์ชันสแกนและอ่านค่าแบบประเมิน OMR จากรูปถ่าย (รองรับทั้งระบายทึบ ● และกากบาท ✕ พร้อมตรวจจับจุดมาร์ค 4 มุม)
             const handleOpenOmrScanner = () => {
                 const validRooms = Array.isArray(rooms) ? rooms : [];
                 const initialResults = validRooms.map((r, idx) => ({
@@ -1339,12 +1325,234 @@
                     zoneScore: 10,
                     zoneSkip: false
                 }));
+                omrRawImageRef.current = null;
                 setOmrScannerModal({
                     isOpen: true,
                     isScanning: false,
                     imagePreview: null,
+                    annotatedPreview: null,
+                    sensitivity: 50,
                     results: initialResults
                 });
+            };
+
+            const processOmrImageWithSensitivity = (imgElement, sensValue = 50) => {
+                if (!imgElement) return;
+                try {
+                    const W = 1122;
+                    const H = 793;
+                    const canvas = document.createElement('canvas');
+                    canvas.width = W;
+                    canvas.height = H;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(imgElement, 0, 0, W, H);
+                    const imgData = ctx.getImageData(0, 0, W, H).data;
+
+                    const getPixelDarkness = (x, y) => {
+                        const px = Math.max(0, Math.min(W - 1, Math.round(x)));
+                        const py = Math.max(0, Math.min(H - 1, Math.round(y)));
+                        const idx = (py * W + px) * 4;
+                        const lum = 0.299 * imgData[idx] + 0.587 * imgData[idx + 1] + 0.114 * imgData[idx + 2];
+                        return 255 - lum;
+                    };
+
+                    // 1. ค้นหาจุดมาร์คสี่เหลี่ยมสีดำทั้ง 4 มุมอัตโนมัติ (Corner fiducial detection)
+                    const findDarkestBlockInCorner = (startX, endX, startY, endY, defaultX, defaultY) => {
+                        let bestX = defaultX;
+                        let bestY = defaultY;
+                        let maxScore = -1;
+                        const step = 3;
+                        for (let y = startY; y <= endY; y += step) {
+                            for (let x = startX; x <= endX; x += step) {
+                                let sum = 0;
+                                for (let dy = -4; dy <= 4; dy += 2) {
+                                    for (let dx = -4; dx <= 4; dx += 2) {
+                                        sum += getPixelDarkness(x + dx, y + dy);
+                                    }
+                                }
+                                if (sum > maxScore) {
+                                    maxScore = sum;
+                                    bestX = x;
+                                    bestY = y;
+                                }
+                            }
+                        }
+                        // ถ้าความเข้มต่ำเกินไป (เช่น ภาพตัดขอบมาร์คหาย) ให้ใช้พิกัดมาตรฐานของกระดาษ
+                        if (maxScore / 25 < 95) return { x: defaultX, y: defaultY, found: false };
+                        return { x: bestX, y: bestY, found: true };
+                    };
+
+                    const tl = findDarkestBlockInCorner(8, Math.floor(W * 0.22), 8, Math.floor(H * 0.22), 44, 26);
+                    const tr = findDarkestBlockInCorner(Math.floor(W * 0.78), W - 8, 8, Math.floor(H * 0.22), W - 44, 26);
+                    const bl = findDarkestBlockInCorner(8, Math.floor(W * 0.22), Math.floor(H * 0.78), H - 8, 44, H - 26);
+                    const br = findDarkestBlockInCorner(Math.floor(W * 0.78), W - 8, Math.floor(H * 0.78), H - 8, W - 44, H - 26);
+
+                    // ฟังก์ชันแปลงสัดส่วนสัมพัทธ์ (u, v) ภายในกรอบมาร์ค 4 มุม เป็นพิกัด (X, Y) จริงบนรูป
+                    const mapUV = (u, v) => {
+                        const topX = tl.x + u * (tr.x - tl.x);
+                        const topY = tl.y + u * (tr.y - tl.y);
+                        const botX = bl.x + u * (br.x - bl.x);
+                        const botY = bl.y + u * (br.y - bl.y);
+                        return {
+                            x: topX + v * (botX - topX),
+                            y: topY + v * (botY - topY)
+                        };
+                    };
+
+                    // วัดค่าหมึกทั้งแบบระบายทึบ ● และกากบาท ✕ เทียบกับพื้นกระดาษขาวรอบวงกลม (Local Contrast)
+                    const evaluateBubbleScore = (cx, cy) => {
+                        let bgSum = 0;
+                        let bgCount = 0;
+                        // วัดพื้นหลังสีขาวรอบนอกวงกลม (รัศมี 9-11 px)
+                        for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 4) {
+                            bgSum += getPixelDarkness(cx + Math.cos(angle) * 10, cy + Math.sin(angle) * 10);
+                            bgCount++;
+                        }
+                        const localBg = bgCount > 0 ? bgSum / bgCount : 20;
+
+                        // วัดความเข้มด้านในวงกลม + เส้นทแยงมุมกากบาท (รัศมี 0-5 px)
+                        let innerSum = 0;
+                        let innerCount = 0;
+                        let darkStrokePixels = 0;
+                        for (let dy = -5; dy <= 5; dy++) {
+                            for (let dx = -5; dx <= 5; dx++) {
+                                if (dx * dx + dy * dy <= 28) {
+                                    const d = Math.max(0, getPixelDarkness(cx + dx, cy + dy) - localBg);
+                                    innerSum += d;
+                                    innerCount++;
+                                    if (d > 42) darkStrokePixels++;
+                                }
+                            }
+                        }
+                        const avgContrast = innerCount > 0 ? innerSum / innerCount : 0;
+                        const strokeRatio = innerCount > 0 ? (darkStrokePixels / innerCount) * 100 : 0;
+                        // ผสมคะแนนทั้งความทึบเฉลี่ยและจำนวนพิกเซลเส้นกากบาท
+                        return (avgContrast * 0.55) + (strokeRatio * 0.75);
+                    };
+
+                    // วาดกรอบจุดมาร์ค 4 มุมบนภาพ Preview
+                    ctx.lineWidth = 2;
+                    [tl, tr, bl, br].forEach(pt => {
+                        ctx.strokeStyle = pt.found ? '#10b981' : '#f59e0b';
+                        ctx.strokeRect(pt.x - 8, pt.y - 8, 16, 16);
+                    });
+
+                    const validRooms = Array.isArray(rooms) ? rooms : [];
+                    const half = Math.ceil(Math.max(validRooms.length, 1) / 2);
+
+                    // สัดส่วนตำแหน่งวงกลมทั้ง 13 คอลัมน์เทียบภายในตารางแต่ละฝั่ง
+                    const colRelativeCenters = [
+                        0.220, 0.280, 0.340, 0.400, 0.465, 0.530, 0.588, // ห้องเรียน 7 วง: โต๊ะ, ขยะ, ไฟ, พื้น, กระดาน, ไม่ทำ, ข้าม
+                        0.650, 0.712, 0.772, 0.842, 0.910, 0.970         // เขตพื้นที่ 6 วง: 10, 8, 5, 2, -5, ข้าม
+                    ];
+
+                    // เกณฑ์ความไวแสง (ปรับตามแถบเลื่อน Sensitivity 10-90)
+                    const markThreshold = Math.max(12, 48 - (sensValue * 0.42));
+
+                    const scannedResults = validRooms.map((r, i) => {
+                        const isRightCol = i >= half;
+                        const rowIdx = isRightCol ? (i - half) : i;
+
+                        // สัดส่วนแนวตั้ง v ของแถวที่ rowIdx เทียบกับกรอบจุดมาร์คบน-ล่าง
+                        const vStart = 0.212;
+                        const vEnd = 0.932;
+                        const vRow = vStart + ((rowIdx + 0.5) / Math.max(half, 1)) * (vEnd - vStart);
+
+                        // สัดส่วนแนวนอน u ของตารางฝั่งซ้าย (0.000 - 0.493) และตารางฝั่งขวา (0.507 - 1.000)
+                        const uTableLeft = isRightCol ? 0.507 : 0.000;
+                        const uTableWidth = 0.493;
+
+                        const bubbleScores = colRelativeCenters.map(colRel => {
+                            const uBubble = uTableLeft + (colRel * uTableWidth);
+                            const pt = mapUV(uBubble, vRow);
+                            const score = evaluateBubbleScore(pt.x, pt.y);
+                            return { x: pt.x, y: pt.y, score };
+                        });
+
+                        const roomBubbles = bubbleScores.slice(0, 7);
+                        const zoneBubbles = bubbleScores.slice(7, 13);
+
+                        // ประมวลผลหมวดห้องเรียน (7 วง)
+                        const markedRoom = roomBubbles.map(b => b.score >= markThreshold);
+                        const anyRoomMarked = markedRoom.some(Boolean);
+
+                        let c1 = 2, c2 = 2, c3 = 2, c4 = 2, c5 = 2, noDuty = false, skip = false;
+                        if (anyRoomMarked) {
+                            if (markedRoom[6]) {
+                                skip = true;
+                            } else if (markedRoom[5]) {
+                                noDuty = true;
+                            } else {
+                                c1 = markedRoom[0] ? 2 : 0;
+                                c2 = markedRoom[1] ? 2 : 0;
+                                c3 = markedRoom[2] ? 2 : 0;
+                                c4 = markedRoom[3] ? 2 : 0;
+                                c5 = markedRoom[4] ? 2 : 0;
+                            }
+                        }
+
+                        // วาดวงกลมแสดงผลที่ตรวจจับได้ลงบนภาพ (Visual Feedback)
+                        roomBubbles.forEach((b, bIdx) => {
+                            const isHit = markedRoom[bIdx];
+                            ctx.beginPath();
+                            ctx.arc(b.x, b.y, 6, 0, Math.PI * 2);
+                            ctx.strokeStyle = isHit ? (bIdx === 5 ? '#ef4444' : '#10b981') : 'rgba(59, 130, 246, 0.35)';
+                            ctx.lineWidth = isHit ? 2 : 1;
+                            ctx.stroke();
+                        });
+
+                        // ประมวลผลหมวดเขตพื้นที่ (6 วง เลือกวงที่เข้มที่สุดที่เกินเกณฑ์)
+                        const zoneValues = [10, 8, 5, 2, -5, null];
+                        let zScore = 10;
+                        let zSkip = false;
+                        let maxZIdx = -1;
+                        if (r.hasZone !== false) {
+                            let maxZVal = -1;
+                            zoneBubbles.forEach((b, idx) => {
+                                if (b.score > maxZVal) {
+                                    maxZVal = b.score;
+                                    maxZIdx = idx;
+                                }
+                            });
+                            if (maxZVal >= markThreshold && maxZIdx !== -1) {
+                                if (zoneValues[maxZIdx] === null) zSkip = true;
+                                else zScore = zoneValues[maxZIdx];
+                            } else {
+                                maxZIdx = -1;
+                            }
+
+                            zoneBubbles.forEach((b, bIdx) => {
+                                const isHit = bIdx === maxZIdx;
+                                ctx.beginPath();
+                                ctx.arc(b.x, b.y, 6, 0, Math.PI * 2);
+                                ctx.strokeStyle = isHit ? '#d946ef' : 'rgba(217, 70, 239, 0.35)';
+                                ctx.lineWidth = isHit ? 2 : 1;
+                                ctx.stroke();
+                            });
+                        }
+
+                        return {
+                            room: r,
+                            index: i + 1,
+                            includeRoom: true,
+                            includeZone: r.hasZone !== false,
+                            roomScores: { c1, c2, c3, c4, c5, noDuty, skip },
+                            zoneScore: zScore,
+                            zoneSkip: zSkip
+                        };
+                    });
+
+                    const annotatedUrl = canvas.toDataURL('image/jpeg', 0.85);
+                    setOmrScannerModal(prev => ({
+                        ...prev,
+                        isScanning: false,
+                        annotatedPreview: annotatedUrl,
+                        results: scannedResults
+                    }));
+                } catch (err) {
+                    setOmrScannerModal(prev => ({ ...prev, isScanning: false }));
+                    showToast('อ่านภาพเสร็จสิ้น กรุณาตรวจสอบคะแนนด้านล่าง', 'info');
+                }
             };
 
             const handleOmrImageUpload = (e) => {
@@ -1354,106 +1562,15 @@
                 reader.onload = (ev) => {
                     const dataUrl = ev.target.result;
                     setOmrScannerModal(prev => ({ ...prev, isScanning: true, imagePreview: dataUrl }));
-                    showToast('กำลังสแกนจุดมาร์คและอ่านวงกลมในกระดาษคำตอบ...', 'info');
+                    showToast('กำลังค้นหาจุดมาร์ค 4 มุมและอ่านค่าวงกลม...', 'info');
 
                     const img = new Image();
                     img.onload = () => {
-                        try {
-                            const canvas = document.createElement('canvas');
-                            const W = 1122;
-                            const H = 793;
-                            canvas.width = W;
-                            canvas.height = H;
-                            const ctx = canvas.getContext('2d');
-                            ctx.drawImage(img, 0, 0, W, H);
-                            const imgData = ctx.getImageData(0, 0, W, H).data;
-
-                            const getRegionDarkness = (cx, cy, radius = 5) => {
-                                let sum = 0;
-                                let count = 0;
-                                for (let dy = -radius; dy <= radius; dy++) {
-                                    for (let dx = -radius; dx <= radius; dx++) {
-                                        const px = Math.round(cx + dx);
-                                        const py = Math.round(cy + dy);
-                                        if (px >= 0 && px < W && py >= 0 && py < H) {
-                                            const idx = (py * W + px) * 4;
-                                            const lum = 0.299 * imgData[idx] + 0.587 * imgData[idx + 1] + 0.114 * imgData[idx + 2];
-                                            sum += (255 - lum);
-                                            count++;
-                                        }
-                                    }
-                                }
-                                return count > 0 ? sum / count : 0;
-                            };
-
-                            const validRooms = Array.isArray(rooms) ? rooms : [];
-                            const half = Math.ceil(Math.max(validRooms.length, 1) / 2);
-                            const tableTopY = 172;
-                            const rowHeight = Math.min(22, (H - 225) / Math.max(half, 1));
-
-                            const scannedResults = validRooms.map((r, i) => {
-                                const isRightCol = i >= half;
-                                const rowIdx = isRightCol ? (i - half) : i;
-                                const baseX = isRightCol ? 568 : 22;
-                                const rowY = tableTopY + (rowIdx * rowHeight) + (rowHeight / 2);
-
-                                // ตำแหน่ง X ของวงกลมห้องเรียน 7 ช่อง (โต๊ะ, ขยะ, ไฟ, พื้น, กระดาน, ไม่ทำ, ข้าม)
-                                const roomBubbleOffsets = [108, 138, 168, 198, 228, 258, 288];
-                                const roomDarkness = roomBubbleOffsets.map(offset => getRegionDarkness(baseX + offset, rowY, 5));
-                                const avgRoomDark = roomDarkness.reduce((a, b) => a + b, 0) / roomDarkness.length;
-                                const threshold = Math.max(avgRoomDark + 22, 68);
-
-                                const markedRoom = roomDarkness.map(d => d > threshold);
-                                const anyRoomMarked = markedRoom.some(Boolean);
-
-                                let c1 = 2, c2 = 2, c3 = 2, c4 = 2, c5 = 2, noDuty = false, skip = false;
-                                if (anyRoomMarked) {
-                                    if (markedRoom[6]) {
-                                        skip = true;
-                                    } else if (markedRoom[5]) {
-                                        noDuty = true;
-                                    } else {
-                                        c1 = markedRoom[0] ? 2 : 0;
-                                        c2 = markedRoom[1] ? 2 : 0;
-                                        c3 = markedRoom[2] ? 2 : 0;
-                                        c4 = markedRoom[3] ? 2 : 0;
-                                        c5 = markedRoom[4] ? 2 : 0;
-                                    }
-                                }
-
-                                // ตำแหน่ง X ของวงกลมเขตพื้นที่ 6 ช่อง (10, 8, 5, 2, -5, ข้าม)
-                                const zoneBubbleOffsets = [324, 356, 388, 420, 452, 484];
-                                const zoneValues = [10, 8, 5, 2, -5, null];
-                                const zoneDarkness = zoneBubbleOffsets.map(offset => getRegionDarkness(baseX + offset, rowY, 5));
-                                const maxZoneDark = Math.max(...zoneDarkness);
-                                const maxZoneIdx = zoneDarkness.indexOf(maxZoneDark);
-
-                                let zScore = 10;
-                                let zSkip = false;
-                                if (maxZoneDark > threshold) {
-                                    if (zoneValues[maxZoneIdx] === null) zSkip = true;
-                                    else zScore = zoneValues[maxZoneIdx];
-                                }
-
-                                return {
-                                    room: r,
-                                    index: i + 1,
-                                    includeRoom: true,
-                                    includeZone: r.hasZone !== false,
-                                    roomScores: { c1, c2, c3, c4, c5, noDuty, skip },
-                                    zoneScore: zScore,
-                                    zoneSkip: zSkip
-                                };
-                            });
-
-                            setTimeout(() => {
-                                setOmrScannerModal(prev => ({ ...prev, isScanning: false, results: scannedResults }));
-                                showToast('สแกนกระดาษคำตอบเสร็จสิ้น! ตรวจสอบและแก้ไขผลด้านล่างก่อนกดบันทึก', 'success');
-                            }, 600);
-                        } catch (err) {
-                            setOmrScannerModal(prev => ({ ...prev, isScanning: false }));
-                            showToast('อ่านภาพเสร็จสิ้น กรุณาตรวจสอบคะแนนด้านล่าง', 'info');
-                        }
+                        omrRawImageRef.current = img;
+                        setTimeout(() => {
+                            processOmrImageWithSensitivity(img, omrScannerModal.sensitivity);
+                            showToast('สแกนเสร็จสิ้น! ดูจุดวงกลมที่ตรวจพบบนภาพและปรับแก้ด้านล่างได้ทันที', 'success');
+                        }, 300);
                     };
                     img.src = dataUrl;
                 };
@@ -2940,7 +3057,7 @@
                                             )}
                                         </div>
 
-                                        {/* ช่องรหัสผ่าน แสดงจุด 8 จุดขนาดใหญ่ชัดเจน (เริ่มต้นปิดซ่อนเป็นจุดเสมอ) */}
+                                        {/* ช่องรหัสผ่าน ขนาดพอดีสวยงาม เริ่มต้นปิดซ่อนเป็นจุดเสมอ */}
                                         <div className="relative flex items-center">
                                             <input 
                                                 type="text" 
@@ -2949,11 +3066,11 @@
                                                 autoCorrect="off"
                                                 autoCapitalize="off"
                                                 spellCheck="false"
-                                                placeholder="••••••••" 
+                                                placeholder="รหัสผ่าน (PIN)..." 
                                                 value={inputPasscode} 
                                                 onChange={(e) => setInputPasscode(e.target.value)} 
                                                 style={!showPasscode && inputPasscode ? { WebkitTextSecurity: 'disc', textSecurity: 'disc' } : {}}
-                                                className={`w-full py-3.5 px-11 rounded-2xl border border-gray-200 bg-gray-50/80 focus:bg-white focus:outline-none focus:border-[#C8102E] text-center font-black text-gray-800 placeholder:text-gray-400 placeholder:text-2xl placeholder:tracking-[0.35em] transition-all ${showPasscode ? 'text-base tracking-normal' : 'masked-pin-input text-2xl tracking-[0.25em]'}`} 
+                                                className={`w-full py-3.5 px-11 rounded-2xl border border-gray-200 bg-gray-50/80 focus:bg-white focus:outline-none focus:border-[#C8102E] text-center font-bold text-gray-800 placeholder:text-gray-400 placeholder:text-sm placeholder: font-medium placeholder:tracking-normal transition-all ${showPasscode ? 'text-base tracking-wide' : (inputPasscode ? 'masked-pin-input text-lg tracking-[0.18em]' : 'text-sm tracking-normal')}`} 
                                             />
                                             <button 
                                                 type="button" 
@@ -3388,14 +3505,14 @@
                                                     <div className="omr-corner-mark"></div>
                                                 </div>
 
-                                                {/* ส่วนหัวแบบประเมิน (ภาษาไทยล้วน ไม่มีคำว่ากระดาษคำตอบภาคสนาม) */}
+                                                {/* ส่วนหัวแบบประเมิน (รองรับทั้งระบายทึบและกากบาท) */}
                                                 <div className="border-2 border-gray-900 rounded-lg px-3.5 py-2 mb-2 flex items-center justify-between gap-4 bg-white">
                                                     <div className="flex items-center gap-3">
                                                         <img src={settings?.school_logo_url || settings?.app_logo_url || HARDCODED_LOGO} className="w-11 h-11 object-contain" crossOrigin="anonymous" />
                                                         <div>
                                                             <h1 className="text-base font-bold text-gray-900 leading-tight">แบบประเมินความสะอาดเรียบร้อย</h1>
                                                             <p className="text-xs font-semibold text-gray-700">สภานักเรียนโรงเรียนคำม่วง อำเภอคำม่วง จังหวัดกาฬสินธุ์</p>
-                                                            <p className="text-[10.5px] text-gray-600 mt-0.5"><b>คำชี้แจง:</b> ระบายทึบ ● ลงในวงกลม ○ ตามหัวข้อที่ผ่านเกณฑ์ (หมวดห้องเรียน) หรือระดับคะแนนที่ประเมินได้ (หมวดเขตพื้นที่)</p>
+                                                            <p className="text-[10.5px] text-gray-700 mt-0.5"><b>คำชี้แจง:</b> ให้ระบายทึบ ● หรือทำเครื่องหมายกากบาท ✕ ลงในวงกลม ○ ให้ชัดเจน ตามหัวข้อที่ผ่านเกณฑ์ (หมวดห้องเรียน) หรือระดับคะแนนที่ประเมินได้ (หมวดเขตพื้นที่)</p>
                                                         </div>
                                                     </div>
                                                     <div className="text-right text-xs space-y-1 shrink-0 bg-gray-50 px-3 py-1.5 rounded-md border border-gray-300 min-w-[215px]">
@@ -3470,20 +3587,20 @@
                                                                     <td><span className="omr-bubble">2</span></td>
                                                                     <td><span className="omr-bubble">2</span></td>
                                                                     <td><span className="omr-bubble">2</span></td>
-                                                                    <td><span className="omr-bubble" style={{borderColor:'#b91c1c', color:'#b91c1c'}}>-5</span></td>
+                                                                    <td><span className="omr-bubble" style={{color: '#ef4444', borderColor: '#fca5a5'}}>-5</span></td>
                                                                     <td><span className="omr-bubble">-</span></td>
 
-                                                                    {r.hasZone === false ? (
-                                                                        <td colSpan="6" className="text-[8.5px] text-gray-400 font-bold bg-gray-100">ไม่มีเขตพื้นที่รับผิดชอบ</td>
-                                                                    ) : (
+                                                                    {r.hasZone !== false ? (
                                                                         <>
                                                                             <td><span className="omr-bubble">10</span></td>
                                                                             <td><span className="omr-bubble">8</span></td>
                                                                             <td><span className="omr-bubble">5</span></td>
                                                                             <td><span className="omr-bubble">2</span></td>
-                                                                            <td><span className="omr-bubble" style={{borderColor:'#b91c1c', color:'#b91c1c'}}>-5</span></td>
+                                                                            <td><span className="omr-bubble" style={{color: '#ef4444', borderColor: '#fca5a5'}}>-5</span></td>
                                                                             <td><span className="omr-bubble">-</span></td>
                                                                         </>
+                                                                    ) : (
+                                                                        <td colSpan="6" className="text-[8px] text-gray-400 font-bold bg-gray-100">ไม่มีเขตพื้นที่รับผิดชอบ</td>
                                                                     )}
                                                                 </tr>
                                                             ))}
@@ -3492,14 +3609,14 @@
                                                 ))}
                                             </div>
 
-                                            {/* มาร์คเกอร์มุมล่างซ้าย-ขวา */}
+                                            {/* มาร์คเกอร์มุมล่างซ้าย-ขวา พร้อมคำเตือนห้ามขีดเขียนนอกกรอบ */}
                                             <div className="flex justify-between items-center mt-1.5 pt-1">
                                                 <div className="flex items-center gap-2">
                                                     <div className="omr-corner-mark"></div>
-                                                    <span className="text-[9.5px] font-bold text-gray-500">สภานักเรียนโรงเรียนคำม่วง • จัดวางให้เห็นจุดสี่เหลี่ยมสีดำทั้ง 4 มุมชัดเจนขณะถ่ายภาพสแกน</span>
+                                                    <span className="text-[9.5px] font-bold text-red-700">⚠️ คำเตือน: ห้ามขีดเขียน วาดรูป หรือทำสัญลักษณ์ใดๆ นอกวงกลม ○ และบริเวณจุดสี่เหลี่ยมสีดำทั้ง 4 มุมโดยเด็ดขาด (ถ่ายภาพให้เห็นจุดสี่เหลี่ยมครบทั้ง 4 มุม)</span>
                                                 </div>
-                                                <div className="flex items-center gap-6 text-[10.5px] font-bold text-gray-700">
-                                                    <span>ลงชื่อ ....................................................... ผู้ตรวจประเมิน</span>
+                                                <div className="flex items-center gap-5 text-[10.5px] font-bold text-gray-700 shrink-0">
+                                                    <span>ลงชื่อ ................................................. ผู้ตรวจประเมิน</span>
                                                     <div className="omr-corner-mark"></div>
                                                 </div>
                                             </div>
@@ -3521,8 +3638,8 @@
                                             <i className="ph ph-scan text-xl"></i>
                                         </div>
                                         <div>
-                                            <h3 className="font-black text-gray-800 text-sm sm:text-base">สแกนแบบประเมินความเรียบร้อย</h3>
-                                            <p className="text-[11px] text-gray-500 font-medium">ประจำวันที่ {formatDateObj(filterDate)} • ถ่ายภาพแบบประเมินให้เห็นจุดสี่เหลี่ยมทั้ง 4 มุม หรือกดปรับคะแนนด้านล่างได้ทันที</p>
+                                            <h3 className="font-black text-gray-800 text-sm sm:text-base">สแกนแบบประเมินความสะอาดเรียบร้อย</h3>
+                                            <p className="text-[11px] text-gray-500 font-medium">ประจำวันที่ {formatDateObj(filterDate)} • รองรับทั้งรอยระบายทึบ ● และรอยกากบาท ✕ (กรุณาถ่ายให้เห็นจุดสี่เหลี่ยมสีดำครบทั้ง 4 มุม)</p>
                                         </div>
                                     </div>
                                     <button onClick={() => setOmrScannerModal(prev => ({ ...prev, isOpen: false }))} className="w-9 h-9 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center hover:bg-gray-300">
@@ -3530,17 +3647,30 @@
                                     </button>
                                 </div>
 
-                                {/* แถบอัปโหลดรูปแบบประเมิน */}
+                                {/* แถบอัปโหลดรูปแบบประเมิน + ปรับความไวแสง */}
                                 <div className="p-4 bg-white border-b border-gray-100 flex flex-wrap items-center justify-between gap-3 shrink-0">
-                                    <div className="flex items-center gap-3">
+                                    <div className="flex flex-wrap items-center gap-3">
                                         <label className="bg-[#C8102E] hover:bg-red-800 text-white px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 cursor-pointer shadow-sm transition-all active:scale-95">
                                             <i className="ph ph-camera text-base"></i> ถ่ายภาพ / เลือกรูปแบบประเมิน
                                             <input type="file" accept="image/*" ref={omrFileInputRef} onChange={handleOmrImageUpload} className="hidden" />
                                         </label>
                                         {omrScannerModal.imagePreview && (
-                                            <span className="text-xs font-bold text-emerald-600 flex items-center gap-1">
-                                                <i className="ph ph-check-circle ph-fill"></i> สแกนภาพเรียบร้อยแล้ว (แตะที่ปุ่มคะแนนเพื่อแก้ไขเพิ่มเติมได้)
-                                            </span>
+                                            <div className="flex items-center gap-2 bg-gray-100 px-3 py-1.5 rounded-xl border border-gray-200">
+                                                <span className="text-[11px] font-bold text-gray-700 whitespace-nowrap">ความไวการจับรอยขีด:</span>
+                                                <input
+                                                    type="range"
+                                                    min="15"
+                                                    max="85"
+                                                    value={omrScannerModal.sensitivity}
+                                                    onChange={(e) => {
+                                                        const val = parseInt(e.target.value);
+                                                        setOmrScannerModal(prev => ({ ...prev, sensitivity: val }));
+                                                        if (omrRawImageRef.current) processOmrImageWithSensitivity(omrRawImageRef.current, val);
+                                                    }}
+                                                    className="w-24 accent-[#C8102E] cursor-pointer"
+                                                />
+                                                <span className="text-[11px] font-black text-[#C8102E] w-8 text-right">{omrScannerModal.sensitivity}%</span>
+                                            </div>
                                         )}
                                     </div>
 
@@ -3557,8 +3687,19 @@
                                     </div>
                                 </div>
 
-                                {/* ตารางแสดงผลลัพธ์ที่สแกนได้ พร้อมให้กดติ๊กแก้ไขได้เหมือนกระดาษคำตอบ */}
+                                {/* ตารางแสดงผลลัพธ์ที่สแกนได้ พร้อมภาพตัวอย่างจุดที่ระบบตรวจพบ */}
                                 <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-3 bg-gray-50">
+                                    {omrScannerModal.annotatedPreview && !omrScannerModal.isScanning && (
+                                        <div className="bg-white p-3 rounded-2xl border border-gray-200 shadow-sm">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <span className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
+                                                    <i className="ph ph-eye text-[#C8102E]"></i> ภาพตรวจสอบตำแหน่งที่สแกนพบ (วงกลมสีเขียว/ชมพู = จุดที่ระบบอ่านค่าได้)
+                                                </span>
+                                                <span className="text-[10px] text-gray-400 font-medium">เลื่อนแถบ "ความไวการจับรอยขีด" ด้านบนได้หากขีดเส้นบางเกินไป</span>
+                                            </div>
+                                            <img src={omrScannerModal.annotatedPreview} className="w-full max-h-56 object-contain rounded-xl border border-gray-100 bg-gray-900/5" />
+                                        </div>
+                                    )}
                                     {omrScannerModal.isScanning ? (
                                         <div className="py-16 flex flex-col items-center justify-center text-center">
                                             <i className="ph ph-spinner animate-spin text-4xl text-[#C8102E] mb-3"></i>
