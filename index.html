@@ -2123,18 +2123,17 @@
 
             const renderExportHeader = () => (
                 <>
-                    <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#faf5ff', border: '1.5px solid #d8b4fe', borderRadius: '14px', padding: '14px 20px', marginBottom: '14px'}}>
+                    <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '2.5px solid #7c3aed', paddingBottom: '14px', marginBottom: '16px'}}>
                         <div style={{display: 'flex', alignItems: 'center'}}>
-                            <img src={settings?.school_logo_url || HARDCODED_LOGO} style={{width: '58px', height: '58px', objectFit: 'contain', marginRight: '15px'}} crossOrigin="anonymous"/>
+                            <img src={settings?.school_logo_url || HARDCODED_LOGO} style={{width: '60px', height: '60px', objectFit: 'contain', marginRight: '16px'}} crossOrigin="anonymous"/>
                             <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                                <h1 style={{color: '#5b21b6', fontSize: '22px', fontWeight: 'bold', margin: '0 0 4px 0', lineHeight: '1.1'}}>รายงานการตรวจความสะอาดเรียบร้อย</h1>
-                                <p style={{color: '#6d28d9', fontSize: '13.5px', fontWeight: '600', margin: 0, lineHeight: '1.1'}}>สภานักเรียนโรงเรียนคำม่วง อำเภอคำม่วง จังหวัดกาฬสินธุ์</p>
+                                <h1 style={{color: '#5b21b6', fontSize: '23px', fontWeight: 'bold', margin: '0 0 4px 0', lineHeight: '1.15'}}>รายงานการตรวจความสะอาดเรียบร้อย</h1>
+                                <p style={{color: '#6d28d9', fontSize: '14px', fontWeight: '600', margin: 0, lineHeight: '1.15'}}>สภานักเรียนโรงเรียนคำม่วง อำเภอคำม่วง จังหวัดกาฬสินธุ์</p>
                             </div>
                         </div>
-                        <div style={{display: 'flex', gap: '22px', fontSize: '13px', color: '#475569', backgroundColor: '#ffffff', padding: '8px 16px', borderRadius: '10px', border: '1px solid #e9d5ff'}}>
-                            <div><span style={{fontWeight: 'bold', color: '#6d28d9'}}>วันที่:</span> <span style={{color: '#1e293b', fontWeight: 'bold'}}>{printData.dateText}</span></div>
-                            <div><span style={{fontWeight: 'bold', color: '#6d28d9'}}>ระดับชั้น:</span> <span style={{color: '#1e293b', fontWeight: 'bold'}}>{printData.groupName}</span></div>
-                            <div><span style={{fontWeight: 'bold', color: '#6d28d9'}}>หมวดหมู่:</span> <span style={{color: '#1e293b', fontWeight: 'bold'}}>{printData.typeName}</span></div>
+                        <div style={{textAlign: 'right', fontSize: '13.5px', color: '#334155', lineHeight: '1.65'}}>
+                            <div><span style={{fontWeight: 'bold', color: '#6d28d9'}}>ประจำวันที่:</span> <span style={{color: '#1e293b', fontWeight: 'bold'}}>{printData.dateText}</span></div>
+                            <div><span style={{fontWeight: 'bold', color: '#6d28d9'}}>ระดับชั้น:</span> <span style={{color: '#1e293b', fontWeight: 'bold'}}>{printData.groupName}</span> <span style={{margin: '0 6px', color: '#cbd5e1'}}>|</span> <span style={{fontWeight: 'bold', color: '#6d28d9'}}>หมวดหมู่:</span> <span style={{color: '#1e293b', fontWeight: 'bold'}}>{printData.typeName}</span></div>
                         </div>
                     </div>
                 </>
@@ -2441,7 +2440,48 @@
                         {}
                         {/* --- เส้นทาง: อันดับคะแนน (Leaderboard) --- */}
                         {currentRoute === 'leaderboard' && (
-                             <div className="bg-gradient-to-b from-[#C8102E] to-red-900 rounded-[2.5rem] shadow-xl border border-red-400/30 animate-in fade-in relative mb-10">
+                             <div className="space-y-4 pb-10 animate-in fade-in">
+                                {/* กล่องค้นหา เลือกระดับชั้น เลือกหมวดหมู่ และปุ่มพิมพ์ด้านบน (เหมือนหน้าประวัติ) */}
+                                <div className="bg-white p-4 sm:p-6 rounded-[1.5rem] shadow-sm border border-gray-100 relative">
+                                    <div className="relative mb-5">
+                                        <input type="text" placeholder="พิมพ์เลขห้อง (เช่น ม.1/1)..." value={guestSearch} onChange={e=>setGuestSearch(e.target.value)} className="w-full pl-12 pr-4 py-3.5 rounded-2xl border border-gray-200 focus:outline-none focus:border-[#C8102E] font-medium bg-gray-50 text-sm transition-all" />
+                                        <i className="ph ph-magnifying-glass text-gray-400 absolute left-4 top-4 text-lg"></i>
+                                    </div>
+
+                                    <div className="mb-5">
+                                        <p className="text-[11px] font-bold text-gray-700 mb-2">ระดับชั้น</p>
+                                        <div className="flex overflow-x-auto gap-2 pb-2 custom-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0">
+                                            {[{id:'all', label:'ทั้งหมด'}, {id:'m_ton', label:'ม.ต้น'}, {id:'m_plai', label:'ม.ปลาย'}, {id:'1', label:'ม.1'}, {id:'2', label:'ม.2'}, {id:'3', label:'ม.3'}, {id:'4', label:'ม.4'}, {id:'5', label:'ม.5'}, {id:'6', label:'ม.6'}].map(tab => (
+                                                <button key={tab.id} onClick={() => setGuestFilterGroup(tab.id)} className={`whitespace-nowrap px-4 py-2 rounded-full font-bold text-sm transition-all border ${guestFilterGroup === tab.id ? 'bg-[#C8102E] text-white border-[#C8102E]' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>{tab.label}</button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <div className="mb-2">
+                                        <p className="text-[11px] font-bold text-gray-700 mb-2">หมวดหมู่การประเมิน</p>
+                                        <div className="flex gap-2 bg-gray-100 p-1.5 rounded-2xl">
+                                            {[{id:'all', label:'รวมทุกหมวด'}, {id:'room', label:'เฉพาะห้อง'}, {id:'zone', label:'เฉพาะเขต'}].map(tab => (
+                                                <button key={tab.id} onClick={() => setGuestFilterType(tab.id)} className={`flex-1 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all ${guestFilterType === tab.id ? 'bg-white text-[#C8102E] shadow-sm' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'}`}>{tab.label}</button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {appMode !== 'guest' && (
+                                        <div className="mt-5 flex flex-wrap justify-end gap-2 border-t border-gray-100 pt-4">
+                                            <select value={exportSortOrder} onChange={e => setExportSortOrder(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-lg p-2 text-xs font-bold text-gray-600 outline-none">
+                                                <option value="score">เรียงตามคะแนน</option><option value="room">เรียงตามห้อง</option>
+                                            </select>
+                                            <select value={exportDestination} onChange={e => setExportDestination(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-lg p-2 text-xs font-bold text-gray-600 outline-none hidden md:block">
+                                                <option value="local">💻 โหลดลงเครื่อง</option><option value="drive">☁️ เซฟลง Drive</option>
+                                            </select>
+                                            <button onClick={()=>executeDirectExport('leaderboard', 'png')} disabled={printData.isPreparing} className="bg-blue-50 text-blue-600 border border-blue-200 px-3 py-2 rounded-lg font-bold text-xs shadow-sm flex items-center gap-1 hover:bg-blue-100"><i className="ph ph-image"></i> รูปภาพ</button>
+                                            <button onClick={()=>exportExcel('leaderboard')} disabled={printData.isPreparing} className="bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-2 rounded-lg font-bold text-xs shadow-sm flex items-center gap-1 hover:bg-emerald-100"><i className="ph ph-microsoft-excel-logo"></i> Excel</button>
+                                            <button onClick={()=>executeDirectExport('leaderboard', 'pdf')} disabled={printData.isPreparing} className="bg-red-50 text-red-500 border border-red-200 px-3 py-2 rounded-lg font-bold text-xs shadow-sm flex items-center gap-1 hover:bg-red-100"><i className="ph ph-file-pdf"></i> PDF</button>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="bg-gradient-to-b from-[#C8102E] to-red-900 rounded-[2.5rem] shadow-xl border border-red-400/30 relative">
                                 <div className="p-4 flex justify-center z-20 relative">
                                     <div className="bg-black/20 backdrop-blur-md p-1.5 rounded-2xl flex gap-1 w-full max-w-sm">
                                         <button onClick={()=>setLeaderboardTab('all')} className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${leaderboardTab === 'all' ? 'bg-white text-[#C8102E] shadow-sm' : 'text-white/70 hover:bg-white/10'}`}>สะสมทั้งหมด</button>
@@ -2514,24 +2554,10 @@
                                                     })}
                                                 </div>
                                             )}
-                                            
-                                            {/* ปุ่มดาวน์โหลดในหน้า Leaderboard (แสดงเฉพาะเจ้าหน้าที่/แอดมิน) */}
-                                            {appMode !== 'guest' && (
-                                                <div className="mt-8 flex flex-wrap justify-end gap-2 border-t pt-4">
-                                                    <select value={exportSortOrder} onChange={e => setExportSortOrder(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-lg p-2 text-xs font-bold text-gray-600 outline-none">
-                                                        <option value="score">เรียงตามคะแนน</option><option value="room">เรียงตามห้อง</option>
-                                                    </select>
-                                                    <select value={exportDestination} onChange={e => setExportDestination(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-lg p-2 text-xs font-bold text-gray-600 outline-none hidden md:block">
-                                                        <option value="local">💻 โหลดลงเครื่อง</option><option value="drive">☁️ เซฟลง Drive</option>
-                                                    </select>
-                                                    <button onClick={()=>executeDirectExport('leaderboard', 'png')} disabled={printData.isPreparing} className="bg-blue-50 text-blue-600 border border-blue-200 px-3 py-2 rounded-lg font-bold text-xs shadow-sm flex items-center gap-1 hover:bg-blue-100"><i className="ph ph-image"></i> รูปภาพ</button>
-                                                    <button onClick={()=>exportExcel('leaderboard')} disabled={printData.isPreparing} className="bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-2 rounded-lg font-bold text-xs shadow-sm flex items-center gap-1 hover:bg-emerald-100"><i className="ph ph-microsoft-excel-logo"></i> Excel</button>
-                                                    <button onClick={()=>executeDirectExport('leaderboard', 'pdf')} disabled={printData.isPreparing} className="bg-red-50 text-red-500 border border-red-200 px-3 py-2 rounded-lg font-bold text-xs shadow-sm flex items-center gap-1 hover:bg-red-100"><i className="ph ph-file-pdf"></i> PDF</button>
-                                                </div>
-                                            )}
                                         </div>
                                     </>
                                 )}
+                                </div>
                              </div>
                         )}
                         
