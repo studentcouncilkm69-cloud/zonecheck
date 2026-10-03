@@ -64,12 +64,20 @@
             color: #333;
             background: white;
             box-sizing: border-box;
-            width: 1123px !important; 
-        . col-purple { color: #7c3aed !important; font-weight: bold; }
+            width: 1123px !important;
+            padding: 30px 40px !important;
+        }
+        .pdf-table { width: 100%; border-collapse: collapse; font-size: 13px; border: 1px solid #cbd5e1; }
+        .pdf-table th { background-color: #f8fafc !important; color: #334155 !important; padding: 8px 6px; border: 1px solid #cbd5e1; font-weight: bold; text-align: center; }
+        .pdf-table td { padding: 7px 6px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; }
+        .pdf-table td.text-left { text-align: left; padding-left: 10px; }
+        .col-purple { color: #7c3aed !important; font-weight: bold; }
 
         /* สไตล์สำหรับใบตรวจแบบกระดาษคำตอบ (OMR Answer Sheet - Single A4 Landscape) */
-        .omr-sheet-wrapper {
+        .omr-sheet-wrapper, .omr-sheet-wrapper * {
             font-family: 'Sarabun', sans-serif !important;
+        }
+        .omr-sheet-wrapper {
             color: #111827;
             background: white;
             box-sizing: border-box;
@@ -77,7 +85,7 @@
             height: 793px !important;
             max-width: 1122px !important;
             max-height: 793px !important;
-            padding: 16px 22px !important;
+            padding: 14px 20px !important;
             margin: 0 auto !important;
             display: flex;
             flex-direction: column;
@@ -85,22 +93,23 @@
             overflow: hidden;
         }
         .omr-table { width: 100%; border-collapse: collapse; font-size: 9.5px; border: 1.5px solid #111827; table-layout: fixed; }
-        .omr-table th { background-color: #f3f4f6 !important; color: #111827 !important; padding: 2.5px 1px; border: 1px solid #374151; font-weight: 700; text-align: center; vertical-align: middle; line-height: 1.05; }
-        .omr-table td { padding: 1.8px 1px; border: 1px solid #9ca3af; text-align: center; vertical-align: middle; color: #111827; height: 18.5px; }
+        .omr-table th { background-color: #f3f4f6 !important; color: #111827 !important; padding: 3px 1px; border: 1px solid #374151; font-weight: 700; text-align: center; vertical-align: middle; line-height: 1.1; white-space: nowrap; }
+        .omr-table td { padding: 1.5px 1px; border: 1px solid #9ca3af; text-align: center; vertical-align: middle; color: #111827; height: 18px; }
         .omr-table tr:nth-child(even) td { background-color: #f8fafc !important; }
         .omr-bubble {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 13px;
-            height: 13px;
-            border: 1.3px solid #1f2937;
+            width: 14px;
+            height: 14px;
+            border: 1.3px solid #374151;
             border-radius: 9999px;
-            font-size: 7.5px;
+            font-size: 8px;
             font-weight: 700;
-            color: #374151;
+            color: #1f2937;
             background: #ffffff;
             line-height: 1;
+            margin: 0 auto;
         }
         .omr-corner-mark {
             width: 14px;
@@ -109,8 +118,8 @@
             border: 2px solid #111827;
         }
         .masked-pin-input {
-            -webkit-text-security: disc;
-            text-security: disc;
+            -webkit-text-security: disc !important;
+            text-security: disc !important;
         }
         @page {
             size: A4 landscape;
@@ -446,6 +455,7 @@
                     if (next >= 5) {
                         setIsLoginModalOpen(true); 
                         setInputPasscode(''); 
+                        setShowPasscode(false);
                         setLoginError('');
                         setCoInspectors([]);
                         setShowCoInspectorPicker(false);
@@ -2530,6 +2540,7 @@
                         {/* --- เส้นทาง: ประเมินผล (Inspect) --- */}
                         {(appMode === 'admin' || appMode === 'inspector') && currentRoute === 'inspect' && (
                              <div className="animate-in fade-in space-y-4 pb-12">
+                                {}
                                 {/* ปุ่มดูแผนผัง + พิมพ์แบบประเมิน + สแกนแบบประเมิน */}
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-2">
                                     <button onClick={() => setShowRoomMap(true)} className="bg-white border border-blue-200 text-blue-600 font-bold py-3.5 px-3 rounded-2xl flex items-center justify-center gap-2 shadow-sm hover:bg-blue-50 active:scale-95 transition-all text-xs sm:text-sm">
@@ -2538,7 +2549,7 @@
                                     <button onClick={() => setShowZoneMap(true)} className="bg-white border border-[#C8102E]/20 text-[#C8102E] font-bold py-3.5 px-3 rounded-2xl flex items-center justify-center gap-2 shadow-sm hover:bg-red-50 active:scale-95 transition-all text-xs sm:text-sm">
                                         <i className="ph ph-map-pin text-lg"></i> แผนผังเขตพื้นที่
                                     </button>
-                                    <button onClick={() => setShowPaperSheetModal(true)} className="bg-white border border-gray-300 text-gray-800 font-bold py-3.5 px-3 rounded-2xl flex items-center justify-center gap-2 shadow-sm hover:bg-gray-50 active:scale-95 transition-all text-xs sm:text-sm">
+                                    <button onClick={() => { setPaperIncludeDate(false); setPaperIncludeInspector(false); setShowPaperSheetModal(true); }} className="bg-white border border-gray-300 text-gray-800 font-bold py-3.5 px-3 rounded-2xl flex items-center justify-center gap-2 shadow-sm hover:bg-gray-50 active:scale-95 transition-all text-xs sm:text-sm">
                                         <i className="ph ph-printer text-lg text-[#C8102E]"></i> พิมพ์แบบประเมิน
                                     </button>
                                     <button onClick={handleOpenOmrScanner} className="bg-gray-900 border border-gray-900 text-white font-bold py-3.5 px-3 rounded-2xl flex items-center justify-center gap-2 shadow-sm hover:bg-black active:scale-95 transition-all text-xs sm:text-sm">
@@ -2697,7 +2708,7 @@
                                       </div>
                                       <div className="flex flex-col sm:flex-row gap-2.5">
                                           <button onClick={handleSaveMegaphoneAndLogo} className="flex-1 py-3.5 bg-[#C8102E] hover:bg-red-800 text-white rounded-xl font-bold text-xs shadow-md transition-all active:scale-95">บันทึกข้อมูลรูปภาพและประกาศ</button>
-                                          <button onClick={() => setShowPaperSheetModal(true)} className="sm:w-auto px-5 py-3.5 bg-gray-900 hover:bg-black text-white rounded-xl font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2">
+                                          <button onClick={() => { setPaperIncludeDate(false); setPaperIncludeInspector(false); setShowPaperSheetModal(true); }} className="sm:w-auto px-5 py-3.5 bg-gray-900 hover:bg-black text-white rounded-xl font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2">
                                               <i className="ph ph-printer text-base"></i> พิมพ์แบบประเมิน
                                           </button>
                                       </div>
@@ -2929,10 +2940,8 @@
                                             )}
                                         </div>
 
-                                        {}
-                                        {/* ช่องรหัสผ่าน แสดงจุด 8 จุดขนาดใหญ่ชัดเจน (แป้นพิมพ์ปกติ กรอกอะไรก็ได้) */}
+                                        {/* ช่องรหัสผ่าน แสดงจุด 8 จุดขนาดใหญ่ชัดเจน (เริ่มต้นปิดซ่อนเป็นจุดเสมอ) */}
                                         <div className="relative flex items-center">
-                                            {}
                                             <input 
                                                 type="text" 
                                                 name="zc_staff_access_code"
@@ -2943,7 +2952,8 @@
                                                 placeholder="••••••••" 
                                                 value={inputPasscode} 
                                                 onChange={(e) => setInputPasscode(e.target.value)} 
-                                                className={`w-full py-3.5 px-11 rounded-2xl border border-gray-200 bg-gray-50/80 focus:bg-white focus:outline-none focus:border-[#C8102E] text-center font-black text-gray-800 placeholder:text-gray-400 placeholder:text-2xl placeholder:tracking-[0.35em] transition-all ${showPasscode ? 'text-base tracking-normal' : 'masked-pin-input text-2xl tracking-[0.35em]'}`} 
+                                                style={!showPasscode && inputPasscode ? { WebkitTextSecurity: 'disc', textSecurity: 'disc' } : {}}
+                                                className={`w-full py-3.5 px-11 rounded-2xl border border-gray-200 bg-gray-50/80 focus:bg-white focus:outline-none focus:border-[#C8102E] text-center font-black text-gray-800 placeholder:text-gray-400 placeholder:text-2xl placeholder:tracking-[0.35em] transition-all ${showPasscode ? 'text-base tracking-normal' : 'masked-pin-input text-2xl tracking-[0.25em]'}`} 
                                             />
                                             <button 
                                                 type="button" 
@@ -3383,24 +3393,22 @@
                                                     <div className="flex items-center gap-3">
                                                         <img src={settings?.school_logo_url || settings?.app_logo_url || HARDCODED_LOGO} className="w-12 h-12 object-contain" crossOrigin="anonymous" />
                                                         <div>
-                                                            <h1 className="text-base font-black text-gray-900 leading-tight">แบบประเมินความเรียบร้อยห้องเรียนและเขตพื้นที่รับผิดชอบ</h1>
-                                                            <p className="text-xs font-bold text-gray-700">สภานักเรียนโรงเรียนคำม่วง อำเภอคำม่วง จังหวัดกาฬสินธุ์</p>
-                                                            <p className="text-[10.5px] text-gray-600 mt-0.5"><b>คำชี้แจง:</b> ระบายทึบ ● ลงในวงกลม ○ ตามหัวข้อที่ผ่านเกณฑ์ (หมวดห้องเรียน) หรือระดับคะแนนที่ประเมินได้ (หมวดเขตพื้นที่)</p>
+                                                            <h1 className="text-base font-bold text-gray-900 leading-tight">แบบประเมินความเรียบร้อยห้องเรียนและเขตพื้นที่รับผิดชอบ</h1>
+                                                            <p className="text-xs font-semibold text-gray-700">สภานักเรียนโรงเรียนคำม่วง อำเภอคำม่วง จังหวัดกาฬสินธุ์</p>
+                                                            <p className="text-[11px] text-gray-600 mt-0.5"><b>คำชี้แจง:</b> ระบายทึบ ● ลงในวงกลม ○ ตามหัวข้อที่ผ่านเกณฑ์ (หมวดห้องเรียน) หรือระดับคะแนนที่ประเมินได้ (หมวดเขตพื้นที่)</p>
                                                         </div>
                                                     </div>
-
-                                                    {/* กรอบวันที่และผู้ตรวจ (เลือกเปิด/ปิดได้) */}
-                                                    <div className="border border-gray-500 rounded px-3 py-1.5 text-xs space-y-1 min-w-[275px] bg-gray-50">
-                                                        <div className="flex items-center justify-between">
-                                                            <span className="font-bold text-gray-800">ประจำวันที่:</span>
-                                                            <span className="border-b border-dotted border-gray-700 flex-1 ml-2 text-center font-bold text-gray-900">
-                                                                {paperIncludeDate ? formatDateObj(filterDate) : '........................................................'}
+                                                    <div className="text-right text-xs space-y-1 shrink-0 bg-gray-50 px-3 py-1.5 rounded-md border border-gray-300 min-w-[225px]">
+                                                        <div className="flex items-center justify-between gap-2">
+                                                            <span className="font-bold text-gray-700">ประจำวันที่:</span>
+                                                            <span className="font-bold text-gray-900 border-b border-dotted border-gray-500 min-w-[130px] text-center inline-block">
+                                                                {paperIncludeDate ? formatDateObj(filterDate) : '............................................'}
                                                             </span>
                                                         </div>
-                                                        <div className="flex items-center justify-between">
-                                                            <span className="font-bold text-gray-800">คณะผู้ตรวจ:</span>
-                                                            <span className="border-b border-dotted border-gray-700 flex-1 ml-2 text-center font-bold text-gray-900 truncate">
-                                                                {paperIncludeInspector && getActiveInspectorTeamString() !== 'ไม่ระบุ' ? getActiveInspectorTeamString() : '........................................................'}
+                                                        <div className="flex items-center justify-between gap-2">
+                                                            <span className="font-bold text-gray-700">คณะผู้ตรวจ:</span>
+                                                            <span className="font-bold text-gray-900 border-b border-dotted border-gray-500 min-w-[130px] text-center inline-block truncate max-w-[160px]">
+                                                                {paperIncludeInspector ? getActiveInspectorTeamString() : '............................................'}
                                                             </span>
                                                         </div>
                                                     </div>
@@ -3408,17 +3416,34 @@
                                             </div>
 
                                             {/* ตารางกระดาษคำตอบ แบ่ง 2 ฝั่ง ซ้าย-ขวา พอดีแผ่นเดียว */}
-                                            <div className="grid grid-cols-2 gap-2.5 flex-1 items-start">
+                                            <div className="grid grid-cols-2 gap-3 flex-1 items-start">
                                                 {[paperSheetSplitColumns.left, paperSheetSplitColumns.right].map((colItems, colIdx) => (
                                                     <table key={colIdx} className="omr-table">
+                                                        <colgroup>
+                                                            <col style={{width: '5.5%'}} />
+                                                            <col style={{width: '15.5%'}} />
+                                                            <col style={{width: '6%'}} />
+                                                            <col style={{width: '6%'}} />
+                                                            <col style={{width: '6%'}} />
+                                                            <col style={{width: '6%'}} />
+                                                            <col style={{width: '6.5%'}} />
+                                                            <col style={{width: '6%'}} />
+                                                            <col style={{width: '5.5%'}} />
+                                                            <col style={{width: '6.5%'}} />
+                                                            <col style={{width: '5.5%'}} />
+                                                            <col style={{width: '6%'}} />
+                                                            <col style={{width: '7%'}} />
+                                                            <col style={{width: '6%'}} />
+                                                            <col style={{width: '6%'}} />
+                                                        </colgroup>
                                                         <thead>
                                                             <tr>
-                                                                <th rowSpan="2" style={{width: '6%'}}>ที่</th>
-                                                                <th rowSpan="2" style={{width: '14%'}}>ห้อง</th>
-                                                                <th colSpan="7" style={{width: '44%', backgroundColor: '#eff6ff'}}>หมวดห้องเรียน</th>
-                                                                <th colSpan="6" style={{width: '36%', backgroundColor: '#fdf4ff'}}>หมวดเขตพื้นที่</th>
+                                                                <th rowSpan="2">ที่</th>
+                                                                <th rowSpan="2">ห้อง</th>
+                                                                <th colSpan="7" style={{backgroundColor: '#eff6ff !important'}}>หมวดห้องเรียน</th>
+                                                                <th colSpan="6" style={{backgroundColor: '#fdf4ff !important'}}>หมวดเขตพื้นที่</th>
                                                             </tr>
-                                                            <tr>
+                                                            <tr style={{fontSize: '8.5px'}}>
                                                                 <th>โต๊ะ</th>
                                                                 <th>ขยะ</th>
                                                                 <th>ไฟ</th>
@@ -3439,7 +3464,7 @@
                                                             {colItems.map(({ room: r, num }) => (
                                                                 <tr key={r.id || num}>
                                                                     <td className="font-bold">{num}</td>
-                                                                    <td className="font-black text-left pl-1.5 truncate">{(r.name || '').replace('ม.', 'ม.')}</td>
+                                                                    <td className="font-black text-left pl-1.5 truncate">{(r.name || '').replace(/\s*\(.*?\)/g, '').trim()}</td>
                                                                     <td><span className="omr-bubble">2</span></td>
                                                                     <td><span className="omr-bubble">2</span></td>
                                                                     <td><span className="omr-bubble">2</span></td>
