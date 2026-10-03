@@ -89,7 +89,7 @@
         const { useState, useEffect, useMemo, useRef } = React;
 
         // ⚠️ ลิงก์ Google Apps Script Backend
-        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxp7RJqJIajrEx8J9IVnJC75saIt_FeiQDUxNgxnP7vrYOy7xcYy77RqXljRUXv_xHm/exec";
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby3CKwBAOiz6dJQWI-t8nabgSv-46yTcAI8QZHR2KFWtrGJSHuKHdnm7-sCDsfL26yu/exec";
 
         const HARDCODED_LOGO = "https://i.postimg.cc/wBN5btrp/rong-re-yn-kham-wng.png";
         const HARDCODED_NAME = "STUDENT COUNCIL • KHAMMUANG SCHOOL";
@@ -239,12 +239,13 @@
             const [isSkipped, setIsSkipped] = useState(false); 
             const [inspectImage, setInspectImage] = useState(null); 
             const fileInputRef = useRef(null);
-
-            // Batch Inspection Modal State (ปุ่มใหญ่ตรวจรวดเดียว)
+            // Batch Inspection Modal State (ปุ่มใหญ่ตรวจรวดเดียว กรณีฉุกเฉิน)
             const [batchModal, setBatchModal] = useState({
                 isOpen: false,
                 type: 'room',
-                mode: 'full', // 'full' = 10 คะแนน, 'good' = 8 คะแนน (เฉพาะเขต), 'skip' = ข้ามการตรวจ
+                isSkipped: false,
+                roomScores: { c1: 2, c2: 2, c3: 2, c4: 2, c5: 2, noDuty: false },
+                zoneScore: 10,
                 gradeFilter: 'all',
                 comment: ''
             });
@@ -415,7 +416,7 @@
                     setCurrentRoute('dashboard'); 
                     safeSetItem('zc26_last_user', finalName);
                     handleSync(); 
-                    const teamCount = coInspectors.length > 0 ? ` (พร้อมเพื่อนร่วมทีม +${coInspectors.length} คน)` : '';
+                    const teamCount = coInspectors.length > 0 ? ` (พร้อมเพื่อน +${coInspectors.length} คน)` : '';
                     showToast(`เข้าสู่ระบบในชื่อ ${finalName}${teamCount}`, 'success');
                 } else { setLoginError('รหัสผ่านไม่ถูกต้อง'); }
             };
@@ -710,20 +711,53 @@
                 });
             }, [rooms, inspections, filterDate, batchModal.type, batchModal.gradeFilter]);
 
+            const toggleBatchRoomScore = (cId) => {
+                if (batchModal.isSkipped) return;
+                setBatchModal(prev => ({
+                    ...prev,
+                    roomScores: { ...prev.roomScores, [cId]: prev.roomScores[cId] === 0 ? 2 : 0 }
+                }));
+            };
+
+            const handleToggleBatchNoDuty = () => {
+                if (batchModal.isSkipped) return;
+                setBatchModal(prev => ({
+                    ...prev,
+                    roomScores: { ...prev.roomScores, noDuty: !prev.roomScores.noDuty }
+                }));
+            };
+
+            const handleToggleBatchSkip = () => {
+                setBatchModal(prev => ({ ...prev, isSkipped: !prev.isSkipped }));
+            };
+
             const handleExecuteBatchInspect = () => {
                 if (remainingRoomsForBatch.length === 0) {
                     return showToast('ไม่มีห้องที่ยังไม่ได้ตรวจในหมวดนี้ครับ', 'warning');
                 }
-                if (batchModal.mode === 'skip' && !batchModal.comment.trim()) {
+                if (batchModal.isSkipped && !batchModal.comment.trim()) {
                     return showToast('กรุณาระบุหมายเหตุสำหรับการข้ามการตรวจด้วยครับ', 'warning');
                 }
 
                 const targetDateStr = filterDate || new Date().toISOString().split('T')[0];
                 const typeLabel = batchModal.type === 'room' ? 'ห้องเรียน' : 'เขตพื้นที่';
-                const modeLabel = batchModal.mode === 'full' ? 'ดีเยี่ยม (+10 คะแนน)' : batchModal.mode === 'good' ? 'ดี (+8 คะแนน)' : 'ข้ามการตรวจ (ไม่มีคะแนน)';
+                let scoreDesc = '';
+                if (batchModal.isSkipped) {
+                    scoreDesc = 'ข้ามการตรวจ (ไม่มีคะแนน)';
+                } else if (batchModal.type === 'room') {
+                    if (batchModal.roomScores.noDuty) {
+                        scoreDesc = 'ไม่ปฏิบัติหน้าที่ (-5 คะแนน)';
+                    } else {
+                        const sum = batchModal.roomScores.c1 + batchModal.roomScores.c2 + batchModal.roomScores.c3 + batchModal.roomScores.c4 + batchModal.roomScores.c5;
+                        scoreDesc = `คะแนนรวม ${sum > 0 ? '+' + sum : sum} คะแนน`;
+                    }
+                } else {
+                    const zMap = { 10: 'ดีเยี่ยม (+10)', 8: 'ดี (+8)', 5: 'พอใช้ (+5)', 2: 'ปรับปรุง (+2)', '-5': 'ไม่ปฏิบัติหน้าที่ (-5)' };
+                    scoreDesc = zMap[String(batchModal.zoneScore)] || `${batchModal.zoneScore} คะแนน`;
+                }
 
                 showConfirm(
-                    `ยืนยันการตรวจรวดเดียว ${remainingRoomsForBatch.length} ห้อง?\nหมวด: ${typeLabel}\nรูปแบบ: ${modeLabel}\nประจำวันที่: ${formatDateObj(targetDateStr)}`,
+                    `ยืนยันการตรวจรวดเดียว (กรณีฉุกเฉิน) จำนวน ${remainingRoomsForBatch.length} ห้อง?\nหมวด: ${typeLabel}\nผลการประเมิน: ${scoreDesc}\nประจำวันที่: ${formatDateObj(targetDateStr)}`,
                     async () => {
                         setIsSavingData(true);
                         try {
@@ -734,20 +768,27 @@
                             const newRecords = remainingRoomsForBatch.map(r => {
                                 let totalScore = 10;
                                 let breakdown = {};
-                                if (batchModal.mode === 'skip') {
+                                if (batchModal.isSkipped) {
                                     totalScore = null;
                                     breakdown = { status: 'ข้ามการตรวจ' };
                                 } else if (batchModal.type === 'room') {
-                                    totalScore = 10;
-                                    breakdown = { c1: 2, c2: 2, c3: 2, c4: 2, c5: 2 };
-                                } else {
-                                    if (batchModal.mode === 'good') {
-                                        totalScore = 8;
-                                        breakdown = { status: 'ดี' };
+                                    if (batchModal.roomScores.noDuty) {
+                                        totalScore = -5;
+                                        breakdown = { status: 'ไม่ปฏิบัติหน้าที่' };
                                     } else {
-                                        totalScore = 10;
-                                        breakdown = { status: 'ดีเยี่ยม' };
+                                        totalScore = batchModal.roomScores.c1 + batchModal.roomScores.c2 + batchModal.roomScores.c3 + batchModal.roomScores.c4 + batchModal.roomScores.c5;
+                                        breakdown = {
+                                            c1: batchModal.roomScores.c1,
+                                            c2: batchModal.roomScores.c2,
+                                            c3: batchModal.roomScores.c3,
+                                            c4: batchModal.roomScores.c4,
+                                            c5: batchModal.roomScores.c5
+                                        };
                                     }
+                                } else {
+                                    totalScore = batchModal.zoneScore;
+                                    const sText = batchModal.zoneScore === 10 ? 'ดีเยี่ยม' : batchModal.zoneScore === 8 ? 'ดี' : batchModal.zoneScore === 5 ? 'พอใช้' : batchModal.zoneScore === 2 ? 'ปรับปรุง' : 'ไม่ปฏิบัติหน้าที่';
+                                    breakdown = { status: sText };
                                 }
                                 return {
                                     id: generateId('insp'),
@@ -762,7 +803,6 @@
                                 };
                             });
 
-                            // พยายามส่งแบบ Batch ก่อน หาก Backend ยังเป็นตัวเก่าจะ Fallback ส่งทีละห้องให้อัตโนมัติ
                             try {
                                 await syncToGASAsync('saveBatchInspections', newRecords);
                             } catch (batchErr) {
@@ -2074,15 +2114,15 @@
                                     </button>
                                 </div>
 
-                                {/* ปุ่มใหญ่ตรวจรวดเดียว (Batch Inspection) */}
-                                <button onClick={() => setBatchModal({ isOpen: true, type: 'room', mode: 'full', gradeFilter: 'all', comment: '' })} className="w-full bg-gradient-to-r from-[#C8102E] via-rose-600 to-amber-600 text-white p-4 rounded-2xl shadow-lg shadow-red-500/20 flex items-center justify-between hover:opacity-95 active:scale-[0.99] transition-all">
+                                {/* ปุ่มใหญ่ตรวจรวดเดียว (กรณีฉุกเฉิน) */}
+                                <button onClick={() => setBatchModal({ isOpen: true, type: 'room', isSkipped: false, roomScores: { c1: 2, c2: 2, c3: 2, c4: 2, c5: 2, noDuty: false }, zoneScore: 10, gradeFilter: 'all', comment: '' })} className="w-full bg-gradient-to-r from-[#C8102E] via-rose-600 to-amber-600 text-white p-4 rounded-2xl shadow-lg shadow-red-500/20 flex items-center justify-between hover:opacity-95 active:scale-[0.99] transition-all">
                                     <div className="flex items-center gap-3 text-left">
                                         <div className="w-11 h-11 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center shrink-0">
                                             <i className="ph ph-lightning ph-fill text-2xl text-amber-200"></i>
                                         </div>
                                         <div>
-                                            <div className="font-black text-sm sm:text-base leading-tight">ตรวจรวดเดียว (ให้คะแนนทุกห้องที่เหลือ)</div>
-                                            <div className="text-[11px] text-white/85 font-medium mt-0.5">ประหยัดเวลา ให้คะแนนเหมือนกันหมดพร้อมกดยืนยัน</div>
+                                            <div className="font-black text-sm sm:text-base leading-tight">ตรวจรวดเดียว (กรณีฉุกเฉิน)</div>
+                                            <div className="text-[11px] text-white/85 font-medium mt-0.5">ใช้เฉพาะกรณีฉุกเฉิน เพื่อให้คะแนนทุกห้องที่เหลือพร้อมกัน</div>
                                         </div>
                                     </div>
                                     <div className="bg-white text-[#C8102E] px-3 py-1.5 rounded-xl font-bold text-xs shrink-0 shadow-sm">
@@ -2327,14 +2367,14 @@
                                             )}
                                         </div>
 
-                                        {/* ส่วนเพิ่มเพื่อนร่วมทีม (ปุ่มบวกด้านล่าง + ค้นหาและติ๊กเลือกได้หลายคน) */}
+                                        {/* ส่วนเพิ่มเพื่อน (ปุ่มบวกด้านล่าง + ค้นหาและติ๊กเลือกได้หลายคน) */}
                                         <div className="space-y-2">
                                             {/* แสดงรายชื่อเพื่อนที่ติ๊กเลือกไว้แล้ว */}
                                             {coInspectors.length > 0 && (
                                                 <div className="bg-red-50/60 border border-red-100 rounded-2xl p-3 space-y-2">
                                                     <div className="flex items-center justify-between">
                                                         <span className="text-[11px] font-bold text-[#C8102E] flex items-center gap-1.5">
-                                                            <i className="ph ph-users-three text-sm"></i> เพื่อนร่วมทีมที่เลือก ({coInspectors.length} คน)
+                                                            <i className="ph ph-users-three text-sm"></i> เพื่อนที่เลือก ({coInspectors.length} คน)
                                                         </span>
                                                         <button type="button" onClick={() => setCoInspectors([])} className="text-[10px] font-bold text-gray-400 hover:text-red-600">ล้างทั้งหมด</button>
                                                     </div>
@@ -2351,7 +2391,7 @@
                                                 </div>
                                             )}
 
-                                            {/* ปุ่มกด + เพิ่มเพื่อนร่วมทีม */}
+                                            {/* ปุ่มกด + เพิ่มเพื่อน */}
                                             <button 
                                                 type="button" 
                                                 onClick={() => setShowCoInspectorPicker(!showCoInspectorPicker)} 
@@ -2360,17 +2400,17 @@
                                                 <div className={`w-5 h-5 rounded-full flex items-center justify-center ${showCoInspectorPicker ? 'bg-[#C8102E] text-white' : 'bg-gray-200 text-gray-600'}`}>
                                                     <i className={`ph ${showCoInspectorPicker ? 'ph-minus' : 'ph-plus'} text-xs font-bold`}></i>
                                                 </div>
-                                                <span>{showCoInspectorPicker ? 'ซ่อนรายชื่อเพื่อนร่วมทีม' : 'เพิ่มเพื่อนร่วมทีมที่เดินตรวจด้วยกัน'}</span>
+                                                <span>{showCoInspectorPicker ? 'ซ่อนรายชื่อเพื่อน' : 'เพิ่มเพื่อนที่เดินตรวจด้วยกัน'}</span>
                                             </button>
 
-                                            {/* กล่องค้นหาและติ๊กเลือกเพื่อนร่วมทีมหลายคน */}
+                                            {/* กล่องค้นหาและติ๊กเลือกเพื่อนหลายคน */}
                                             {showCoInspectorPicker && (
                                                 <div className="bg-gray-50 p-3 rounded-2xl border border-gray-200 space-y-2.5 animate-in fade-in">
                                                     <div className="relative flex items-center">
                                                         <i className="ph ph-magnifying-glass text-gray-400 absolute left-3.5 text-sm"></i>
                                                         <input 
                                                             type="text" 
-                                                            placeholder="พิมพ์ค้นหาชื่อเพื่อนร่วมทีม..." 
+                                                            placeholder="พิมพ์ค้นหาชื่อเพื่อน..." 
                                                             value={coInspectorSearch}
                                                             onChange={(e) => setCoInspectorSearch(e.target.value)}
                                                             className="w-full pl-9 pr-8 py-2 rounded-xl border border-gray-200 bg-white text-xs font-bold text-gray-700 focus:outline-none focus:border-[#C8102E]"
@@ -2414,7 +2454,7 @@
                                                                         }}
                                                                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#C8102E] text-white text-xs font-bold shadow-sm"
                                                                     >
-                                                                        <i className="ph ph-plus-circle"></i> เพิ่ม "{coInspectorSearch.trim()}" เป็นเพื่อนร่วมทีม
+                                                                        <i className="ph ph-plus-circle"></i> เพิ่ม "{coInspectorSearch.trim()}" เป็นเพื่อน
                                                                     </button>
                                                                 )}
                                                             </div>
@@ -2425,47 +2465,55 @@
                                         </div>
 
                                         {/* ช่องรหัสผ่าน แสดงจุด 8 จุด */}
-                                        <div className="pt-1">
+                                        <div>
                                             <input 
                                                 type="password" 
+                                                inputMode="numeric"
                                                 placeholder="••••••••" 
                                                 value={inputPasscode} 
-                                                onChange={e => setInputPasscode(e.target.value)} 
-                                                className="w-full px-4 py-3.5 rounded-2xl border border-gray-200 text-center tracking-[0.45em] text-lg font-black bg-gray-50/80 focus:bg-white focus:outline-none focus:border-[#C8102E] placeholder:text-gray-300 placeholder:tracking-[0.45em] transition-all" 
-                                                required 
+                                                onChange={(e) => setInputPasscode(e.target.value)} 
+                                                className="w-full py-3.5 px-4 rounded-2xl border border-gray-200 bg-gray-50/80 focus:bg-white focus:outline-none focus:border-[#C8102E] text-center text-lg font-black tracking-[0.35em] text-gray-800 placeholder:text-gray-400 placeholder:tracking-[0.25em] transition-all" 
                                             />
                                         </div>
+
+                                        {loginError && (
+                                            <div className="bg-red-50 border border-red-100 text-red-600 text-xs font-bold py-2.5 px-3 rounded-xl text-center flex items-center justify-center gap-1.5">
+                                                <i className="ph ph-warning-circle text-sm"></i> {loginError}
+                                            </div>
+                                        )}
+
+                                        <button type="submit" className="w-full py-4 rounded-2xl bg-[#C8102E] hover:bg-red-800 text-white font-black text-sm shadow-lg shadow-red-500/25 active:scale-[0.98] transition-all mt-1">
+                                            เข้าสู่ระบบ
+                                        </button>
                                     </div>
-                                    {loginError && <p className="text-red-500 text-xs font-bold text-center mt-3">{loginError}</p>}
-                                    <button type="submit" className="w-full mt-5 bg-[#C8102E] hover:bg-red-800 text-white py-3.5 rounded-2xl font-bold shadow-lg shadow-red-500/20 transition-all active:scale-95">เข้าสู่ระบบ</button>
                                 </form>
                             </div>
                         </div>
                     )}
 
-                    {/* Batch Inspect Modal (หน้าต่างปุ่มใหญ่ ตรวจรวดเดียวพร้อมกดยืนยัน) */}
+                    {/* Batch Inspect Modal (หน้าต่างปุ่มใหญ่ ตรวจรวดเดียว กรณีฉุกเฉิน ใช้ปุ่มเหมือนหน้าตรวจจริง 100%) */}
                     {batchModal.isOpen && (
                         <div className="fixed inset-0 z-[9995] bg-gray-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-                            <div className="bg-white rounded-[2rem] w-full max-w-md p-6 relative shadow-2xl animate-in zoom-in-95 flex flex-col max-h-[92vh]">
-                                <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-3">
+                            <div className="bg-white rounded-[2rem] w-full max-w-md p-5 relative shadow-2xl animate-in zoom-in-95 flex flex-col max-h-[92vh]">
+                                <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-3 shrink-0">
                                     <div className="flex items-center gap-2.5">
                                         <div className="w-10 h-10 rounded-xl bg-red-50 text-[#C8102E] flex items-center justify-center"><i className="ph ph-lightning ph-fill text-xl"></i></div>
                                         <div>
-                                            <h2 className="text-lg font-black text-gray-800">ตรวจรวดเดียว (Batch)</h2>
+                                            <h2 className="text-base sm:text-lg font-black text-gray-800">ตรวจรวดเดียว (กรณีฉุกเฉิน)</h2>
                                             <p className="text-[11px] font-bold text-gray-400">ประจำวันที่ {formatDateObj(filterDate)}</p>
                                         </div>
                                     </div>
                                     <button onClick={() => setBatchModal(prev => ({ ...prev, isOpen: false }))} className="w-8 h-8 bg-gray-100 text-gray-500 rounded-full flex items-center justify-center hover:bg-gray-200"><i className="ph ph-x"></i></button>
                                 </div>
 
-                                <div className="space-y-4 overflow-y-auto custom-scrollbar pr-1">
+                                <div className="space-y-4 overflow-y-auto custom-scrollbar pr-1 flex-1">
                                     <div>
                                         <label className="text-xs font-bold text-gray-700 mb-1.5 block">1. เลือกหมวดที่ต้องการตรวจรวดเดียว</label>
                                         <div className="grid grid-cols-2 gap-2">
-                                            <button onClick={() => setBatchModal(prev => ({ ...prev, type: 'room', mode: 'full' }))} className={`py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 border-2 transition-all ${batchModal.type === 'room' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-100 bg-gray-50 text-gray-500'}`}>
+                                            <button onClick={() => setBatchModal(prev => ({ ...prev, type: 'room', isSkipped: false }))} className={`py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 border-2 transition-all ${batchModal.type === 'room' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-100 bg-gray-50 text-gray-500'}`}>
                                                 <i className="ph ph-buildings text-base"></i> หมวดห้องเรียน
                                             </button>
-                                            <button onClick={() => setBatchModal(prev => ({ ...prev, type: 'zone', mode: 'full' }))} className={`py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 border-2 transition-all ${batchModal.type === 'zone' ? 'border-fuchsia-500 bg-fuchsia-50 text-fuchsia-700' : 'border-gray-100 bg-gray-50 text-gray-500'}`}>
+                                            <button onClick={() => setBatchModal(prev => ({ ...prev, type: 'zone', isSkipped: false }))} className={`py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 border-2 transition-all ${batchModal.type === 'zone' ? 'border-fuchsia-500 bg-fuchsia-50 text-fuchsia-700' : 'border-gray-100 bg-gray-50 text-gray-500'}`}>
                                                 <i className="ph ph-map-pin text-base"></i> หมวดเขตพื้นที่
                                             </button>
                                         </div>
@@ -2485,39 +2533,67 @@
                                     </div>
 
                                     <div>
-                                        <label className="text-xs font-bold text-gray-700 mb-1.5 block">3. คะแนนที่จะให้เหมือนกันทั้งหมด</label>
-                                        <div className="space-y-2">
-                                            <button onClick={() => setBatchModal(prev => ({ ...prev, mode: 'full' }))} className={`w-full p-3 rounded-xl border-2 font-bold text-xs flex justify-between items-center transition-all ${batchModal.mode === 'full' ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-gray-100 bg-white text-gray-600'}`}>
-                                                <span>✨ ดีเยี่ยม / ผ่านครบทุกข้อ (+10 คะแนน)</span>
-                                                <i className={`ph ph-check-circle text-base ${batchModal.mode === 'full' ? 'ph-fill text-emerald-600' : 'text-gray-300'}`}></i>
-                                            </button>
-                                            {batchModal.type === 'zone' && (
-                                                <button onClick={() => setBatchModal(prev => ({ ...prev, mode: 'good' }))} className={`w-full p-3 rounded-xl border-2 font-bold text-xs flex justify-between items-center transition-all ${batchModal.mode === 'good' ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-gray-100 bg-white text-gray-600'}`}>
-                                                    <span>👍 ดี (+8 คะแนน)</span>
-                                                    <i className={`ph ph-check-circle text-base ${batchModal.mode === 'good' ? 'ph-fill text-emerald-600' : 'text-gray-300'}`}></i>
-                                                </button>
+                                        <label className="text-xs font-bold text-gray-700 mb-2 block">3. เลือกคะแนนการตรวจ (ใช้เกณฑ์เดียวกับหน้าตรวจจริง)</label>
+                                        
+                                        {/* ปุ่มข้ามการตรวจ */}
+                                        <div onClick={handleToggleBatchSkip} className={`flex items-center justify-between p-3.5 rounded-xl border-2 transition-all cursor-pointer select-none mb-3 ${batchModal.isSkipped ? 'border-gray-400 bg-gray-100 shadow-sm' : 'border-gray-100 bg-white hover:bg-gray-50'}`}>
+                                            <div className="flex flex-col">
+                                                <span className={`font-bold text-sm ${batchModal.isSkipped ? 'text-gray-700' : 'text-gray-500'}`}>ข้ามการตรวจ (ไม่มีคะแนน)</span>
+                                                <span className="text-[9px] text-gray-400">กรอกหมายเหตุด้านล่างเพื่อระบุสาเหตุ</span>
+                                            </div>
+                                            <div className={`w-6 h-6 rounded-full flex items-center justify-center transition-colors border-2 ${batchModal.isSkipped ? 'bg-gray-500 border-gray-500 text-white' : 'bg-transparent border-gray-300 text-transparent'}`}><i className="ph ph-check-circle text-sm ph-fill"></i></div>
+                                        </div>
+
+                                        {/* รายการปุ่มให้คะแนนเหมือนหน้าตรวจจริงทุกประการ */}
+                                        <div className={`transition-all duration-300 ${batchModal.isSkipped ? 'opacity-30 pointer-events-none grayscale' : 'opacity-100'}`}>
+                                            {batchModal.type === 'room' ? (
+                                                <>
+                                                    <div onClick={handleToggleBatchNoDuty} className={`flex items-center justify-between p-3 rounded-xl border-2 transition-all cursor-pointer select-none mb-2.5 ${batchModal.roomScores.noDuty ? 'border-red-500 bg-red-50' : 'border-gray-200 bg-white'}`}>
+                                                        <span className={`font-bold text-sm ${batchModal.roomScores.noDuty ? 'text-red-700' : 'text-gray-700'}`}>ไม่ปฏิบัติหน้าที่ (-5 คะแนน)</span>
+                                                        <div className={`w-5 h-5 rounded-full flex items-center justify-center transition-colors ${batchModal.roomScores.noDuty ? 'bg-red-500 text-white' : 'bg-gray-200 text-transparent'}`}><i className="ph ph-check-circle text-xs ph-fill"></i></div>
+                                                    </div>
+                                                    
+                                                    <div className={`grid grid-cols-2 gap-2 ${batchModal.roomScores.noDuty ? 'opacity-40 grayscale pointer-events-none' : ''}`}>
+                                                        {ROOM_CRITERIA.map(c => (
+                                                            <div key={c.id} onClick={() => toggleBatchRoomScore(c.id)} className={`flex items-center justify-between p-2.5 rounded-xl border-2 transition-all cursor-pointer select-none ${batchModal.roomScores[c.id] > 0 ? 'border-emerald-500 bg-emerald-50' : 'border-gray-100 bg-white'}`}>
+                                                                <span className={`font-bold text-xs ${batchModal.roomScores[c.id] > 0 ? 'text-emerald-700' : 'text-gray-600'}`}>{c.name}</span>
+                                                                <div className={`w-4 h-4 rounded-full flex items-center justify-center transition-colors ${batchModal.roomScores[c.id] > 0 ? 'bg-emerald-500 text-white' : 'bg-gray-200 text-transparent'}`}><i className="ph ph-check-circle text-[10px] ph-fill"></i></div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <div className="space-y-2">
+                                                    {[{s:10, l:'ดีเยี่ยม'}, {s:8, l:'ดี'}, {s:5, l:'พอใช้'}, {s:2, l:'ปรับปรุง'}, {s:-5, l:'ไม่ปฏิบัติหน้าที่ (-5 คะแนน)'}].map(btn => (
+                                                        <button key={btn.s} onClick={() => setBatchModal(prev => ({ ...prev, zoneScore: btn.s }))} className={`w-full p-3 rounded-xl border-2 font-bold text-sm flex justify-between items-center transition-all ${batchModal.zoneScore === btn.s ? (btn.s < 0 ? 'border-red-500 bg-red-50 text-red-700' : 'border-emerald-500 bg-emerald-50 text-emerald-700') : 'border-gray-100 bg-white text-gray-600'}`}>
+                                                            <span>{btn.l}</span>
+                                                            <div className={`w-5 h-5 rounded-full flex items-center justify-center transition-colors ${batchModal.zoneScore === btn.s ? (btn.s < 0 ? 'bg-red-500 text-white' : 'bg-emerald-500 text-white') : 'bg-gray-200 text-transparent'}`}><i className="ph ph-check-circle text-xs ph-fill"></i></div>
+                                                        </button>
+                                                    ))}
+                                                </div>
                                             )}
-                                            <button onClick={() => setBatchModal(prev => ({ ...prev, mode: 'skip' }))} className={`w-full p-3 rounded-xl border-2 font-bold text-xs flex justify-between items-center transition-all ${batchModal.mode === 'skip' ? 'border-gray-500 bg-gray-100 text-gray-800' : 'border-gray-100 bg-white text-gray-600'}`}>
-                                                <span>⏭️ ข้ามการตรวจทั้งหมด (ไม่มีคะแนน)</span>
-                                                <i className={`ph ph-check-circle text-base ${batchModal.mode === 'skip' ? 'ph-fill text-gray-700' : 'text-gray-300'}`}></i>
-                                            </button>
                                         </div>
                                     </div>
 
                                     <div>
                                         <label className="text-xs font-bold text-gray-700 mb-1.5 block">หมายเหตุรวม (ถ้ามี)</label>
-                                        <input type="text" value={batchModal.comment} onChange={e => setBatchModal(prev => ({ ...prev, comment: e.target.value }))} placeholder={batchModal.mode === 'skip' ? "กรุณาระบุสาเหตุที่ข้ามการตรวจ (เช่น วันหยุด/กิจกรรม)..." : "หมายเหตุเพิ่มเติม..."} className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-xs font-medium outline-none focus:border-[#C8102E]" />
+                                        <input type="text" value={batchModal.comment} onChange={e => setBatchModal(prev => ({ ...prev, comment: e.target.value }))} placeholder={batchModal.isSkipped ? "กรุณาระบุสาเหตุที่ข้ามการตรวจ (เช่น วันหยุด/กิจกรรม)..." : "ข้อเสนอแนะหรือหมายเหตุเพิ่มเติม..."} className={`w-full p-3 rounded-xl border text-xs font-medium outline-none transition-colors ${batchModal.isSkipped && !batchModal.comment.trim() ? 'border-red-400 bg-red-50/30 focus:border-red-500' : 'border-gray-200 bg-gray-50 focus:border-[#C8102E]'}`} />
                                     </div>
 
-                                    <div className="bg-amber-50 border border-amber-200 p-3.5 rounded-2xl flex items-center justify-between">
+                                    <div className="bg-amber-50 border border-amber-200 p-3 rounded-2xl flex items-center justify-between">
                                         <span className="text-xs font-bold text-amber-800">จำนวนห้องที่จะถูกบันทึก:</span>
                                         <span className="text-base font-black text-[#C8102E]">{remainingRoomsForBatch.length} ห้อง</span>
                                     </div>
                                 </div>
 
-                                <div className="pt-4 mt-3 border-t border-gray-100 flex gap-2">
-                                    <button onClick={() => setBatchModal(prev => ({ ...prev, isOpen: false }))} className="flex-1 py-3.5 rounded-xl font-bold text-xs bg-gray-100 text-gray-600 hover:bg-gray-200">ยกเลิก</button>
-                                    <button onClick={handleExecuteBatchInspect} disabled={remainingRoomsForBatch.length === 0} className="flex-[2] py-3.5 rounded-xl font-bold text-xs bg-[#C8102E] text-white shadow-lg shadow-red-500/25 hover:bg-red-800 disabled:opacity-40 active:scale-95 transition-all">
+                                <div className="pt-3 mt-3 border-t border-gray-100 flex gap-3 items-center shrink-0">
+                                    <div className="flex-1 text-center bg-gray-50 rounded-xl py-2 border border-gray-100 flex flex-col justify-center">
+                                        <span className="block text-[9px] font-bold text-gray-400">คะแนนต่อห้อง</span>
+                                        <span className={`text-xl font-black ${batchModal.isSkipped ? 'text-gray-400' : ((batchModal.type === 'room' ? (batchModal.roomScores.noDuty ? -5 : (batchModal.roomScores.c1 + batchModal.roomScores.c2 + batchModal.roomScores.c3 + batchModal.roomScores.c4 + batchModal.roomScores.c5)) : batchModal.zoneScore) < 0 ? 'text-red-500' : 'text-emerald-600')}`}>
+                                            {batchModal.isSkipped ? '-' : ((batchModal.type === 'room' ? (batchModal.roomScores.noDuty ? -5 : (batchModal.roomScores.c1 + batchModal.roomScores.c2 + batchModal.roomScores.c3 + batchModal.roomScores.c4 + batchModal.roomScores.c5)) : batchModal.zoneScore) > 0 ? `+${batchModal.type === 'room' ? (batchModal.roomScores.noDuty ? -5 : (batchModal.roomScores.c1 + batchModal.roomScores.c2 + batchModal.roomScores.c3 + batchModal.roomScores.c4 + batchModal.roomScores.c5)) : batchModal.zoneScore}` : (batchModal.type === 'room' ? (batchModal.roomScores.noDuty ? -5 : (batchModal.roomScores.c1 + batchModal.roomScores.c2 + batchModal.roomScores.c3 + batchModal.roomScores.c4 + batchModal.roomScores.c5)) : batchModal.zoneScore))}
+                                        </span>
+                                    </div>
+                                    <button onClick={handleExecuteBatchInspect} disabled={remainingRoomsForBatch.length === 0} className="flex-[2] py-3.5 rounded-xl font-bold text-xs sm:text-sm bg-[#C8102E] text-white shadow-lg shadow-red-500/25 hover:bg-red-800 disabled:opacity-40 active:scale-95 transition-all">
                                         ยืนยันการตรวจ ({remainingRoomsForBatch.length} ห้อง)
                                     </button>
                                 </div>
