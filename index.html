@@ -113,6 +113,10 @@
             height: 14px;
             border: 3px solid #111827;
         }
+        .masked-pin-input {
+            -webkit-text-security: disc;
+            text-security: disc;
+        }
         @media print {
             body * { visibility: hidden; }
             #omr-print-area, #omr-print-area * { visibility: visible; }
@@ -2450,8 +2454,8 @@
 
                     {/* Login Modal (พร้อมปุ่มบวกเพิ่มเพื่อนร่วมทีม และค้นหาติ๊กเลือกหลายคน) */}
                     {isLoginModalOpen && (
-                        <div className="fixed inset-0 z-[9999] bg-gray-900/50 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in zoom-in duration-200">
-                            <div className="bg-white w-full max-w-sm rounded-[2.25rem] p-7 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.25)] border border-gray-100 relative max-h-[92vh] overflow-y-auto custom-scrollbar">
+                        <div className="fixed inset-0 z-[9999] bg-gray-900/50 backdrop-blur-md flex items-start sm:items-center justify-center p-4 pt-10 sm:pt-4 overflow-y-auto animate-in fade-in zoom-in duration-200">
+                            <div className="bg-white w-full max-w-sm rounded-[2.25rem] p-7 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.25)] border border-gray-100 relative max-h-[88vh] overflow-y-auto custom-scrollbar my-auto">
                                 <button onClick={() => setIsLoginModalOpen(false)} className="absolute top-5 right-5 w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 transition-colors"><i className="ph ph-x text-base"></i></button>
                                 
                                 <div className="w-20 h-20 bg-white rounded-full mx-auto flex items-center justify-center mb-3 shadow-md border border-gray-100 overflow-hidden p-1">
@@ -2460,7 +2464,7 @@
                                 <h2 className="text-2xl font-black text-center text-gray-800 tracking-tight">ระบบเจ้าหน้าที่</h2>
                                 <p className="text-[11px] font-bold text-gray-400 text-center mt-0.5">เลือกชื่อผู้ตรวจและระบุรหัสผ่านเพื่อเข้าใช้งาน</p>
 
-                                <form onSubmit={handleLoginSubmit}>
+                                <form onSubmit={handleLoginSubmit} autoComplete="off">
                                     <div className="space-y-3.5 mt-5">
                                         {/* ช่องเลือกชื่อผู้ตรวจหลัก */}
                                         <div className="relative">
@@ -2614,13 +2618,18 @@
                                         {}
                                         {/* ช่องรหัสผ่าน แสดงจุด 8 จุดขนาดใหญ่ชัดเจน (แป้นพิมพ์ปกติ กรอกอะไรก็ได้) */}
                                         <div className="relative flex items-center">
+                                            {}
                                             <input 
-                                                type={showPasscode ? "text" : "password"} 
-                                                inputMode="text"
+                                                type="text" 
+                                                name="zc_staff_access_code"
+                                                autoComplete="off"
+                                                autoCorrect="off"
+                                                autoCapitalize="off"
+                                                spellCheck="false"
                                                 placeholder="••••••••" 
                                                 value={inputPasscode} 
                                                 onChange={(e) => setInputPasscode(e.target.value)} 
-                                                className={`w-full py-3.5 px-11 rounded-2xl border border-gray-200 bg-gray-50/80 focus:bg-white focus:outline-none focus:border-[#C8102E] text-center font-black text-gray-800 placeholder:text-gray-400 placeholder:text-2xl placeholder:tracking-[0.35em] transition-all ${showPasscode ? 'text-base tracking-normal' : 'text-2xl tracking-[0.35em]'}`} 
+                                                className={`w-full py-3.5 px-11 rounded-2xl border border-gray-200 bg-gray-50/80 focus:bg-white focus:outline-none focus:border-[#C8102E] text-center font-black text-gray-800 placeholder:text-gray-400 placeholder:text-2xl placeholder:tracking-[0.35em] transition-all ${showPasscode ? 'text-base tracking-normal' : 'masked-pin-input text-2xl tracking-[0.35em]'}`} 
                                             />
                                             <button 
                                                 type="button" 
