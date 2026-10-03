@@ -79,6 +79,46 @@
         .pdf-table.detailed-table th { font-size: 12px; padding: 6px 2px; }
         .col-purple { color: #7c3aed !important; font-weight: bold; }
 
+        /* สไตล์สำหรับใบตรวจแบบกระดาษคำตอบ (OMR Answer Sheet) */
+        .omr-sheet-wrapper {
+            font-family: 'Sarabun', sans-serif !important;
+            color: #111827;
+            background: white;
+            box-sizing: border-box;
+            width: 1123px !important;
+            max-width: 1123px !important;
+            padding: 24px 32px !important;
+            margin: 0 auto !important;
+        }
+        .omr-table { width: 100%; border-collapse: collapse; font-size: 11.5px; border: 1.5px solid #1f2937; }
+        .omr-table th { background-color: #f3f4f6 !important; color: #111827 !important; padding: 5px 3px; border: 1px solid #374151; font-weight: 700; text-align: center; vertical-align: middle; }
+        .omr-table td { padding: 4px 3px; border: 1px solid #9ca3af; text-align: center; vertical-align: middle; color: #1f2937; }
+        .omr-table tr:nth-child(even) td { background-color: #f9fafb !important; }
+        .omr-bubble {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 16px;
+            height: 16px;
+            border: 1.5px solid #374151;
+            border-radius: 9999px;
+            font-size: 8.5px;
+            font-weight: 700;
+            color: #4b5563;
+            background: #ffffff;
+            line-height: 1;
+        }
+        .omr-corner-mark {
+            width: 14px;
+            height: 14px;
+            border: 3px solid #111827;
+        }
+        @media print {
+            body * { visibility: hidden; }
+            #omr-print-area, #omr-print-area * { visibility: visible; }
+            #omr-print-area { position: fixed; left: 0; top: 0; width: 100%; margin: 0; padding: 10px; box-shadow: none !important; }
+        }
+
         .nav-item { transition: all 0.2s ease; position: relative; }
     </style>
 </head>
@@ -89,7 +129,7 @@
         const { useState, useEffect, useMemo, useRef } = React;
 
         // ⚠️ ลิงก์ Google Apps Script Backend
-        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby3CKwBAOiz6dJQWI-t8nabgSv-46yTcAI8QZHR2KFWtrGJSHuKHdnm7-sCDsfL26yu/exec";
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxp7RJqJIajrEx8J9IVnJC75saIt_FeiQDUxNgxnP7vrYOy7xcYy77RqXljRUXv_xHm/exec";
 
         const HARDCODED_LOGO = "https://i.postimg.cc/wBN5btrp/rong-re-yn-kham-wng.png";
         const HARDCODED_NAME = "STUDENT COUNCIL • KHAMMUANG SCHOOL";
@@ -136,7 +176,11 @@
             app_logo_url: "", logo_url: "", school_logo_url: "", zone_map_url: "", room_map_url: "",
             banner_url: "", main_banner_url: "", popup_banner_url: "", 
             announcement_title: "", announcement_msg: "",
-            visibility_main_banner: "public", visibility_popup_banner: "public", visibility_announce_banner: "public"
+            visibility_main_banner: "public", visibility_popup_banner: "public", visibility_announce_banner: "public",
+            admin_avatar_url: ADMIN_AVATAR_URL,
+            admin_name: "นายภูธนากร หงษ์ทอง (พี่ภีม)",
+            admin_role: "เลขานุการสภานักเรียนโรงเรียนคำม่วง",
+            admin_line_url: "https://line.me/ti/p/~470aijh"
         };
         
         const ROOM_CRITERIA = [
@@ -259,6 +303,8 @@
             const [showMainBannerPopup, setShowMainBannerPopup] = useState(false);
             const [hideBannerFor7Days, setHideBannerFor7Days] = useState(false);
             const [printData, setPrintData] = useState({ isPreparing: false, format: null, mode: null, title: '', subtitle: '', dateText: '', data: [] });
+            const [showPaperSheetModal, setShowPaperSheetModal] = useState(false);
+            const [paperSheetGradeFilter, setPaperSheetGradeFilter] = useState('all');
 
             // Admin Settings Inputs
             const [bulkRooms, setBulkRooms] = useState('');
@@ -278,6 +324,10 @@
             const [visMainBanner, setVisMainBanner] = useState('public');
             const [visPopupBanner, setVisPopupBanner] = useState('public');
             const [visAnnounceBanner, setVisAnnounceBanner] = useState('public');
+            const [adminAvatarInput, setAdminAvatarInput] = useState(ADMIN_AVATAR_URL);
+            const [adminNameInput, setAdminNameInput] = useState('นายภูธนากร หงษ์ทอง (พี่ภีม)');
+            const [adminRoleInput, setAdminRoleInput] = useState('เลขานุการสภานักเรียนโรงเรียนคำม่วง');
+            const [adminLineInput, setAdminLineInput] = useState('https://line.me/ti/p/~470aijh');
             const [sysPasscode, setSysPasscode] = useState('');
             const [sysMasterPasscode, setSysMasterPasscode] = useState('');
 
@@ -298,6 +348,10 @@
                     setVisMainBanner(settings.visibility_main_banner || 'public');
                     setVisPopupBanner(settings.visibility_popup_banner || 'public');
                     setVisAnnounceBanner(settings.visibility_announce_banner || 'public');
+                    setAdminAvatarInput(settings.admin_avatar_url || ADMIN_AVATAR_URL);
+                    setAdminNameInput(settings.admin_name || 'นายภูธนากร หงษ์ทอง (พี่ภีม)');
+                    setAdminRoleInput(settings.admin_role || 'เลขานุการสภานักเรียนโรงเรียนคำม่วง');
+                    setAdminLineInput(settings.admin_line_url || 'https://line.me/ti/p/~470aijh');
                     setSysPasscode(settings.passcode || '1234');
                     setSysMasterPasscode(settings.master_passcode || '9999');
                 }
@@ -1134,7 +1188,8 @@
                     ...settings, app_logo_url: appLogoInput, logo_url: logoInput, school_logo_url: schoolLogoInput, zone_map_url: zoneMapInput, room_map_url: roomMapInput,
                     banner_url: announceBannerInput, announce_banner_url: announceBannerInput, main_banner_url: mainBannerInput, popup_banner_url: popupBannerInput, 
                     announcement_title: announcementTitleInput, announcement_msg: announcementInput,
-                    visibility_main_banner: visMainBanner, visibility_popup_banner: visPopupBanner, visibility_announce_banner: visAnnounceBanner
+                    visibility_main_banner: visMainBanner, visibility_popup_banner: visPopupBanner, visibility_announce_banner: visAnnounceBanner,
+                    admin_avatar_url: adminAvatarInput, admin_name: adminNameInput, admin_role: adminRoleInput, admin_line_url: adminLineInput
                 }); 
                 try {
                     await saveSettingsGroupToServer([
@@ -1151,11 +1206,63 @@
                         { key: 'announcement_msg', val: announcementInput },
                         { key: 'visibility_main_banner', val: visMainBanner },
                         { key: 'visibility_popup_banner', val: visPopupBanner },
-                        { key: 'visibility_announce_banner', val: visAnnounceBanner }
+                        { key: 'visibility_announce_banner', val: visAnnounceBanner },
+                        { key: 'admin_avatar_url', val: adminAvatarInput },
+                        { key: 'admin_name', val: adminNameInput },
+                        { key: 'admin_role', val: adminRoleInput },
+                        { key: 'admin_line_url', val: adminLineInput }
                     ]);
                     if(!popupBannerInput) { safeRemoveItem('zc26_hide_banner_until'); }
                     showToast('บันทึกข้อมูลรูปภาพและประกาศเรียบร้อย', 'success'); 
                 } catch(e) { showToast('บันทึกล้มเหลว กรุณาเช็คการเชื่อมต่อหลังบ้าน', 'error'); }
+            };
+
+            const paperSheetRooms = useMemo(() => {
+                const validRooms = Array.isArray(rooms) ? rooms : [];
+                if (paperSheetGradeFilter === 'all') return validRooms;
+                return validRooms.filter(r => {
+                    const match = (r.name || '').match(/(\d+)/);
+                    const gGrade = match ? parseInt(match[1]) : 0;
+                    if (paperSheetGradeFilter === 'm_ton') return gGrade >= 1 && gGrade <= 3;
+                    if (paperSheetGradeFilter === 'm_plai') return gGrade >= 4 && gGrade <= 6;
+                    return String(gGrade) === paperSheetGradeFilter;
+                });
+            }, [rooms, paperSheetGradeFilter]);
+
+            const handleExportPaperSheet = async (format) => {
+                const element = document.getElementById('omr-sheet-export-box');
+                if (!element) return;
+                if (format === 'print') {
+                    window.print();
+                    return;
+                }
+                if (typeof window.html2canvas === 'undefined') {
+                    return showToast('กำลังโหลดเครื่องมือสร้างไฟล์ กรุณารอสักครู่...', 'warning');
+                }
+                showToast(`กำลังสร้างไฟล์กระดาษคำตอบ (${format.toUpperCase()})...`, 'info');
+                try {
+                    const canvas = await window.html2canvas(element, { scale: 2, useCORS: true });
+                    if (format === 'png') {
+                        const dataUrl = canvas.toDataURL('image/png');
+                        const link = document.createElement('a');
+                        link.download = `ใบตรวจกระดาษคำตอบ_ZoneCheck_${formatThaiDateForFile(filterDate)}.png`;
+                        link.href = dataUrl;
+                        link.click();
+                        showToast('ดาวน์โหลดใบตรวจ (PNG) สำเร็จ!', 'success');
+                    } else if (format === 'pdf' && typeof window.html2pdf !== 'undefined') {
+                        const opt = {
+                            margin: 5,
+                            filename: `ใบตรวจกระดาษคำตอบ_ZoneCheck_${formatThaiDateForFile(filterDate)}.pdf`,
+                            image: { type: 'jpeg', quality: 0.98 },
+                            html2canvas: { scale: 2, useCORS: true },
+                            jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
+                        };
+                        await window.html2pdf().set(opt).from(element).save();
+                        showToast('ดาวน์โหลดใบตรวจ (PDF) สำเร็จ!', 'success');
+                    }
+                } catch (err) {
+                    showToast('เกิดข้อผิดพลาดในการสร้างไฟล์ใบตรวจ', 'error');
+                }
             };
 
             const handleAddBulkInspectors = async () => {
@@ -2105,12 +2212,15 @@
                         {(appMode === 'admin' || appMode === 'inspector') && currentRoute === 'inspect' && (
                              <div className="animate-in fade-in space-y-4 pb-12">
                                 {/* ปุ่มดูแผนผัง (ห้องเรียนซ้าย - เขตพื้นที่ขวา ตรงกับปุ่มการ์ดด้านล่าง) */}
-                                <div className="grid grid-cols-2 gap-3 mb-2">
-                                    <button onClick={() => setShowRoomMap(true)} className="bg-white border border-blue-200 text-blue-600 font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-sm hover:bg-blue-50 active:scale-95 transition-all text-xs sm:text-sm">
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mb-2">
+                                    <button onClick={() => setShowRoomMap(true)} className="bg-white border border-blue-200 text-blue-600 font-bold py-3.5 px-3 rounded-2xl flex items-center justify-center gap-2 shadow-sm hover:bg-blue-50 active:scale-95 transition-all text-xs sm:text-sm">
                                         <i className="ph ph-buildings text-lg"></i> แผนผังห้องเรียน
                                     </button>
-                                    <button onClick={() => setShowZoneMap(true)} className="bg-white border border-[#C8102E]/20 text-[#C8102E] font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-sm hover:bg-red-50 active:scale-95 transition-all text-xs sm:text-sm">
+                                    <button onClick={() => setShowZoneMap(true)} className="bg-white border border-[#C8102E]/20 text-[#C8102E] font-bold py-3.5 px-3 rounded-2xl flex items-center justify-center gap-2 shadow-sm hover:bg-red-50 active:scale-95 transition-all text-xs sm:text-sm">
                                         <i className="ph ph-map-pin text-lg"></i> แผนผังเขตพื้นที่
+                                    </button>
+                                    <button onClick={() => setShowPaperSheetModal(true)} className="col-span-2 sm:col-span-1 bg-white border border-gray-300 text-gray-800 font-bold py-3.5 px-3 rounded-2xl flex items-center justify-center gap-2 shadow-sm hover:bg-gray-50 active:scale-95 transition-all text-xs sm:text-sm">
+                                        <i className="ph ph-printer text-lg text-[#C8102E]"></i> พิมพ์ใบตรวจ (กระดาษคำตอบ)
                                     </button>
                                 </div>
 
@@ -2229,13 +2339,46 @@
                                             <label className="text-[10px] font-bold text-gray-500 mb-1 block uppercase">5. แผนผังเขตพื้นที่ (Zone Map URL)</label>
                                             <input type="text" value={zoneMapInput} onChange={e=>setZoneMapInput(e.target.value)} placeholder="URL รูปแผนผังเขตพื้นที่..." className="w-full p-2.5 rounded-lg border border-gray-200 text-xs font-medium outline-none focus:border-[#C8102E]" />
                                          </div>
+                                         <div className="border border-gray-200 p-3 rounded-xl bg-white">
+                                            <label className="text-[10px] font-bold text-gray-500 mb-1 block uppercase">6. โลโก้ระบบ / โลโก้โรงเรียน (Logo URL)</label>
+                                            <input type="text" value={appLogoInput} onChange={e=>{setAppLogoInput(e.target.value); setSchoolLogoInput(e.target.value);}} placeholder="URL โลโก้โรงเรียน..." className="w-full p-2.5 rounded-lg border border-gray-200 text-xs font-medium outline-none focus:border-[#C8102E]" />
+                                         </div>
+                                         <div className="col-span-full border border-gray-200 p-3.5 rounded-xl bg-white space-y-3">
+                                            <div className="flex items-center justify-between">
+                                                <label className="text-xs font-bold text-gray-700 flex items-center gap-1.5"><i className="ph ph-identification-card text-[#C8102E] text-base"></i> ตั้งค่ารูปโปรไฟล์แอดมินและนามบัตรศูนย์ช่วยเหลือ</label>
+                                                <img src={adminAvatarInput || ADMIN_AVATAR_URL} alt="Admin Preview" className="w-10 h-10 rounded-full object-cover border-2 border-[#C8102E] shadow-sm" onError={(e)=>{e.target.src=HARDCODED_LOGO}} />
+                                            </div>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-gray-400 mb-1 block">URL รูปโปรไฟล์แอดมิน</label>
+                                                    <input type="text" value={adminAvatarInput} onChange={e=>setAdminAvatarInput(e.target.value)} placeholder="URL รูปหน้าแอดมิน..." className="w-full p-2.5 rounded-lg border border-gray-200 text-xs font-medium outline-none focus:border-[#C8102E]" />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-gray-400 mb-1 block">ชื่อ-สกุล แอดมิน</label>
+                                                    <input type="text" value={adminNameInput} onChange={e=>setAdminNameInput(e.target.value)} placeholder="เช่น นายภูธนากร หงษ์ทอง (พี่ภีม)" className="w-full p-2.5 rounded-lg border border-gray-200 text-xs font-bold outline-none focus:border-[#C8102E]" />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-gray-400 mb-1 block">ตำแหน่ง</label>
+                                                    <input type="text" value={adminRoleInput} onChange={e=>setAdminRoleInput(e.target.value)} placeholder="เช่น เลขานุการสภานักเรียนโรงเรียนคำม่วง" className="w-full p-2.5 rounded-lg border border-gray-200 text-xs font-medium outline-none focus:border-[#C8102E]" />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-gray-400 mb-1 block">ลิงก์ติดต่อ LINE</label>
+                                                    <input type="text" value={adminLineInput} onChange={e=>setAdminLineInput(e.target.value)} placeholder="https://line.me/ti/p/~..." className="w-full p-2.5 rounded-lg border border-gray-200 text-xs font-medium outline-none focus:border-[#C8102E]" />
+                                                </div>
+                                            </div>
+                                         </div>
                                          <div className="col-span-full border border-gray-200 p-3 rounded-xl bg-white space-y-2">
                                             <label className="text-[10px] font-bold text-gray-500 block uppercase">ข้อความประกาศสภานักเรียน</label>
                                             <input type="text" value={announcementTitleInput} onChange={e=>setAnnouncementTitleInput(e.target.value)} placeholder="หัวข้อประกาศ..." className="w-full p-2.5 rounded-lg border border-gray-200 text-xs font-bold outline-none focus:border-[#C8102E]" />
                                             <textarea value={announcementInput} onChange={e=>setAnnouncementInput(e.target.value)} rows="3" placeholder="รายละเอียดประกาศ..." className="w-full p-2.5 rounded-lg border border-gray-200 text-xs font-medium outline-none focus:border-[#C8102E]"></textarea>
                                          </div>
                                       </div>
-                                      <button onClick={handleSaveMegaphoneAndLogo} className="w-full py-3.5 bg-[#C8102E] hover:bg-red-800 text-white rounded-xl font-bold text-xs shadow-md transition-all active:scale-95">บันทึกข้อมูลรูปภาพและประกาศ</button>
+                                      <div className="flex flex-col sm:flex-row gap-2.5">
+                                          <button onClick={handleSaveMegaphoneAndLogo} className="flex-1 py-3.5 bg-[#C8102E] hover:bg-red-800 text-white rounded-xl font-bold text-xs shadow-md transition-all active:scale-95">บันทึกข้อมูลรูปภาพและประกาศ</button>
+                                          <button onClick={() => setShowPaperSheetModal(true)} className="sm:w-auto px-5 py-3.5 bg-gray-900 hover:bg-black text-white rounded-xl font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2">
+                                              <i className="ph ph-printer text-base"></i> พิมพ์ใบตรวจแบบกระดาษคำตอบ
+                                          </button>
+                                      </div>
                                    </div>
                                 </div>
 
@@ -2710,7 +2853,7 @@
                                                     <div className={`w-5 h-5 rounded-full flex items-center justify-center transition-colors ${roomScores.noDuty ? 'bg-red-500 text-white' : 'bg-gray-200 text-transparent'}`}><i className="ph ph-check-circle text-xs ph-fill"></i></div>
                                                 </div>
                                                 
-                                                <div className={`grid grid-cols-2 gap-2 ${roomScores.noDuty ? 'opacity-40 grayscale pointer-events-none' : ''}`}>
+                                                <div className={`grid grid-cols-2 gap-2 mb-4 ${roomScores.noDuty ? 'opacity-40 grayscale pointer-events-none' : ''}`}>
                                                     {ROOM_CRITERIA.map(c => (
                                                         <div key={c.id} onClick={() => toggleRoomScore(c.id)} className={`flex items-center justify-between p-2.5 rounded-xl border-2 transition-all cursor-pointer select-none ${roomScores[c.id] > 0 ? 'border-emerald-500 bg-emerald-50' : 'border-gray-100 bg-white'}`}>
                                                             <span className={`font-bold text-xs ${roomScores[c.id] > 0 ? 'text-emerald-700' : 'text-gray-600'}`}>{c.name}</span>
@@ -2720,7 +2863,7 @@
                                                 </div>
                                             </>
                                         ) : (
-                                            <div className="space-y-2">
+                                            <div className="space-y-2 mb-4">
                                                 {[{s:10, l:'ดีเยี่ยม'}, {s:8, l:'ดี'}, {s:5, l:'พอใช้'}, {s:2, l:'ปรับปรุง'}, {s:-5, l:'ไม่ปฏิบัติหน้าที่ (-5 คะแนน)'}].map(btn => (
                                                     <button key={btn.s} onClick={() => setZoneScore(btn.s)} className={`w-full p-3 rounded-xl border-2 font-bold text-sm flex justify-between items-center transition-all ${zoneScore === btn.s ? (btn.s < 0 ? 'border-red-500 bg-red-50 text-red-700' : 'border-emerald-500 bg-emerald-50 text-emerald-700') : 'border-gray-100 bg-white text-gray-600'}`}>
                                                         <span>{btn.l}</span>
@@ -2731,146 +2874,121 @@
                                         )}
                                     </div>
 
-                                    <div className="mt-5 bg-gray-50 p-3 rounded-xl border border-gray-200">
-                                        <label className="text-[10px] font-bold text-gray-500 mb-1.5 flex items-center gap-1.5 uppercase">หมายเหตุ (ถ้ามี)</label>
-                                        <textarea value={evalComment} onChange={e => setEvalComment(e.target.value)} placeholder={isSkipped ? "กรุณาระบุสาเหตุที่ข้ามการตรวจ..." : "ข้อเสนอแนะเพิ่มเติม..."} rows="2" className={`w-full bg-white border rounded-xl p-2.5 text-xs font-medium text-gray-700 outline-none transition-colors ${isSkipped && !evalComment.trim() ? 'border-red-400 focus:border-red-500 bg-red-50/30' : 'border-gray-200 focus:border-[#C8102E]'}`}></textarea>
-                                        
-                                        <div className="mt-3 flex items-center gap-2">
-                                            <input type="file" accept="image/*" capture="environment" id="inspectImageUpload" className="hidden" onChange={handleImageChange} ref={fileInputRef} disabled={isImageProcessing} />
-                                            {!inspectImage ? (
-                                                <label htmlFor="inspectImageUpload" className={`w-full flex items-center justify-center gap-2 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-500 hover:bg-gray-100 cursor-pointer shadow-sm transition-all active:scale-95 ${isImageProcessing ? 'opacity-50 cursor-wait' : ''}`}>
-                                                    {isImageProcessing ? <i className="ph ph-spinner animate-spin text-sm"></i> : <i className="ph ph-camera text-sm"></i>}
-                                                    {isImageProcessing ? "กำลังสร้างลายน้ำ..." : "แนบรูปหลักฐาน"}
-                                                </label>
-                                            ) : (
-                                                <div className="w-full relative flex items-center gap-3 bg-white p-2 rounded-xl border border-emerald-200 shadow-sm">
-                                                    <img src={inspectImage.dataUrl} className="w-10 h-10 object-cover rounded-lg border border-gray-100" />
-                                                    <div className="flex-1 overflow-hidden">
-                                                        <p className="text-xs font-bold text-emerald-600 truncate">{inspectImage.fileName}</p>
-                                                        <p className="text-[9px] text-gray-400">รูปลายน้ำพร้อมอัปโหลด</p>
-                                                    </div>
-                                                    <button onClick={removeImage} className="w-8 h-8 rounded-full bg-red-50 text-red-500 flex items-center justify-center hover:bg-red-100 transition-colors"><i className="ph ph-trash text-xs"></i></button>
-                                                </div>
-                                            )}
+                                    <div className="space-y-2 mb-4 bg-gray-50 p-3 rounded-xl border border-gray-100">
+                                        <div className="flex gap-2">
+                                            <input type="text" placeholder={isSkipped ? "กรุณาระบุสาเหตุที่ข้ามการตรวจ..." : "ข้อเสนอแนะเพิ่มเติม..."} value={evalComment} onChange={(e) => setEvalComment(e.target.value)} className={`flex-1 p-2.5 rounded-lg border bg-white text-xs font-medium outline-none transition-colors ${isSkipped && !evalComment.trim() ? 'border-red-400 focus:border-red-500 bg-red-50/20' : 'border-gray-200 focus:border-[#C8102E]'}`} />
+                                            <label className="bg-white border border-gray-200 text-gray-600 hover:text-[#C8102E] hover:border-[#C8102E] px-3 py-2.5 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all shadow-sm shrink-0">
+                                                <i className="ph ph-camera text-base"></i> รูป
+                                                <input type="file" accept="image/*" capture="environment" ref={fileInputRef} onChange={handleImageChange} className="hidden" />
+                                            </label>
                                         </div>
+                                        {inspectImage && (
+                                            <div className="relative rounded-xl overflow-hidden border border-gray-200 mt-2">
+                                                <img src={inspectImage.dataUrl} alt="Preview" className="w-full h-36 object-cover" />
+                                                <button onClick={removeImage} className="absolute top-2 right-2 bg-black/60 text-white w-7 h-7 rounded-full flex items-center justify-center hover:bg-black"><i className="ph ph-x text-xs"></i></button>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 
                                 <div className="pt-3 border-t border-gray-100 flex gap-3 items-center shrink-0">
                                     <div className="flex-1 text-center bg-gray-50 rounded-xl py-2 border border-gray-100 flex flex-col justify-center">
                                         <span className="block text-[9px] font-bold text-gray-400">คะแนน</span>
-                                        <span className={`text-xl font-black ${isSkipped ? 'text-gray-400' : ((inspectModal.type === 'room' ? (roomScores.noDuty ? -5 : Object.values(roomScores).filter(v=>typeof v==='number').reduce((a,b)=>a+b,0)) : zoneScore) < 0 ? 'text-red-500' : 'text-emerald-600')}`}>
-                                            {isSkipped ? '-' : ((inspectModal.type === 'room' ? (roomScores.noDuty ? -5 : Object.values(roomScores).filter(v=>typeof v==='number').reduce((a,b)=>a+b,0)) : zoneScore) > 0 ? `+${inspectModal.type === 'room' ? (roomScores.noDuty ? -5 : Object.values(roomScores).filter(v=>typeof v==='number').reduce((a,b)=>a+b,0)) : zoneScore}` : (inspectModal.type === 'room' ? (roomScores.noDuty ? -5 : Object.values(roomScores).filter(v=>typeof v==='number').reduce((a,b)=>a+b,0)) : zoneScore))}
+                                        <span className={`text-xl font-black ${isSkipped ? 'text-gray-400' : ((inspectModal.type === 'room' ? (roomScores.noDuty ? -5 : (roomScores.c1 + roomScores.c2 + roomScores.c3 + roomScores.c4 + roomScores.c5)) : zoneScore) < 0 ? 'text-red-500' : 'text-emerald-600')}`}>
+                                            {isSkipped ? '-' : ((inspectModal.type === 'room' ? (roomScores.noDuty ? -5 : (roomScores.c1 + roomScores.c2 + roomScores.c3 + roomScores.c4 + roomScores.c5)) : zoneScore) > 0 ? `+${inspectModal.type === 'room' ? (roomScores.noDuty ? -5 : (roomScores.c1 + roomScores.c2 + roomScores.c3 + roomScores.c4 + roomScores.c5)) : zoneScore}` : (inspectModal.type === 'room' ? (roomScores.noDuty ? -5 : (roomScores.c1 + roomScores.c2 + roomScores.c3 + roomScores.c4 + roomScores.c5)) : zoneScore))}
                                         </span>
                                     </div>
-                                    <button onClick={handleSubmitInspection} disabled={isImageProcessing} className={`flex-[2] py-3.5 rounded-xl font-bold text-white shadow-lg active:scale-95 transition-all text-sm disabled:opacity-50 ${isSkipped ? 'bg-gray-800 shadow-gray-500/30' : ((inspectModal.type === 'room' ? (roomScores.noDuty ? -5 : Object.values(roomScores).filter(v=>typeof v==='number').reduce((a,b)=>a+b,0)) : zoneScore) < 0 ? 'bg-gradient-to-r from-red-500 to-red-600 shadow-red-500/30' : 'bg-gradient-to-r from-[#C8102E] to-red-800 shadow-red-500/30')}`}>
-                                        {isImageProcessing ? "รอโหลดรูป..." : "บันทึกผล"}
+                                    <button onClick={handleSubmitInspection} disabled={isImageProcessing} className="flex-[2] py-3.5 rounded-xl font-bold text-sm bg-[#C8102E] text-white shadow-lg shadow-red-500/25 hover:bg-red-800 disabled:opacity-50 active:scale-95 transition-all">
+                                        {isImageProcessing ? 'รอสักครู่...' : 'บันทึกผล'}
                                     </button>
                                 </div>
                             </div>
                         </div>
                     )}
 
-                    {/* Confirm Dialog */}
+                    {/* Confirm Dialog & Modals อื่นๆ */}
                     {confirmDialog.isOpen && (
                         <div className="fixed inset-0 z-[99999] bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-                            <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl animate-in zoom-in-95 text-center relative">
-                                <div className="w-16 h-16 bg-amber-100 text-amber-500 rounded-full flex items-center justify-center text-3xl mx-auto mb-4"><i className="ph ph-warning-circle"></i></div>
-                                <h3 className="text-xl font-bold text-gray-800 mb-2">ยืนยันการดำเนินการ</h3>
-                                <p className="text-gray-500 font-medium mb-6 text-sm whitespace-pre-line">{confirmDialog.message}</p>
-                                {confirmDialog.isAlert ? (
-                                    <button onClick={() => setConfirmDialog({isOpen: false, message: '', onConfirm: null, isAlert: false})} className="w-full py-3 rounded-xl font-bold text-white bg-[#C8102E] hover:bg-red-800 transition-colors shadow-lg">ปิดหน้าต่าง</button>
+                            <div className="bg-white rounded-[2rem] p-6 w-full max-w-xs text-center shadow-2xl animate-in zoom-in-95">
+                                <div className="w-12 h-12 rounded-full bg-red-50 text-[#C8102E] flex items-center justify-center mx-auto mb-3"><i className="ph ph-warning-circle text-2xl"></i></div>
+                                <p className="text-sm font-bold text-gray-800 whitespace-pre-line mb-5">{confirmDialog.message}</p>
+                                <div className="flex gap-2">
+                                    {!confirmDialog.isAlert && (
+                                        <button onClick={() => setConfirmDialog({ isOpen: false, message: '', onConfirm: null, isAlert: false })} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-600 font-bold text-xs hover:bg-gray-200">ยกเลิก</button>
+                                    )}
+                                    <button onClick={() => { if(confirmDialog.onConfirm) confirmDialog.onConfirm(); setConfirmDialog({ isOpen: false, message: '', onConfirm: null, isAlert: false }); }} className="flex-1 py-2.5 rounded-xl bg-[#C8102E] text-white font-bold text-xs hover:bg-red-800">ตกลง</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* แผนผังห้องเรียน & เขตพื้นที่ & ประกาศ */}
+                    {showRoomMap && (
+                        <div className="fixed inset-0 z-[9990] bg-gray-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in" onClick={() => setShowRoomMap(false)}>
+                            <div className="bg-white rounded-[2rem] p-4 w-full max-w-2xl shadow-2xl relative" onClick={e => e.stopPropagation()}>
+                                <div className="flex justify-between items-center mb-3 px-2">
+                                    <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2"><i className="ph ph-buildings text-blue-600"></i> แผนผังห้องเรียน</h3>
+                                    <button onClick={() => setShowRoomMap(false)} className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center"><i className="ph ph-x"></i></button>
+                                </div>
+                                {settings?.room_map_url ? (
+                                    <img src={settings.room_map_url} alt="Room Map" className="w-full max-h-[75vh] object-contain rounded-xl bg-gray-50" />
                                 ) : (
-                                    <div className="flex gap-2">
-                                        <button onClick={() => setConfirmDialog({isOpen: false, message: '', onConfirm: null, isAlert: false})} className="flex-1 py-3 rounded-xl font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 transition-colors">ยกเลิก</button>
-                                        <button onClick={() => { confirmDialog.onConfirm(); setConfirmDialog({isOpen: false, message: '', onConfirm: null, isAlert: false}); }} className="flex-1 py-3 rounded-xl font-bold text-white bg-[#C8102E] hover:bg-red-800 transition-colors shadow-lg">ยืนยัน</button>
-                                    </div>
+                                    <p className="text-center text-gray-400 text-xs py-12 font-medium">ยังไม่ได้ตั้งค่ารูปแผนผังห้องเรียนในระบบ</p>
                                 )}
                             </div>
                         </div>
                     )}
 
-                    {/* Announcement Modal */}
-                    {showAnnouncement && canViewBanner(settings?.visibility_announce_banner) && (
-                        <div className="fixed inset-0 z-[9990] bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in" onClick={()=>setShowAnnouncement(false)}>
-                            <div className="bg-white rounded-[2rem] w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95" onClick={e=>e.stopPropagation()}>
-                                <div className="bg-gradient-to-r from-[#C8102E] to-red-800 p-4 flex items-center justify-between text-white">
-                                    <div className="flex items-center gap-2 font-bold text-lg"><i className="ph ph-megaphone text-xl"></i> ประกาศสภาฯ</div>
-                                    <button onClick={()=>setShowAnnouncement(false)} className="w-8 h-8 flex items-center justify-center bg-white/20 rounded-full hover:bg-white/30 transition-colors"><i className="ph ph-x"></i></button>
-                                </div>
-                                <div className="max-h-[60vh] overflow-y-auto p-6 space-y-4 custom-scrollbar">
-                                    {settings?.announce_banner_url && <div className="w-full aspect-[16/9] rounded-xl overflow-hidden shadow-sm border border-gray-100 bg-gray-50"><img src={settings.announce_banner_url} alt="Announcement Banner" className="w-full h-full object-cover" /></div>}
-                                    <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
-                                        <h3 className="font-bold text-[#C8102E] mb-2">{settings?.announcement_title || '📌 ประกาศจากระบบ'}</h3>
-                                        <div className="whitespace-pre-line text-gray-700 text-sm font-medium leading-relaxed">{settings?.announcement_msg || 'ยังไม่มีประกาศในขณะนี้'}</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Room Map Modal */}
-                    {showRoomMap && (
-                        <div className="fixed inset-0 z-[9999] bg-gray-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in" onClick={()=>setShowRoomMap(false)}>
-                            <div className="bg-white rounded-[2rem] w-full max-w-2xl max-h-[85vh] shadow-2xl overflow-hidden animate-in zoom-in-95 flex flex-col" onClick={e=>e.stopPropagation()}>
-                                <div className="p-4 flex items-center justify-between border-b border-gray-100 bg-white">
-                                    <h3 className="font-bold text-gray-800 flex items-center gap-2"><i className="ph ph-buildings text-blue-600"></i> แผนผังห้องเรียน</h3>
-                                    <button onClick={()=>setShowRoomMap(false)} className="w-8 h-8 flex items-center justify-center bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"><i className="ph ph-x"></i></button>
-                                </div>
-                                <div className="flex-1 overflow-auto bg-gray-50 p-2 custom-scrollbar flex items-center justify-center">
-                                    {settings?.room_map_url ? (
-                                        <img src={settings.room_map_url} alt="Room Map" className="w-full h-auto object-contain rounded-xl" crossOrigin="anonymous"/>
-                                    ) : (
-                                        <p className="text-gray-400 text-sm font-medium py-10">ยังไม่มีข้อมูลรูปภาพแผนผังห้องเรียน</p>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Zone Map Modal */}
                     {showZoneMap && (
-                        <div className="fixed inset-0 z-[9999] bg-gray-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in" onClick={()=>setShowZoneMap(false)}>
-                            <div className="bg-white rounded-[2rem] w-full max-w-2xl max-h-[85vh] shadow-2xl overflow-hidden animate-in zoom-in-95 flex flex-col" onClick={e=>e.stopPropagation()}>
-                                <div className="p-4 flex items-center justify-between border-b border-gray-100 bg-white">
-                                    <h3 className="font-bold text-gray-800 flex items-center gap-2"><i className="ph ph-map-pin text-[#C8102E]"></i> แผนผังเขตพื้นที่</h3>
-                                    <button onClick={()=>setShowZoneMap(false)} className="w-8 h-8 flex items-center justify-center bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"><i className="ph ph-x"></i></button>
+                        <div className="fixed inset-0 z-[9990] bg-gray-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in" onClick={() => setShowZoneMap(false)}>
+                            <div className="bg-white rounded-[2rem] p-4 w-full max-w-2xl shadow-2xl relative" onClick={e => e.stopPropagation()}>
+                                <div className="flex justify-between items-center mb-3 px-2">
+                                    <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2"><i className="ph ph-map-pin text-[#C8102E]"></i> แผนผังเขตพื้นที่</h3>
+                                    <button onClick={() => setShowZoneMap(false)} className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center"><i className="ph ph-x"></i></button>
                                 </div>
-                                <div className="flex-1 overflow-auto bg-gray-50 p-2 custom-scrollbar flex items-center justify-center">
-                                    {settings?.zone_map_url ? (
-                                        <img src={settings.zone_map_url} alt="Zone Map" className="w-full h-auto object-contain rounded-xl" crossOrigin="anonymous"/>
-                                    ) : (
-                                        <p className="text-gray-400 text-sm font-medium py-10">ยังไม่มีข้อมูลรูปภาพแผนผังเขตพื้นที่</p>
-                                    )}
+                                {settings?.zone_map_url ? (
+                                    <img src={settings.zone_map_url} alt="Zone Map" className="w-full max-h-[75vh] object-contain rounded-xl bg-gray-50" />
+                                ) : (
+                                    <p className="text-center text-gray-400 text-xs py-12 font-medium">ยังไม่ได้ตั้งค่ารูปแผนผังเขตพื้นที่ในระบบ</p>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {showAnnouncement && (
+                        <div className="fixed inset-0 z-[9990] bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in" onClick={() => setShowAnnouncement(false)}>
+                            <div className="bg-white rounded-[2rem] p-6 w-full max-w-md shadow-2xl relative" onClick={e => e.stopPropagation()}>
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="font-black text-gray-800 text-base flex items-center gap-2"><i className="ph ph-megaphone text-[#C8102E]"></i> {settings?.announcement_title || 'ประกาศสภานักเรียน'}</h3>
+                                    <button onClick={() => setShowAnnouncement(false)} className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center"><i className="ph ph-x"></i></button>
+                                </div>
+                                {(settings?.announce_banner_url || settings?.banner_url) && canViewBanner(settings?.visibility_announce_banner) && (
+                                    <img src={settings.announce_banner_url || settings.banner_url} alt="Announcement" className="w-full rounded-xl mb-4 object-cover max-h-56" />
+                                )}
+                                <p className="text-xs text-gray-600 whitespace-pre-line leading-relaxed bg-gray-50 p-4 rounded-xl border border-gray-100">
+                                    {settings?.announcement_msg || 'ยังไม่มีประกาศใหม่ในขณะนี้'}
+                                </p>
+                            </div>
+                        </div>
+                    )}
+
+                    {showMainBannerPopup && settings?.popup_banner_url && (
+                        <div className="fixed inset-0 z-[9992] bg-gray-900/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+                            <div className="bg-white rounded-[2rem] p-4 w-full max-w-md shadow-2xl relative">
+                                <button onClick={handleCloseMainBannerPopup} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/60 text-white flex items-center justify-center z-10"><i className="ph ph-x"></i></button>
+                                <img src={settings.popup_banner_url} alt="Popup Banner" className="w-full rounded-2xl object-contain max-h-[65vh]" />
+                                <div className="flex items-center justify-between mt-3 px-2">
+                                    <label className="flex items-center gap-2 text-xs text-gray-500 font-medium cursor-pointer">
+                                        <input type="checkbox" checked={hideBannerFor7Days} onChange={e => setHideBannerFor7Days(e.target.checked)} className="rounded accent-[#C8102E]" />
+                                        ไม่ต้องแสดงอีกใน 7 วัน
+                                    </label>
+                                    <button onClick={handleCloseMainBannerPopup} className="px-4 py-1.5 bg-[#C8102E] text-white rounded-xl text-xs font-bold">ปิด</button>
                                 </div>
                             </div>
                         </div>
                     )}
 
-                    {/* Popup Banner Modal */}
-                    {showMainBannerPopup && settings?.popup_banner_url && canViewBanner(settings.visibility_popup_banner) && (
-                        <div className="fixed inset-0 z-[9995] bg-gray-900/80 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in">
-                            <div className="bg-transparent w-full max-w-sm rounded-[2rem] relative flex flex-col items-center animate-in zoom-in-95">
-                                <button onClick={handleCloseMainBannerPopup} className="absolute -top-12 right-0 w-10 h-10 bg-white/20 hover:bg-white/40 backdrop-blur-md rounded-full text-white flex items-center justify-center transition-all border border-white/30 z-10">
-                                    <i className="ph ph-x text-lg"></i>
-                                </button>
-                                <div className="w-full rounded-3xl overflow-hidden shadow-2xl bg-white mb-4 flex items-center justify-center">
-                                    <img src={settings.popup_banner_url} alt="Popup Campaign Banner" className="w-full h-auto object-cover block" />
-                                </div>
-                                <label className="flex items-center gap-3 cursor-pointer bg-black/40 backdrop-blur-md px-4 py-2.5 rounded-full border border-white/10 hover:bg-black/60 transition-colors">
-                                    <div className="relative flex items-center">
-                                        <input type="checkbox" checked={hideBannerFor7Days} onChange={(e) => setHideBannerFor7Days(e.target.checked)} className="checkbox-custom opacity-0 absolute w-full h-full cursor-pointer z-10" />
-                                        <div className="w-5 h-5 bg-white/20 border-2 border-white/50 rounded flex items-center justify-center transition-all duration-200">
-                                            <i className="ph ph-check text-white hidden pointer-events-none text-xs"></i>
-                                        </div>
-                                    </div>
-                                    <span className="text-white text-xs font-medium">ไม่แสดงหน้านี้อีกใน 7 วัน</span>
-                                </label>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Info Modal (นามบัตรช่วยเหลือแบบแนวนอน) */}
+                    {/* Info Modal (นามบัตรช่วยเหลือแบบแนวนอน ดึงรูปและชื่อจากตั้งค่าได้) */}
                     {showInfoModal && (
                         <div className="fixed inset-0 z-[9990] bg-gray-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4 animate-in fade-in" onClick={()=>setShowInfoModal(false)}>
                             <div className="bg-white rounded-[2rem] p-6 w-full max-w-md shadow-2xl animate-in slide-in-from-bottom-full sm:zoom-in-95 relative" onClick={e=>e.stopPropagation()}>
@@ -2879,16 +2997,185 @@
                                     <button onClick={()=>setShowInfoModal(false)} className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center hover:bg-gray-200"><i className="ph ph-x"></i></button>
                                 </div>
                                 <div className="flex items-center gap-4 bg-gray-50 p-4 rounded-2xl border border-gray-100 mb-4">
-                                    <img src={ADMIN_AVATAR_URL} alt="Admin Profile" className="w-16 h-16 rounded-full object-cover border-2 border-[#C8102E] shadow-sm shrink-0" />
+                                    <img src={settings?.admin_avatar_url || ADMIN_AVATAR_URL} alt="Admin Profile" className="w-16 h-16 rounded-full object-cover border-2 border-[#C8102E] shadow-sm shrink-0" onError={(e)=>{e.target.src=HARDCODED_LOGO}} />
                                     <div className="min-w-0 flex-1">
-                                        <h3 className="font-black text-gray-800 text-base truncate">นายภูธนากร หงษ์ทอง (พี่ภีม)</h3>
-                                        <p className="text-xs font-bold text-[#C8102E] mt-0.5">เลขานุการสภานักเรียนโรงเรียนคำม่วง</p>
+                                        <h3 className="font-black text-gray-800 text-base truncate">{settings?.admin_name || 'นายภูธนากร หงษ์ทอง (พี่ภีม)'}</h3>
+                                        <p className="text-xs font-bold text-[#C8102E] mt-0.5">{settings?.admin_role || 'เลขานุการสภานักเรียนโรงเรียนคำม่วง'}</p>
                                         <p className="text-[11px] text-gray-500 mt-1 leading-snug">หากลืมรหัสผ่าน หรือพบปัญหาการใช้งานระบบ ติดต่อแอดมินได้โดยตรงครับ</p>
                                     </div>
                                 </div>
-                                <a href="https://line.me/ti/p/~470aijh" target="_blank" rel="noreferrer" className="w-full flex items-center justify-center gap-2 py-3.5 bg-[#00B900] hover:bg-[#009900] text-white rounded-xl font-bold transition-all active:scale-95 text-sm shadow-md shadow-green-500/20">
+                                <a href={settings?.admin_line_url || "https://line.me/ti/p/~470aijh"} target="_blank" rel="noreferrer" className="w-full flex items-center justify-center gap-2 py-3.5 bg-[#00B900] hover:bg-[#009900] text-white rounded-xl font-bold transition-all active:scale-95 text-sm shadow-md shadow-green-500/20">
                                     <i className="ph ph-chat-circle-dots text-lg ph-fill"></i> ติดต่อแอดมินผ่าน LINE
                                 </a>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Paper Answer Sheet Modal (แบบฟอร์มกระดาษคำตอบ OMR สำหรับปริ้นท์ไปฝน/กากบาท) */}
+                    {showPaperSheetModal && (
+                        <div className="fixed inset-0 z-[9998] bg-gray-900/80 backdrop-blur-sm flex flex-col items-center justify-center p-3 sm:p-6 animate-in fade-in">
+                            <div className="bg-white rounded-[2rem] w-full max-w-6xl max-h-[92vh] shadow-2xl flex flex-col overflow-hidden">
+                                {/* แถบเครื่องมือด้านบน */}
+                                <div className="p-4 border-b border-gray-200 flex flex-wrap items-center justify-between gap-3 bg-gray-50 shrink-0">
+                                    <div className="flex items-center gap-2.5">
+                                        <div className="w-10 h-10 rounded-xl bg-red-50 text-[#C8102E] flex items-center justify-center">
+                                            <i className="ph ph-exam text-xl"></i>
+                                        </div>
+                                        <div>
+                                            <h3 className="font-black text-gray-800 text-sm sm:text-base">ใบตรวจภาคสนาม (แบบกระดาษคำตอบ OMR / กากบาท)</h3>
+                                            <p className="text-[11px] text-gray-500 font-medium">สำหรับพิมพ์ออกไปเดินตรวจด้วยปากกา/ดินสอ แล้วค่อยนำคะแนนมาคีย์เข้าระบบ</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <select value={paperSheetGradeFilter} onChange={e => setPaperSheetGradeFilter(e.target.value)} className="bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-700 outline-none">
+                                            <option value="all">ทุกระดับชั้น ({rooms.length} ห้อง)</option>
+                                            <option value="m_ton">เฉพาะ ม.ต้น (ม.1 - ม.3)</option>
+                                            <option value="m_plai">เฉพาะ ม.ปลาย (ม.4 - ม.6)</option>
+                                            <option value="1">เฉพาะ ม.1</option>
+                                            <option value="2">เฉพาะ ม.2</option>
+                                            <option value="3">เฉพาะ ม.3</option>
+                                            <option value="4">เฉพาะ ม.4</option>
+                                            <option value="5">เฉพาะ ม.5</option>
+                                            <option value="6">เฉพาะ ม.6</option>
+                                        </select>
+                                        <button onClick={() => handleExportPaperSheet('png')} className="bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 px-3.5 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all">
+                                            <i className="ph ph-image text-base"></i> โหลดรูป PNG
+                                        </button>
+                                        <button onClick={() => handleExportPaperSheet('pdf')} className="bg-red-50 hover:bg-red-100 text-[#C8102E] border border-red-200 px-3.5 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all">
+                                            <i className="ph ph-file-pdf text-base"></i> โหลด PDF
+                                        </button>
+                                        <button onClick={() => handleExportPaperSheet('print')} className="bg-gray-900 hover:bg-black text-white px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all">
+                                            <i className="ph ph-printer text-base"></i> สั่งพิมพ์ทันที
+                                        </button>
+                                        <button onClick={() => setShowPaperSheetModal(false)} className="w-9 h-9 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center hover:bg-gray-300">
+                                            <i className="ph ph-x text-base"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* พื้นที่แสดงตัวอย่างกระดาษคำตอบ A4 แนวนอน */}
+                                <div className="flex-1 overflow-auto bg-gray-200 p-4 sm:p-6 custom-scrollbar flex justify-center items-start">
+                                    <div id="omr-print-area" className="shadow-xl rounded-sm bg-white overflow-x-auto">
+                                        <div id="omr-sheet-export-box" className="omr-sheet-wrapper relative">
+                                            {/* มุมมาร์คเกอร์แบบกระดาษคำตอบ OMR สี่มุม */}
+                                            <div className="flex justify-between items-center mb-2">
+                                                <div className="omr-corner-mark"></div>
+                                                <div className="text-[10px] font-bold tracking-widest text-gray-400 uppercase">OFFICIAL INSPECTION ANSWER SHEET • ZONECHECK V2.1</div>
+                                                <div className="omr-corner-mark"></div>
+                                            </div>
+
+                                            {/* ส่วนหัวกระดาษคำตอบ */}
+                                            <div className="border-2 border-gray-800 rounded-lg p-3 mb-3 flex items-center justify-between gap-4 bg-white">
+                                                <div className="flex items-center gap-3">
+                                                    <img src={settings?.school_logo_url || settings?.app_logo_url || HARDCODED_LOGO} className="w-14 h-14 object-contain" crossOrigin="anonymous" />
+                                                    <div>
+                                                        <h1 className="text-lg font-black text-gray-900 leading-tight">ใบลงคะแนนตรวจความเรียบร้อย (แบบกระดาษคำตอบภาคสนาม)</h1>
+                                                        <p className="text-xs font-bold text-gray-600">สภานักเรียนโรงเรียนคำม่วง อำเภอคำม่วง จังหวัดกาฬสินธุ์ • {HARDCODED_NAME}</p>
+                                                        <p className="text-[11px] text-gray-500 mt-0.5"><b>คำชี้แจง:</b> ให้ระบายทึบ ● หรือทำเครื่องหมายกากบาท ✕ ลงในวงกลม ○ ตามหัวข้อที่ผ่านเกณฑ์ หรือระดับคะแนนที่ประเมินได้</p>
+                                                    </div>
+                                                </div>
+
+                                                {/* กรอบกรอกข้อมูลผู้ตรวจและวันที่ */}
+                                                <div className="border border-gray-400 rounded p-2.5 text-xs space-y-1.5 min-w-[290px] bg-gray-50">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="font-bold text-gray-700">ประจำวันที่:</span>
+                                                        <span className="border-b border-dotted border-gray-600 px-3 font-bold text-gray-900">{formatDateObj(filterDate)}</span>
+                                                    </div>
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="font-bold text-gray-700">ผู้ตรวจ:</span>
+                                                        <span className="border-b border-dotted border-gray-600 flex-1 ml-2 text-right font-bold text-gray-800 truncate">{getActiveInspectorTeamString() !== 'ไม่ระบุ' ? getActiveInspectorTeamString() : '....................................................'}</span>
+                                                    </div>
+                                                    <div className="flex items-center justify-between text-[10px] text-gray-500 pt-0.5">
+                                                        <span>วิธีทำเครื่องหมาย: <b>● ระบายทึบ</b> หรือ <b>✕ กากบาท</b></span>
+                                                        <span>รวม {paperSheetRooms.length} ห้อง</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* ตารางกระดาษคำตอบ OMR */}
+                                            <table className="omr-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th rowSpan="2" style={{width: '3.5%'}}>ที่</th>
+                                                        <th rowSpan="2" style={{width: '8.5%'}}>ห้องเรียน</th>
+                                                        <th colSpan="7" style={{width: '38%', backgroundColor: '#eff6ff'}}>หมวดห้องเรียน (ข้อละ 2 คะแนน / เต็ม 10)</th>
+                                                        <th rowSpan="2" style={{width: '5.5%'}}>รวม<br/>ห้อง</th>
+                                                        <th colSpan="6" style={{width: '28%', backgroundColor: '#fdf4ff'}}>หมวดเขตพื้นที่ (เลือกฝน 1 ช่อง / เต็ม 10)</th>
+                                                        <th rowSpan="2" style={{width: '5.5%'}}>รวม<br/>เขต</th>
+                                                        <th rowSpan="2" style={{width: '11%'}}>หมายเหตุ / จุดที่ต้องแก้ไข</th>
+                                                    </tr>
+                                                    <tr>
+                                                        <th style={{fontSize: '10px'}}>โต๊ะ<br/>(+2)</th>
+                                                        <th style={{fontSize: '10px'}}>ขยะ<br/>(+2)</th>
+                                                        <th style={{fontSize: '10px'}}>ไฟ/หน้าต่าง<br/>(+2)</th>
+                                                        <th style={{fontSize: '10px'}}>พื้น<br/>(+2)</th>
+                                                        <th style={{fontSize: '10px'}}>กระดาน<br/>(+2)</th>
+                                                        <th style={{fontSize: '10px', color: '#b91c1c'}}>ไม่ทำ<br/>(-5)</th>
+                                                        <th style={{fontSize: '10px', color: '#4b5563'}}>ข้าม<br/>(-)</th>
+
+                                                        <th style={{fontSize: '10px'}}>ดีเยี่ยม<br/>(10)</th>
+                                                        <th style={{fontSize: '10px'}}>ดี<br/>(8)</th>
+                                                        <th style={{fontSize: '10px'}}>พอใช้<br/>(5)</th>
+                                                        <th style={{fontSize: '10px'}}>ปรับปรุง<br/>(2)</th>
+                                                        <th style={{fontSize: '10px', color: '#b91c1c'}}>ไม่ทำ<br/>(-5)</th>
+                                                        <th style={{fontSize: '10px', color: '#4b5563'}}>ข้าม<br/>(-)</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {paperSheetRooms.length === 0 ? (
+                                                        <tr>
+                                                            <td colSpan="17" className="py-8 text-center text-gray-400 font-bold">ยังไม่มีรายชื่อห้องเรียนในระบบ (สามารถเพิ่มห้องเรียนได้ที่เมนูตั้งค่า)</td>
+                                                        </tr>
+                                                    ) : paperSheetRooms.map((r, idx) => (
+                                                        <tr key={r.id || idx}>
+                                                            <td className="font-bold">{idx + 1}</td>
+                                                            <td className="font-black text-left pl-2">{r.name}</td>
+                                                            {/* วงกลมฝนคะแนนห้องเรียน */}
+                                                            <td><span className="omr-bubble">2</span></td>
+                                                            <td><span className="omr-bubble">2</span></td>
+                                                            <td><span className="omr-bubble">2</span></td>
+                                                            <td><span className="omr-bubble">2</span></td>
+                                                            <td><span className="omr-bubble">2</span></td>
+                                                            <td><span className="omr-bubble" style={{borderColor:'#b91c1c', color:'#b91c1c'}}>-5</span></td>
+                                                            <td><span className="omr-bubble">-</span></td>
+                                                            <td></td>
+
+                                                            {/* วงกลมฝนคะแนนเขตพื้นที่ */}
+                                                            {r.hasZone === false ? (
+                                                                <td colSpan="6" className="text-[10px] text-gray-400 font-bold bg-gray-100">ไม่มีเขตพื้นที่รับผิดชอบ</td>
+                                                            ) : (
+                                                                <>
+                                                                    <td><span className="omr-bubble">10</span></td>
+                                                                    <td><span className="omr-bubble">8</span></td>
+                                                                    <td><span className="omr-bubble">5</span></td>
+                                                                    <td><span className="omr-bubble">2</span></td>
+                                                                    <td><span className="omr-bubble" style={{borderColor:'#b91c1c', color:'#b91c1c'}}>-5</span></td>
+                                                                    <td><span className="omr-bubble">-</span></td>
+                                                                </>
+                                                            )}
+                                                            <td></td>
+                                                            <td></td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+
+                                            {/* ส่วนท้ายกระดาษคำตอบสำหรับลงลายมือชื่อ */}
+                                            <div className="mt-4 flex justify-between items-end text-xs text-gray-700 pt-2">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="omr-corner-mark"></div>
+                                                    <span className="text-[10px] text-gray-500">เอกสารสร้างจากระบบ ZoneCheck V2.1 • สภานักเรียนโรงเรียนคำม่วง</span>
+                                                </div>
+                                                <div className="flex gap-8 items-center">
+                                                    <div>ลงชื่อ ....................................................... ผู้ตรวจประเมิน</div>
+                                                    <div>ลงชื่อ ....................................................... ผู้รับรองผล</div>
+                                                    <div className="omr-corner-mark"></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     )}
