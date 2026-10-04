@@ -334,6 +334,7 @@
             const [customSelectedSignerIds, setCustomSelectedSignerIds] = useState([]);
             const [showDigitalSignatureImg, setShowDigitalSignatureImg] = useState(true);
             const [showCustomSignerPickerModal, setShowCustomSignerPickerModal] = useState(false);
+            const [showDailyInspectorsModal, setShowDailyInspectorsModal] = useState(false);
 
             // States สำหรับหน้าตั้งค่าคลังผู้ลงนามและเซตลายเซ็น (แอดมิน)
             const [newSignerName, setNewSignerName] = useState('');
@@ -631,7 +632,28 @@
                     return;
                 }
 
-                // สเต็ปที่ 1 ผ่านแล้ว -> ไปสเต็ปที่ 2 เพื่อเซ็นลายมือชื่อยืนยันตัวตนบนพื้นที่ขนาดใหญ่
+                // ถ้าเป็นรหัสผ่านแอดมิน (Master Passcode) ให้เข้าสู่ระบบได้ทันทีโดยไม่ต้องเซ็นชื่อ!
+                if (isMaster) {
+                    const validInspectors = Array.isArray(inspectors) ? inspectors : [];
+                    let adminObj = validInspectors.find(u => u.name === finalName);
+                    const resolvedAvatar = getInspectorAvatar(finalName);
+                    if (!adminObj) { 
+                        adminObj = { id: generateId('u'), name: finalName, avatar_url: resolvedAvatar, dailySignature: '' }; 
+                    } else {
+                        adminObj = { ...adminObj, avatar_url: adminObj.avatar_url || resolvedAvatar, dailySignature: '' };
+                    }
+                    setLoginError(''); 
+                    setIsLoginModalOpen(false); 
+                    setLoginStep(1);
+                    setAppMode('admin');
+                    setCurrentUser(adminObj);
+                    setCurrentRoute('dashboard'); 
+                    safeSetItem('zc26_last_user', finalName);
+                    handleSync(true); 
+                    return;
+                }
+
+                // สำหรับผู้ตรวจทั่วไป: สเต็ปที่ 1 ผ่านแล้ว -> ไปสเต็ปที่ 2 เพื่อเซ็นลายมือชื่อยืนยันตัวตนบนพื้นที่ขนาดใหญ่
                 if (loginStep === 1) {
                     setLoginError('');
                     setLoginStep(2);
@@ -656,8 +678,7 @@
                 setLoginError(''); 
                 setIsLoginModalOpen(false); 
                 setLoginStep(1);
-                if (isMaster) setAppMode('admin'); 
-                else setAppMode('inspector');
+                setAppMode('inspector');
                 setCurrentUser(userObj);
                 setCurrentRoute('dashboard'); 
                 safeSetItem('zc26_last_user', finalName);
@@ -1859,6 +1880,66 @@
                 });
                 return resolvedSigners;
             }, [activeSignatureMode, blankInspectorCount, customSelectedSignerIds, signaturePresets, signersList, inspections, currentRoute, dateMode, filterDate, currentUser, coInspectors, loginSignatureDataUrl]);
+
+            // สรุปข้อมูลการปฏิบัติหน้าที่ของผู้ตรวจประจำวัน (แบ่งตามทีม: ผู้ตรวจหลัก + เพื่อนร่วมทีม + ลายเซ็น + ห้องที่ตรวจ)
+            const dailyInspectorDutySummary = useMemo(() => {
+                const todayStr = new Date().toISOString().split('T')[0];
+                const targetDateStr = (currentRoute === 'history' && dateMode !== 'today') ? filterDate : (filterDate || todayStr);
+                const validInspections = Array.isArray(inspections) ? inspections : [];
+                const validRooms = Array.isArray(rooms) ? rooms : [];
+                const roomNameMap = {};
+                validRooms.forEach(r => { roomNameMap[r.id] = r.name || 'ไม่ระบุ'; });
+
+                const dayInsps = validInspections.filter(i => i.date && String(i.date).startsWith(targetDateStr));
+                const teamMap = new Map();
+
+                dayInsps.forEach(insp => {
+                    const rawTeamStr = String(insp.inspector || 'ไม่ระบุ').trim();
+                    const members = rawTeamStr.split(',').map(s => s.trim()).filter(Boolean);
+                    const mainName = String(insp.mainInspector || members[0] || 'ไม่ระบุ').trim();
+                    const coMembers = members.filter(m => m !== mainName);
+                    const teamKey = `${mainName}__${coMembers.join('|')}`;
+
+                    if (!teamMap.has(teamKey)) {
+                        teamMap.set(teamKey, {
+                            key: teamKey,
+                            mainInspector: mainName,
+                            coInspectors: coMembers,
+                            allMembers: members.length > 0 ? members : [mainName],
+                            signatureUrl: insp.inspectorSignature || '',
+                            checkedRooms: new Set(),
+                            checkedZones: new Set(),
+                            latestTime: insp.date || ''
+                        });
+                    }
+
+                    const entry = teamMap.get(teamKey);
+                    if (insp.inspectorSignature && !entry.signatureUrl) {
+                        entry.signatureUrl = insp.inspectorSignature;
+                    }
+                    if (insp.date && (!entry.latestTime || insp.date > entry.latestTime)) {
+                        entry.latestTime = insp.date;
+                    }
+                    const rName = roomNameMap[insp.roomId] || insp.roomId;
+                    if (insp.type === 'room') entry.checkedRooms.add(rName);
+                    if (insp.type === 'zone') entry.checkedZones.add(rName);
+                });
+
+                const teams = Array.from(teamMap.values()).map(t => ({
+                    ...t,
+                    roomList: Array.from(t.checkedRooms),
+                    zoneList: Array.from(t.checkedZones)
+                }));
+
+                const uniquePersonSet = new Set();
+                teams.forEach(t => t.allMembers.forEach(m => uniquePersonSet.add(m)));
+
+                return {
+                    dateStr: targetDateStr,
+                    totalUniqueInspectors: uniquePersonSet.size,
+                    teams
+                };
+            }, [inspections, rooms, currentRoute, dateMode, filterDate]);
 
             const handleOpenOmrScanner = () => {
                 const validRooms = Array.isArray(rooms) ? rooms : [];
@@ -3428,7 +3509,11 @@
 
                                             {/* ปุ่มดาวน์โหลด Export History (เฉพาะเจ้าหน้าที่) */}
                                             {appMode !== 'guest' && (
-                                                <div className="mt-6 flex flex-wrap justify-end items-center gap-2 border-t pt-4">
+                                                <div className="mt-6 flex flex-wrap justify-between items-center gap-2 border-t pt-4">
+                                                    <button onClick={() => setShowDailyInspectorsModal(true)} className="bg-red-50 text-[#C8102E] border border-red-200 px-3.5 py-2 rounded-lg font-bold text-xs shadow-sm flex items-center gap-1.5 hover:bg-red-100 transition-colors">
+                                                        <i className="ph ph-users-three text-sm"></i> ผู้ตรวจประจำวัน ({dailyInspectorDutySummary.totalUniqueInspectors} คน)
+                                                    </button>
+                                                    <div className="flex flex-wrap justify-end items-center gap-2">
                                                     <select value={excelMode === 'months' ? 'single' : excelMode} onChange={e => setExcelMode(e.target.value)} className="bg-emerald-50/70 border border-emerald-200 rounded-lg p-2 text-xs font-bold text-emerald-700 outline-none">
                                                         <option value="single">Excel: รวมชีตเดียว</option>
                                                         <option value="grade">Excel: แยกชีต ม.1-ม.6</option>
@@ -3465,6 +3550,7 @@
                                                     <button onClick={()=>executeDirectExport('history', 'png')} disabled={printData.isPreparing} className="bg-blue-50 text-blue-600 border border-blue-200 px-3 py-2 rounded-lg font-bold text-xs shadow-sm flex items-center gap-1 hover:bg-blue-100"><i className="ph ph-image"></i> รูปภาพ</button>
                                                     <button onClick={()=>exportExcel('history')} disabled={printData.isPreparing} className="bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-2 rounded-lg font-bold text-xs shadow-sm flex items-center gap-1 hover:bg-emerald-100"><i className="ph ph-microsoft-excel-logo"></i> Excel</button>
                                                     <button onClick={()=>executeDirectExport('history', 'pdf')} disabled={printData.isPreparing} className="bg-red-50 text-red-500 border border-red-200 px-3 py-2 rounded-lg font-bold text-xs shadow-sm flex items-center gap-1 hover:bg-red-100"><i className="ph ph-file-pdf"></i> PDF</button>
+                                                    </div>
                                                 </div>
                                             )}
                                         </>
@@ -3599,16 +3685,21 @@
                                 </button>
 
                                 <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-gray-100 mb-6 relative overflow-hidden">
-                                    <div className="flex justify-between items-center mb-4">
+                                    <div className="flex justify-between items-center mb-4 gap-2">
                                         <div>
                                             <h3 className="font-bold text-gray-800 text-base flex items-center gap-2"><i className="ph ph-chart-bar text-[#C8102E]"></i> ความคืบหน้าการตรวจ</h3>
                                             <p className="text-[10px] text-gray-400 font-medium mt-0.5">ผู้ตรวจ: {getActiveInspectorTeamString()}</p>
                                         </div>
-                                        <label className="bg-gray-100 px-3 py-1.5 rounded-full flex items-center gap-2 shadow-sm cursor-pointer hover:bg-gray-200 transition-colors border border-gray-200 relative">
-                                            <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"/>
-                                            <i className="ph ph-calendar text-[#C8102E] text-xs"></i>
-                                            <span className="text-[10px] font-bold text-gray-700">{formatDateObj(inspectProgress.dateStr)}</span>
-                                        </label>
+                                        <div className="flex items-center gap-1.5 shrink-0">
+                                            <button onClick={() => setShowDailyInspectorsModal(true)} className="bg-red-50 text-[#C8102E] border border-red-100 px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-sm hover:bg-red-100 transition-colors text-[10px] font-bold">
+                                                <i className="ph ph-users-three text-xs"></i> ผู้ตรวจวันนี้ ({dailyInspectorDutySummary.totalUniqueInspectors})
+                                            </button>
+                                            <label className="bg-gray-100 px-3 py-1.5 rounded-full flex items-center gap-2 shadow-sm cursor-pointer hover:bg-gray-200 transition-colors border border-gray-200 relative">
+                                                <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"/>
+                                                <i className="ph ph-calendar text-[#C8102E] text-xs"></i>
+                                                <span className="text-[10px] font-bold text-gray-700">{formatDateObj(inspectProgress.dateStr)}</span>
+                                            </label>
+                                        </div>
                                     </div>
                                     <div className="space-y-4">
                                         <div>
@@ -4164,7 +4255,7 @@
                                                 )}
 
                                                 <button type="submit" className="w-full py-4 rounded-2xl bg-[#C8102E] hover:bg-red-800 text-white font-black text-sm shadow-lg shadow-red-500/25 active:scale-[0.98] transition-all mt-1 flex items-center justify-center gap-2">
-                                                    <span>ถัดไป (ลงลายมือชื่อ)</span>
+                                                    <span>{inputPasscode === (settings.master_passcode || '9999') ? 'เข้าสู่ระบบผู้ดูแลระบบ' : 'ถัดไป (ลงลายมือชื่อ)'}</span>
                                                     <i className="ph ph-arrow-right font-bold"></i>
                                                 </button>
                                             </div>
@@ -4389,7 +4480,13 @@
                                                 </div>
                                             )}
                                             {viewDetailModal.roomInsp.comment && <p className="text-xs text-gray-600 bg-white p-2 rounded-xl border border-blue-100">หมายเหตุ: {viewDetailModal.roomInsp.comment}</p>}
-                                            <p className="text-[10px] text-gray-400 font-medium pt-1">ผู้ตรวจ: {viewDetailModal.roomInsp.inspector || 'ไม่ระบุ'}</p>
+                                            <p className="text-[10px] text-gray-500 font-bold pt-1">คณะผู้ตรวจ: {viewDetailModal.roomInsp.inspector || 'ไม่ระบุ'}</p>
+                                            {appMode !== 'guest' && viewDetailModal.roomInsp.inspectorSignature && (
+                                                <div className="mt-1.5 bg-white p-2 rounded-xl border border-blue-100 flex items-center justify-between gap-2">
+                                                    <span className="text-[10px] font-bold text-gray-400">ลายมือชื่อผู้ตรวจหลัก ({viewDetailModal.roomInsp.mainInspector || String(viewDetailModal.roomInsp.inspector || '').split(',')[0]}):</span>
+                                                    <img src={viewDetailModal.roomInsp.inspectorSignature} className="h-8 object-contain" />
+                                                </div>
+                                            )}
                                             {viewDetailModal.roomInsp.photoUrl && (
                                                 <a href={viewDetailModal.roomInsp.photoUrl} target="_blank" rel="noreferrer" className="mt-2 w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all">
                                                     <i className="ph ph-image text-lg"></i> ดูรูปหลักฐานห้องเรียน
@@ -4406,7 +4503,13 @@
                                             </div>
                                             <p className="text-xs font-bold text-gray-600 bg-white p-2 rounded-xl border border-fuchsia-100">ผลประเมิน: {viewDetailModal.zoneInsp.scores?.status || 'ประเมินแล้ว'}</p>
                                             {viewDetailModal.zoneInsp.comment && <p className="text-xs text-gray-600 bg-white p-2 rounded-xl border border-fuchsia-100">หมายเหตุ: {viewDetailModal.zoneInsp.comment}</p>}
-                                            <p className="text-[10px] text-gray-400 font-medium pt-1">ผู้ตรวจ: {viewDetailModal.zoneInsp.inspector || 'ไม่ระบุ'}</p>
+                                            <p className="text-[10px] text-gray-500 font-bold pt-1">คณะผู้ตรวจ: {viewDetailModal.zoneInsp.inspector || 'ไม่ระบุ'}</p>
+                                            {appMode !== 'guest' && viewDetailModal.zoneInsp.inspectorSignature && (
+                                                <div className="mt-1.5 bg-white p-2 rounded-xl border border-fuchsia-100 flex items-center justify-between gap-2">
+                                                    <span className="text-[10px] font-bold text-gray-400">ลายมือชื่อผู้ตรวจหลัก ({viewDetailModal.zoneInsp.mainInspector || String(viewDetailModal.zoneInsp.inspector || '').split(',')[0]}):</span>
+                                                    <img src={viewDetailModal.zoneInsp.inspectorSignature} className="h-8 object-contain" />
+                                                </div>
+                                            )}
                                             {viewDetailModal.zoneInsp.photoUrl && (
                                                 <a href={viewDetailModal.zoneInsp.photoUrl} target="_blank" rel="noreferrer" className="mt-2 w-full bg-fuchsia-600 hover:bg-fuchsia-700 text-white py-2.5 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all">
                                                     <i className="ph ph-image text-lg"></i> ดูรูปหลักฐานเขตพื้นที่
@@ -4613,6 +4716,112 @@
                                 <div className="flex gap-2 pt-4 mt-2 border-t border-gray-100">
                                     <button onClick={() => setCustomSelectedSignerIds([])} className="px-4 py-2.5 rounded-xl bg-gray-100 text-gray-600 font-bold text-xs hover:bg-gray-200">ล้างที่เลือก</button>
                                     <button onClick={() => setShowCustomSignerPickerModal(false)} className="flex-1 py-2.5 rounded-xl bg-purple-600 text-white font-bold text-xs shadow-md hover:bg-purple-700">ตกลง ({customSelectedSignerIds.length} รายการ)</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Modal สมุดลงนามและสรุปการปฏิบัติหน้าที่ประจำวัน (เห็นเฉพาะผู้ตรวจและแอดมินเท่านั้น ซ่อนจาก Guest 100%) */}
+                    {showDailyInspectorsModal && appMode !== 'guest' && (
+                        <div className="fixed inset-0 z-[99998] bg-gray-900/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in" onClick={() => setShowDailyInspectorsModal(false)}>
+                            <div className="bg-white rounded-[2rem] w-full max-w-lg p-6 shadow-2xl relative flex flex-col max-h-[88vh]" onClick={e => e.stopPropagation()}>
+                                <button onClick={() => setShowDailyInspectorsModal(false)} className="absolute top-4 right-4 w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center hover:bg-gray-200"><i className="ph ph-x"></i></button>
+                                
+                                <div className="flex items-center gap-2.5 mb-3 pb-3 border-b border-gray-100">
+                                    <div className="w-10 h-10 rounded-2xl bg-red-50 text-[#C8102E] flex items-center justify-center shrink-0">
+                                        <i className="ph ph-users-three text-xl font-bold"></i>
+                                    </div>
+                                    <div>
+                                        <h3 className="font-black text-gray-800 text-base leading-tight">รายชื่อและลายมือชื่อผู้ตรวจประจำวัน</h3>
+                                        <p className="text-xs font-bold text-gray-400">ประจำวันที่ {formatDateObj(dailyInspectorDutySummary.dateStr)} • รวมผู้ตรวจ {dailyInspectorDutySummary.totalUniqueInspectors} คน</p>
+                                    </div>
+                                </div>
+
+                                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 pr-1">
+                                    {dailyInspectorDutySummary.teams.length === 0 ? (
+                                        <div className="text-center py-12 bg-gray-50 rounded-2xl border border-gray-100">
+                                            <i className="ph ph-clipboard-text text-4xl text-gray-300 mb-2 block"></i>
+                                            <p className="text-xs font-bold text-gray-400">ยังไม่มีประวัติการตรวจสำหรับวันที่เลือก</p>
+                                        </div>
+                                    ) : dailyInspectorDutySummary.teams.map((team, idx) => (
+                                        <div key={team.key || idx} className="bg-gray-50/80 border border-gray-200/80 rounded-2xl p-4 space-y-3">
+                                            {/* ส่วนหัวการ์ด: ผู้ตรวจหลัก + รูปลายเซ็น */}
+                                            <div className="flex items-center justify-between gap-3 bg-white p-3 rounded-xl border border-gray-100 shadow-sm">
+                                                <div className="flex items-center gap-2.5 min-w-0">
+                                                    <img 
+                                                        src={getInspectorAvatar(team.mainInspector)} 
+                                                        className="w-10 h-10 rounded-full object-cover border-2 border-[#C8102E] shrink-0 bg-gray-50"
+                                                        onError={(e) => { e.target.src = settings?.app_logo_url || HARDCODED_LOGO; }}
+                                                    />
+                                                    <div className="min-w-0">
+                                                        <span className="inline-block text-[9px] font-black px-2 py-0.5 rounded-full bg-red-50 text-[#C8102E] border border-red-100">
+                                                            ผู้ตรวจหลัก
+                                                        </span>
+                                                        <h4 className="font-black text-gray-800 text-xs sm:text-sm truncate mt-0.5">{team.mainInspector}</h4>
+                                                    </div>
+                                                </div>
+                                                {team.signatureUrl ? (
+                                                    <div className="bg-gray-50 border border-dashed border-gray-300 rounded-xl px-3 py-1.5 flex flex-col items-center shrink-0">
+                                                        <img src={team.signatureUrl} className="h-9 max-w-[110px] object-contain" />
+                                                        <span className="text-[8px] font-bold text-gray-400 mt-0.5">ลายมือชื่อยืนยันตัวตน</span>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-[10px] font-bold text-gray-400 bg-gray-100 px-2.5 py-1 rounded-lg shrink-0">ไม่มีลายเซ็น</span>
+                                                )}
+                                            </div>
+
+                                            {/* รายชื่อผู้ตรวจร่วม (เพื่อนร่วมทีมที่เดินตรวจด้วยกัน) */}
+                                            {team.coInspectors.length > 0 && (
+                                                <div className="bg-white/80 p-2.5 rounded-xl border border-gray-100">
+                                                    <span className="text-[10px] font-bold text-blue-600 block mb-1.5">ผู้ตรวจร่วมในทีม ({team.coInspectors.length} คน):</span>
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        {team.coInspectors.map((coName, cIdx) => (
+                                                            <div key={cIdx} className="inline-flex items-center gap-1.5 pl-1.5 pr-2.5 py-1 rounded-full bg-blue-50/70 border border-blue-100 text-gray-700 text-xs font-bold">
+                                                                <img 
+                                                                    src={getInspectorAvatar(coName)} 
+                                                                    className="w-5 h-5 rounded-full object-cover border border-white bg-white"
+                                                                    onError={(e) => { e.target.src = settings?.app_logo_url || HARDCODED_LOGO; }}
+                                                                />
+                                                                <span>{coName}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* รายการห้องเรียนและเขตพื้นที่ที่ตรวจ */}
+                                            <div className="space-y-1.5 pt-1">
+                                                {team.roomList.length > 0 && (
+                                                    <div className="flex items-start gap-2 text-xs">
+                                                        <span className="font-bold text-blue-600 whitespace-nowrap shrink-0 flex items-center gap-1">
+                                                            <i className="ph ph-buildings"></i> ห้องเรียน ({team.roomList.length}):
+                                                        </span>
+                                                        <div className="flex flex-wrap gap-1">
+                                                            {team.roomList.map(rName => (
+                                                                <span key={rName} className="px-2 py-0.5 bg-white border border-blue-100 text-gray-700 rounded-md text-[11px] font-bold">{rName}</span>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                {team.zoneList.length > 0 && (
+                                                    <div className="flex items-start gap-2 text-xs">
+                                                        <span className="font-bold text-fuchsia-600 whitespace-nowrap shrink-0 flex items-center gap-1">
+                                                            <i className="ph ph-map-pin"></i> เขตพื้นที่ ({team.zoneList.length}):
+                                                        </span>
+                                                        <div className="flex flex-wrap gap-1">
+                                                            {team.zoneList.map(zName => (
+                                                                <span key={zName} className="px-2 py-0.5 bg-white border border-fuchsia-100 text-gray-700 rounded-md text-[11px] font-bold">{zName}</span>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div className="pt-4 mt-2 border-t border-gray-100">
+                                    <button onClick={() => setShowDailyInspectorsModal(false)} className="w-full py-3 rounded-xl bg-gray-900 hover:bg-black text-white font-bold text-xs transition-colors">ปิดหน้าต่าง</button>
                                 </div>
                             </div>
                         </div>
