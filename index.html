@@ -152,6 +152,25 @@
         const safeGetItem = (key) => { try { return localStorage.getItem(key); } catch(e) { return null; } };
         const safeSetItem = (key, val) => { try { localStorage.setItem(key, val); } catch(e) {} };
         const safeRemoveItem = (key) => { try { localStorage.removeItem(key); } catch(e) {} };
+        const safeSessionGet = (key) => { try { return sessionStorage.getItem(key); } catch(e) { return null; } };
+        const safeSessionSet = (key, val) => { try { sessionStorage.setItem(key, val); } catch(e) {} };
+        const safeSessionRemove = (key) => { try { sessionStorage.removeItem(key); } catch(e) {} };
+        const SESSION_TIMEOUT_MS = 5 * 60 * 1000; // 5 นาทีสำหรับการสลับแอป/โหลดไฟล์
+        const getValidSessionState = () => {
+            try {
+                const raw = safeSessionGet('zc26_active_session');
+                if (!raw) return null;
+                const parsed = JSON.parse(raw);
+                if (!parsed || !parsed.mode || parsed.mode === 'guest') return null;
+                const now = Date.now();
+                if (parsed.lastActive && (now - parsed.lastActive) > SESSION_TIMEOUT_MS) {
+                    safeSessionRemove('zc26_active_session');
+                    return null;
+                }
+                return parsed;
+            } catch (e) { return null; }
+        };
+
         const safeParse = (data, fallback) => {
             if (!data) return fallback;
             try {
@@ -176,6 +195,7 @@
                             <button onClick={() => { 
                                 safeRemoveItem('zc26_rooms'); safeRemoveItem('zc26_inspectors'); 
                                 safeRemoveItem('zc26_inspections'); safeRemoveItem('zc26_settings'); 
+                                safeSessionRemove('zc26_active_session');
                                 window.location.reload(); 
                             }} className="mt-6 px-6 py-3 bg-[#C8102E] text-white font-medium rounded-xl shadow-lg">รีเซ็ตและโหลดใหม่</button>
                         </div>
@@ -192,12 +212,15 @@
             announcement_title: "", announcement_msg: "",
             visibility_main_banner: "public", visibility_popup_banner: "public", visibility_announce_banner: "public",
             inspector_avatars_json: "{}",
+            signers_json: "[]",
+            signature_presets_json: "[]",
+            default_signature_preset: "none",
             admin_avatar_url: ADMIN_AVATAR_URL,
             admin_name: "นายภูธนากร หงษ์ทอง (พี่ภีม)",
             admin_role: "เลขานุการสภานักเรียนโรงเรียนคำม่วง",
             admin_line_url: "https://line.me/ti/p/~470aijh"
         };
-        
+
         const ROOM_CRITERIA = [
             { id: 'c1', name: "โต๊ะ" }, { id: 'c2', name: "ขยะ" },
             { id: 'c3', name: "ไฟ/หน้าต่าง" }, { id: 'c4', name: "พื้น" }, { id: 'c5', name: "กระดาน" }
@@ -244,8 +267,8 @@
         };
 
         function ZoneCheckApp() {
-            const [appMode, setAppMode] = useState(() => safeGetItem('zc26_session_mode') || 'guest'); 
-            const [currentRoute, setCurrentRoute] = useState(() => safeGetItem('zc26_session_route') || 'dashboard'); 
+            const [appMode, setAppMode] = useState(() => getValidSessionState()?.mode || 'guest'); 
+            const [currentRoute, setCurrentRoute] = useState(() => getValidSessionState()?.route || 'dashboard'); 
             const [showSplash, setShowSplash] = useState(true); 
             const [toastObj, setToastObj] = useState({ msg: '', type: 'info' });
             const [isSyncing, setIsSyncing] = useState(false);
@@ -257,12 +280,12 @@
             const [inputPasscode, setInputPasscode] = useState('');
             const [loginInspector, setLoginInspector] = useState(() => safeGetItem('zc26_last_user') || '');
             const [selectedLoginName, setSelectedLoginName] = useState(() => safeGetItem('zc26_last_user') || ''); 
-            const [coInspectors, setCoInspectors] = useState(() => safeParse(safeGetItem('zc26_session_coinspectors'), []));
+            const [coInspectors, setCoInspectors] = useState(() => getValidSessionState()?.coInspectors || []);
             const [showCoInspectorPicker, setShowCoInspectorPicker] = useState(false);
             const [coInspectorSearch, setCoInspectorSearch] = useState('');
             const [loginError, setLoginError] = useState('');
             const [showPasscode, setShowPasscode] = useState(false);
-            const [currentUser, setCurrentUser] = useState(() => safeParse(safeGetItem('zc26_session_user'), null));
+            const [currentUser, setCurrentUser] = useState(() => getValidSessionState()?.user || null);
             const [showLoginSuggestions, setShowLoginSuggestions] = useState(false);
 
             // State สำหรับแสดงตัวอย่างไฟล์ที่ส่งออกในแอป (ป้องกันการเด้งออกนอกแอปบน iPad/iOS)
@@ -294,10 +317,26 @@
             const [selectedMonth, setSelectedMonth] = useState(() => new Date().toISOString().slice(0, 7)); 
             
             const [leaderboardTab, setLeaderboardTab] = useState('all'); 
-            
             const [exportSortOrder, setExportSortOrder] = useState('score'); 
             const [excelMode, setExcelMode] = useState('single'); 
             const [exportDestination, setExportDestination] = useState('local');
+
+            // States ระบบลายเซ็นท้ายเอกสาร PDF / รูปภาพ
+            const [signersList, setSignersList] = useState([]);
+            const [signaturePresets, setSignaturePresets] = useState([]);
+            const [defaultSignaturePreset, setDefaultSignaturePreset] = useState('none');
+            const [activeSignatureMode, setActiveSignatureMode] = useState('none'); // 'none', presetId, or 'custom'
+            const [customSelectedSignerIds, setCustomSelectedSignerIds] = useState([]);
+            const [showDigitalSignatureImg, setShowDigitalSignatureImg] = useState(true);
+            const [showCustomSignerPickerModal, setShowCustomSignerPickerModal] = useState(false);
+
+            // States สำหรับหน้าตั้งค่าคลังผู้ลงนามและเซตลายเซ็น (แอดมิน)
+            const [newSignerName, setNewSignerName] = useState('');
+            const [newSignerRole, setNewSignerRole] = useState('');
+            const [newSignerImgUrl, setNewSignerImgUrl] = useState('');
+            const [editingSignerId, setEditingSignerId] = useState(null);
+            const [newPresetName, setNewPresetName] = useState('');
+            const [newPresetSignerIds, setNewPresetSignerIds] = useState([]);
 
             const [historyViewMode, setHistoryViewMode] = useState('table'); 
             const [historyCalendarMonth, setHistoryCalendarMonth] = useState(() => new Date().toISOString().slice(0, 7));
@@ -400,9 +439,17 @@
                     setAdminLineInput(settings.admin_line_url || 'https://line.me/ti/p/~470aijh');
                     setSysPasscode(settings.passcode || '1234');
                     setSysMasterPasscode(settings.master_passcode || '9999');
+
+                    const parsedSigners = safeParse(settings.signers_json, []);
+                    const parsedPresets = safeParse(settings.signature_presets_json, []);
+                    const defPreset = settings.default_signature_preset || 'none';
+                    setSignersList(Array.isArray(parsedSigners) ? parsedSigners : []);
+                    setSignaturePresets(Array.isArray(parsedPresets) ? parsedPresets : []);
+                    setDefaultSignaturePreset(defPreset);
+                    setActiveSignatureMode(prev => (prev === 'none' && defPreset !== 'none') ? defPreset : prev);
                 }
             }, [settings]);
-            
+
             useEffect(() => {
                 if (currentRoute === 'history') {
                     setExportSortOrder('room'); 
@@ -502,10 +549,6 @@
                 const validInspectors = Array.isArray(inspectors) ? inspectors : [];
                 const found = validInspectors.find(u => String(u.name).trim() === cleanName);
                 if (found && found.avatar_url) return found.avatar_url;
-
-                const localMap = safeParse(safeGetItem('zc26_avatars_map'), {});
-                if (localMap && localMap[cleanName]) return localMap[cleanName];
-
                 if (appMode === 'admin' && currentUser?.name === cleanName) return settings?.admin_avatar_url || ADMIN_AVATAR_URL;
                 return settings?.app_logo_url || HARDCODED_LOGO;
             };
@@ -574,27 +617,11 @@
                     
                     if (json && json.status === 'Success') {
                         const incomingSettings = json.settings ? { ...initialSettings, ...json.settings } : initialSettings;
-                        const localAvatarMap = safeParse(safeGetItem('zc26_avatars_map'), {});
-                        const prevInspectors = Array.isArray(inspectors) ? inspectors : [];
-
-                        const mergedAvatarMap = { ...localAvatarMap };
-                        prevInspectors.forEach(u => {
-                            if (u?.name && u?.avatar_url) {
-                                const cName = String(u.name).trim();
-                                if (!mergedAvatarMap[cName]) mergedAvatarMap[cName] = u.avatar_url;
-                            }
-                        });
-
                         const rawInspectors = Array.isArray(json.inspectors) ? json.inspectors : [];
-                        const loadedInspectors = rawInspectors.map(u => {
-                            const cleanName = String(u.name || '').trim();
-                            // ดึงรูปจากคอลัมน์ C ของชีต "รายชื่อผู้ตรวจ" เป็นหลัก
-                            const finalAvatar = u.avatar_url || mergedAvatarMap[cleanName] || '';
-                            if (finalAvatar) mergedAvatarMap[cleanName] = finalAvatar;
-                            return { ...u, avatar_url: finalAvatar };
-                        });
-
-                        safeSetItem('zc26_avatars_map', JSON.stringify(mergedAvatarMap));
+                        const loadedInspectors = rawInspectors.map(u => ({
+                            ...u,
+                            avatar_url: u.avatar_url ? String(u.avatar_url).trim() : ''
+                        }));
 
                         setRooms(Array.isArray(json.rooms) ? json.rooms : []);
                         setInspectors(loadedInspectors);
@@ -604,7 +631,7 @@
                             if (!prev) return null;
                             const cleanPrev = String(prev.name || '').trim();
                             const updated = loadedInspectors.find(u => String(u.name || '').trim() === cleanPrev);
-                            const bestAvatar = (updated && updated.avatar_url) || mergedAvatarMap[cleanPrev] || prev.avatar_url;
+                            const bestAvatar = (updated && updated.avatar_url) || prev.avatar_url;
                             return { ...prev, avatar_url: bestAvatar };
                         });
                         if (!silent && json.settings && String(json.settings.is_maintenance).toLowerCase() !== 'true' && !showSplash) {
@@ -637,19 +664,78 @@
                 } catch (error) { console.warn('LocalStorage Blocked'); }
             }, [rooms, inspectors, inspections, settings]);
 
+            // ล้างค่าเก่าที่เคยค้างใน localStorage เพื่อไม่ให้ใครแอบเข้าได้ตอนเปิดแท็บใหม่
+            useEffect(() => {
+                safeRemoveItem('zc26_session_mode');
+                safeRemoveItem('zc26_session_user');
+                safeRemoveItem('zc26_session_coinspectors');
+                safeRemoveItem('zc26_session_route');
+            }, []);
+
+            // บันทึกเซสชันเฉพาะใน sessionStorage (ปิดแท็บปุ๊บหายทันที) พร้อมเวลาล่าสุด
             useEffect(() => {
                 if (appMode !== 'guest' && currentUser) {
-                    safeSetItem('zc26_session_mode', appMode);
-                    safeSetItem('zc26_session_user', JSON.stringify(currentUser));
-                    safeSetItem('zc26_session_coinspectors', JSON.stringify(coInspectors || []));
-                    safeSetItem('zc26_session_route', currentRoute);
+                    safeSessionSet('zc26_active_session', JSON.stringify({
+                        mode: appMode,
+                        user: currentUser,
+                        coInspectors: coInspectors || [],
+                        route: currentRoute,
+                        lastActive: Date.now()
+                    }));
                 } else {
-                    safeRemoveItem('zc26_session_mode');
-                    safeRemoveItem('zc26_session_user');
-                    safeRemoveItem('zc26_session_coinspectors');
-                    safeRemoveItem('zc26_session_route');
+                    safeSessionRemove('zc26_active_session');
                 }
             }, [appMode, currentUser, coInspectors, currentRoute]);
+
+            // ระบบจับเวลา 5 นาทีเมื่อสลับแอป/พับหน้าจอ หรือวางเครื่องทิ้งไว้
+            useEffect(() => {
+                if (appMode === 'guest') return;
+
+                const updateLastActive = () => {
+                    const curr = getValidSessionState();
+                    if (curr) {
+                        safeSessionSet('zc26_active_session', JSON.stringify({ ...curr, lastActive: Date.now() }));
+                    }
+                };
+
+                const checkIdleTimeout = () => {
+                    const raw = safeSessionGet('zc26_active_session');
+                    if (!raw) return;
+                    try {
+                        const parsed = JSON.parse(raw);
+                        if (parsed.lastActive && (Date.now() - parsed.lastActive) > SESSION_TIMEOUT_MS) {
+                            safeSessionRemove('zc26_active_session');
+                            setAppMode('guest');
+                            setCurrentUser(null);
+                            setCoInspectors([]);
+                            setCurrentRoute('dashboard');
+                            showToast('ออกจากระบบอัตโนมัติเนื่องจากไม่ได้ใช้งานเกิน 5 นาที', 'warning');
+                        } else {
+                            updateLastActive();
+                        }
+                    } catch (e) {}
+                };
+
+                const onVisChange = () => {
+                    if (document.visibilityState === 'visible') {
+                        checkIdleTimeout();
+                    } else {
+                        updateLastActive();
+                    }
+                };
+
+                window.addEventListener('visibilitychange', onVisChange);
+                window.addEventListener('touchstart', updateLastActive, { passive: true });
+                window.addEventListener('click', updateLastActive, { passive: true });
+                const intervalId = setInterval(checkIdleTimeout, 30000);
+
+                return () => {
+                    window.removeEventListener('visibilitychange', onVisChange);
+                    window.removeEventListener('touchstart', updateLastActive);
+                    window.removeEventListener('click', updateLastActive);
+                    clearInterval(intervalId);
+                };
+            }, [appMode]);
 
             useEffect(() => {
                 try {
@@ -878,7 +964,6 @@
                 }
             };
 
-            // คำนวณรายชื่อห้องที่ยังไม่ได้ตรวจสำหรับปุ่มใหญ่ "ตรวจรวดเดียว"
             const remainingRoomsForBatch = useMemo(() => {
                 const targetDateStr = filterDate || new Date().toISOString().split('T')[0];
                 const validRooms = Array.isArray(rooms) ? rooms : [];
@@ -1070,12 +1155,21 @@
             }, [rooms, guestFilterGroup, guestSearch]);
 
             const calculateRanking = (data, mode) => {
+                // สำหรับโหมดผู้เยี่ยมชม (Guest) ให้เรียงตามคะแนนรวม (pts) เสมอเพื่อไม่ให้สับสน
+                // สำหรับเจ้าหน้าที่ สามารถเลือกได้ว่าจะเรียงตามเปอร์เซ็นต์ ('score') หรือคะแนนรวม ('raw_score') หรือเลขห้อง ('room')
+                const usePercentageSort = (mode === 'leaderboard') && (appMode !== 'guest') && (exportSortOrder !== 'raw_score');
+
                 data.sort((a, b) => {
                     if (mode === 'leaderboard') {
+                        if (usePercentageSort) {
+                            const pctA = parseFloat(a.percentage) || 0;
+                            const pctB = parseFloat(b.percentage) || 0;
+                            if (Math.abs(pctB - pctA) > 0.0001) return pctB - pctA;
+                        }
+                        if (b.score !== a.score) return b.score - a.score;
                         const pctA = parseFloat(a.percentage) || 0;
                         const pctB = parseFloat(b.percentage) || 0;
                         if (Math.abs(pctB - pctA) > 0.0001) return pctB - pctA;
-                        if (b.score !== a.score) return b.score - a.score;
                         return a.originalIndex - b.originalIndex;
                     }
                     let scoreA = ((a.roomInsp?.totalScore || 0) + (a.zoneInsp?.totalScore || 0));
@@ -1086,7 +1180,10 @@
 
                 if (mode === 'leaderboard') {
                     for (let i = 0; i < data.length; i++) {
-                        if (i > 0 && data[i].percentage === data[i-1].percentage && data[i].score === data[i-1].score) { 
+                        const isTie = usePercentageSort
+                            ? (i > 0 && data[i].percentage === data[i-1].percentage && data[i].score === data[i-1].score)
+                            : (i > 0 && data[i].score === data[i-1].score);
+                        if (isTie) { 
                             data[i].trueRank = data[i-1].trueRank; 
                         } else { 
                             data[i].trueRank = i + 1; 
@@ -1187,7 +1284,7 @@
                 });
 
                 return calculateRanking(data, 'leaderboard');
-            }, [inspections, filteredRooms, selectedMonth, guestFilterType, exportSortOrder]);
+            }, [inspections, filteredRooms, selectedMonth, guestFilterType, exportSortOrder, appMode]);
 
             const leaderboardDataAllTime = useMemo(() => {
                 const stats = {};
@@ -1238,51 +1335,63 @@
                 });
 
                 return calculateRanking(data, 'leaderboard');
-            }, [inspections, filteredRooms, guestFilterType, exportSortOrder]);
+            }, [inspections, filteredRooms, guestFilterType, exportSortOrder, appMode]);
 
             const currentLeaderboardView = leaderboardTab === 'all' ? leaderboardDataAllTime : monthlyDashboardData;
 
             const top5AllTime = useMemo(() => {
                 let clone = [...leaderboardDataAllTime];
+                const usePct = appMode !== 'guest' && exportSortOrder !== 'raw_score';
                 clone.sort((a, b) => {
-                    const pctDiff = (parseFloat(b.percentage) || 0) - (parseFloat(a.percentage) || 0);
-                    if (Math.abs(pctDiff) > 0.0001) return pctDiff;
+                    if (usePct) {
+                        const pctDiff = (parseFloat(b.percentage) || 0) - (parseFloat(a.percentage) || 0);
+                        if (Math.abs(pctDiff) > 0.0001) return pctDiff;
+                    }
                     return b.score - a.score;
                 });
                 for (let i = 0; i < clone.length; i++) {
-                    if (i > 0 && clone[i].percentage === clone[i-1].percentage && clone[i].score === clone[i-1].score) { clone[i].trueRank = clone[i-1].trueRank; } 
+                    const isTie = usePct ? (i > 0 && clone[i].percentage === clone[i-1].percentage && clone[i].score === clone[i-1].score) : (i > 0 && clone[i].score === clone[i-1].score);
+                    if (isTie) { clone[i].trueRank = clone[i-1].trueRank; } 
                     else { clone[i].trueRank = i + 1; }
                 }
                 return clone.slice(0, 5);
-            }, [leaderboardDataAllTime]);
+            }, [leaderboardDataAllTime, appMode, exportSortOrder]);
 
             const top5Monthly = useMemo(() => {
                 let clone = [...monthlyDashboardData];
+                const usePct = appMode !== 'guest' && exportSortOrder !== 'raw_score';
                 clone.sort((a, b) => {
-                    const pctDiff = (parseFloat(b.percentage) || 0) - (parseFloat(a.percentage) || 0);
-                    if (Math.abs(pctDiff) > 0.0001) return pctDiff;
+                    if (usePct) {
+                        const pctDiff = (parseFloat(b.percentage) || 0) - (parseFloat(a.percentage) || 0);
+                        if (Math.abs(pctDiff) > 0.0001) return pctDiff;
+                    }
                     return b.score - a.score;
                 });
                 for (let i = 0; i < clone.length; i++) {
-                    if (i > 0 && clone[i].percentage === clone[i-1].percentage && clone[i].score === clone[i-1].score) { clone[i].trueRank = clone[i-1].trueRank; } 
+                    const isTie = usePct ? (i > 0 && clone[i].percentage === clone[i-1].percentage && clone[i].score === clone[i-1].score) : (i > 0 && clone[i].score === clone[i-1].score);
+                    if (isTie) { clone[i].trueRank = clone[i-1].trueRank; } 
                     else { clone[i].trueRank = i + 1; }
                 }
                 return clone.slice(0, 5);
-            }, [monthlyDashboardData]);
+            }, [monthlyDashboardData, appMode, exportSortOrder]);
 
             const podiumWinners = useMemo(() => {
                 let clone = [...currentLeaderboardView];
+                const usePct = appMode !== 'guest' && exportSortOrder !== 'raw_score';
                 clone.sort((a, b) => {
-                    const pctDiff = (parseFloat(b.percentage) || 0) - (parseFloat(a.percentage) || 0);
-                    if (Math.abs(pctDiff) > 0.0001) return pctDiff;
+                    if (usePct) {
+                        const pctDiff = (parseFloat(b.percentage) || 0) - (parseFloat(a.percentage) || 0);
+                        if (Math.abs(pctDiff) > 0.0001) return pctDiff;
+                    }
                     return b.score - a.score;
                 });
                 for (let i = 0; i < clone.length; i++) {
-                    if (i > 0 && clone[i].percentage === clone[i-1].percentage && clone[i].score === clone[i-1].score) { clone[i].trueRank = clone[i-1].trueRank; } 
+                    const isTie = usePct ? (i > 0 && clone[i].percentage === clone[i-1].percentage && clone[i].score === clone[i-1].score) : (i > 0 && clone[i].score === clone[i-1].score);
+                    if (isTie) { clone[i].trueRank = clone[i-1].trueRank; } 
                     else { clone[i].trueRank = i + 1; }
                 }
                 return clone.slice(0, 3);
-            }, [currentLeaderboardView]);
+            }, [currentLeaderboardView, appMode, exportSortOrder]);
 
             const inspectProgress = useMemo(() => {
                 const targetDateStr = filterDate || new Date().toISOString().split('T')[0];
@@ -1478,7 +1587,124 @@
                 }
             };
 
-            // ฟังก์ชันสแกนและอ่านค่าแบบประเมิน OMR จากรูปถ่าย (รองรับทั้งระบายทึบ ● และกากบาท ✕ พร้อมตรวจจับจุดมาร์ค 4 มุม)
+            const saveSignatureSettingsToCloud = async (nextSigners, nextPresets, nextDefault) => {
+                const sJson = JSON.stringify(nextSigners);
+                const pJson = JSON.stringify(nextPresets);
+                const updates = [
+                    { key: 'signers_json', val: sJson },
+                    { key: 'signature_presets_json', val: pJson },
+                    { key: 'default_signature_preset', val: nextDefault }
+                ];
+                setSignersList(nextSigners);
+                setSignaturePresets(nextPresets);
+                setDefaultSignaturePreset(nextDefault);
+                setSettings(prev => ({
+                    ...prev,
+                    signers_json: sJson,
+                    signature_presets_json: pJson,
+                    default_signature_preset: nextDefault
+                }));
+                try {
+                    await syncToGASAsync('updateMultipleSettings', updates);
+                    showToast('บันทึกการตั้งค่าลายเซ็นและเซตสำเร็จ!', 'success');
+                } catch (e) {
+                    showToast('บันทึกลงเครื่องแล้ว (แต่ซิงค์ออนไลน์ไม่สำเร็จ)', 'warning');
+                }
+            };
+
+            const handleAddOrUpdateSigner = async () => {
+                if (!newSignerName.trim()) return showToast('กรุณากรอกชื่อ-นามสกุลผู้ลงนาม', 'warning');
+                let updated = [...signersList];
+                if (editingSignerId) {
+                    updated = updated.map(s => s.id === editingSignerId ? {
+                        ...s,
+                        name: newSignerName.trim(),
+                        role: newSignerRole.trim(),
+                        signatureUrl: newSignerImgUrl.trim()
+                    } : s);
+                } else {
+                    updated.push({
+                        id: generateId('sig'),
+                        name: newSignerName.trim(),
+                        role: newSignerRole.trim(),
+                        signatureUrl: newSignerImgUrl.trim()
+                    });
+                }
+                setNewSignerName('');
+                setNewSignerRole('');
+                setNewSignerImgUrl('');
+                setEditingSignerId(null);
+                await saveSignatureSettingsToCloud(updated, signaturePresets, defaultSignaturePreset);
+            };
+
+            const handleDeleteSigner = (id) => {
+                showConfirm('ต้องการลบรายชื่อผู้ลงนามนี้ใช่หรือไม่?', async () => {
+                    const updatedSigners = signersList.filter(s => s.id !== id);
+                    const updatedPresets = signaturePresets.map(p => ({
+                        ...p,
+                        signerIds: (p.signerIds || []).filter(sid => sid !== id)
+                    }));
+                    await saveSignatureSettingsToCloud(updatedSigners, updatedPresets, defaultSignaturePreset);
+                });
+            };
+
+            const toggleSignerInNewPreset = (id) => {
+                setNewPresetSignerIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+            };
+
+            const handleCreateSignaturePreset = async () => {
+                if (!newPresetName.trim()) return showToast('กรุณาตั้งชื่อเซตลายเซ็น', 'warning');
+                if (newPresetSignerIds.length === 0) return showToast('กรุณาติ๊กเลือกผู้ลงนามอย่างน้อย 1 คน', 'warning');
+                const newPreset = {
+                    id: generateId('pset'),
+                    name: newPresetName.trim(),
+                    signerIds: [...newPresetSignerIds]
+                };
+                const updatedPresets = [...signaturePresets, newPreset];
+                const nextDefault = signaturePresets.length === 0 ? newPreset.id : defaultSignaturePreset;
+                setNewPresetName('');
+                setNewPresetSignerIds([]);
+                if (activeSignatureMode === 'none' && signaturePresets.length === 0) {
+                    setActiveSignatureMode(newPreset.id);
+                }
+                await saveSignatureSettingsToCloud(signersList, updatedPresets, nextDefault);
+            };
+
+            const handleDeleteSignaturePreset = (presetId) => {
+                showConfirm('ต้องการลบเซตลายเซ็นนี้ใช่หรือไม่?', async () => {
+                    const updatedPresets = signaturePresets.filter(p => p.id !== presetId);
+                    const nextDefault = defaultSignaturePreset === presetId ? 'none' : defaultSignaturePreset;
+                    if (activeSignatureMode === presetId) setActiveSignatureMode(nextDefault);
+                    await saveSignatureSettingsToCloud(signersList, updatedPresets, nextDefault);
+                });
+            };
+
+            const handleSetDefaultPreset = async (presetId) => {
+                setActiveSignatureMode(presetId);
+                await saveSignatureSettingsToCloud(signersList, signaturePresets, presetId);
+            };
+
+            const toggleCustomSignerId = (id) => {
+                setCustomSelectedSignerIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+            };
+
+            // คำนวณรายชื่อผู้ลงนามที่จะนำไปแสดงท้ายกระดาษ PDF / รูปภาพ ตามลำดับที่เลือก
+            const activeSignersForExport = useMemo(() => {
+                if (!activeSignatureMode || activeSignatureMode === 'none') return [];
+                let targetIds = [];
+                if (activeSignatureMode === 'custom') {
+                    targetIds = customSelectedSignerIds;
+                } else {
+                    const foundPreset = signaturePresets.find(p => p.id === activeSignatureMode);
+                    if (foundPreset && Array.isArray(foundPreset.signerIds)) {
+                        targetIds = foundPreset.signerIds;
+                    }
+                }
+                return targetIds
+                    .map(id => signersList.find(s => s.id === id))
+                    .filter(Boolean);
+            }, [activeSignatureMode, customSelectedSignerIds, signaturePresets, signersList]);
+
             const handleOpenOmrScanner = () => {
                 const validRooms = Array.isArray(rooms) ? rooms : [];
                 const initialResults = validRooms.map((r, idx) => ({
@@ -1521,7 +1747,6 @@
                         return 255 - lum;
                     };
 
-                    // 1. ค้นหาจุดมาร์คสี่เหลี่ยมสีดำทั้ง 4 มุมอัตโนมัติ (Corner fiducial detection)
                     const findDarkestBlockInCorner = (startX, endX, startY, endY, defaultX, defaultY) => {
                         let bestX = defaultX;
                         let bestY = defaultY;
@@ -1542,7 +1767,6 @@
                                 }
                             }
                         }
-                        // ถ้าความเข้มต่ำเกินไป (เช่น ภาพตัดขอบมาร์คหาย) ให้ใช้พิกัดมาตรฐานของกระดาษ
                         if (maxScore / 25 < 95) return { x: defaultX, y: defaultY, found: false };
                         return { x: bestX, y: bestY, found: true };
                     };
@@ -1552,7 +1776,6 @@
                     const bl = findDarkestBlockInCorner(8, Math.floor(W * 0.22), Math.floor(H * 0.78), H - 8, 44, H - 26);
                     const br = findDarkestBlockInCorner(Math.floor(W * 0.78), W - 8, Math.floor(H * 0.78), H - 8, W - 44, H - 26);
 
-                    // ฟังก์ชันแปลงสัดส่วนสัมพัทธ์ (u, v) ภายในกรอบมาร์ค 4 มุม เป็นพิกัด (X, Y) จริงบนรูป
                     const mapUV = (u, v) => {
                         const topX = tl.x + u * (tr.x - tl.x);
                         const topY = tl.y + u * (tr.y - tl.y);
@@ -1564,18 +1787,15 @@
                         };
                     };
 
-                    // วัดค่าหมึกทั้งแบบระบายทึบ ● และกากบาท ✕ เทียบกับพื้นกระดาษขาวรอบวงกลม (Local Contrast)
                     const evaluateBubbleScore = (cx, cy) => {
                         let bgSum = 0;
                         let bgCount = 0;
-                        // วัดพื้นหลังสีขาวรอบนอกวงกลม (รัศมี 9-11 px)
                         for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 4) {
                             bgSum += getPixelDarkness(cx + Math.cos(angle) * 10, cy + Math.sin(angle) * 10);
                             bgCount++;
                         }
                         const localBg = bgCount > 0 ? bgSum / bgCount : 20;
 
-                        // วัดความเข้มด้านในวงกลม + เส้นทแยงมุมกากบาท (รัศมี 0-5 px)
                         let innerSum = 0;
                         let innerCount = 0;
                         let darkStrokePixels = 0;
@@ -1591,11 +1811,9 @@
                         }
                         const avgContrast = innerCount > 0 ? innerSum / innerCount : 0;
                         const strokeRatio = innerCount > 0 ? (darkStrokePixels / innerCount) * 100 : 0;
-                        // ผสมคะแนนทั้งความทึบเฉลี่ยและจำนวนพิกเซลเส้นกากบาท
                         return (avgContrast * 0.55) + (strokeRatio * 0.75);
                     };
 
-                    // วาดกรอบจุดมาร์ค 4 มุมบนภาพ Preview
                     ctx.lineWidth = 2;
                     [tl, tr, bl, br].forEach(pt => {
                         ctx.strokeStyle = pt.found ? '#10b981' : '#f59e0b';
@@ -1605,25 +1823,21 @@
                     const validRooms = Array.isArray(rooms) ? rooms : [];
                     const half = Math.ceil(Math.max(validRooms.length, 1) / 2);
 
-                    // สัดส่วนตำแหน่งวงกลมทั้ง 13 คอลัมน์เทียบภายในตารางแต่ละฝั่ง
                     const colRelativeCenters = [
-                        0.220, 0.280, 0.340, 0.400, 0.465, 0.530, 0.588, // ห้องเรียน 7 วง: โต๊ะ, ขยะ, ไฟ, พื้น, กระดาน, ไม่ทำ, ข้าม
-                        0.650, 0.712, 0.772, 0.842, 0.910, 0.970         // เขตพื้นที่ 6 วง: 10, 8, 5, 2, -5, ข้าม
+                        0.220, 0.280, 0.340, 0.400, 0.465, 0.530, 0.588,
+                        0.650, 0.712, 0.772, 0.842, 0.910, 0.970
                     ];
 
-                    // เกณฑ์ความไวแสง (ปรับตามแถบเลื่อน Sensitivity 10-90)
                     const markThreshold = Math.max(12, 48 - (sensValue * 0.42));
 
                     const scannedResults = validRooms.map((r, i) => {
                         const isRightCol = i >= half;
                         const rowIdx = isRightCol ? (i - half) : i;
 
-                        // สัดส่วนแนวตั้ง v ของแถวที่ rowIdx เทียบกับกรอบจุดมาร์คบน-ล่าง
                         const vStart = 0.212;
                         const vEnd = 0.932;
                         const vRow = vStart + ((rowIdx + 0.5) / Math.max(half, 1)) * (vEnd - vStart);
 
-                        // สัดส่วนแนวนอน u ของตารางฝั่งซ้าย (0.000 - 0.493) และตารางฝั่งขวา (0.507 - 1.000)
                         const uTableLeft = isRightCol ? 0.507 : 0.000;
                         const uTableWidth = 0.493;
 
@@ -1637,7 +1851,6 @@
                         const roomBubbles = bubbleScores.slice(0, 7);
                         const zoneBubbles = bubbleScores.slice(7, 13);
 
-                        // ประมวลผลหมวดห้องเรียน (7 วง)
                         const markedRoom = roomBubbles.map(b => b.score >= markThreshold);
                         const anyRoomMarked = markedRoom.some(Boolean);
 
@@ -1656,7 +1869,6 @@
                             }
                         }
 
-                        // วาดวงกลมแสดงผลที่ตรวจจับได้ลงบนภาพ (Visual Feedback)
                         roomBubbles.forEach((b, bIdx) => {
                             const isHit = markedRoom[bIdx];
                             ctx.beginPath();
@@ -1666,7 +1878,6 @@
                             ctx.stroke();
                         });
 
-                        // ประมวลผลหมวดเขตพื้นที่ (6 วง เลือกวงที่เข้มที่สุดที่เกินเกณฑ์)
                         const zoneValues = [10, 8, 5, 2, -5, null];
                         let zScore = 10;
                         let zSkip = false;
@@ -1904,63 +2115,16 @@
                 const newInspecs = validInspectors.map(u => u.id === editingInspectorAvatar.id ? { ...u, avatar_url: cleanUrl } : u);
                 setInspectors(newInspecs);
 
-                const currentMap = safeParse(safeGetItem('zc26_avatars_map'), {});
-                if (cleanName) {
-                    if (cleanUrl) currentMap[cleanName] = cleanUrl;
-                    else delete currentMap[cleanName];
-                }
-                safeSetItem('zc26_avatars_map', JSON.stringify(currentMap));
-
                 if (currentUser && String(currentUser.name || '').trim() === cleanName) {
                     setCurrentUser(prev => ({ ...prev, avatar_url: cleanUrl }));
                 }
                 setEditingInspectorAvatar(null);
                 try {
-                    // บันทึกลงคอลัมน์ C (ข้างชื่อผู้ตรวจ) ในชีต "รายชื่อผู้ตรวจ" โดยตรงอย่างเดียว!
                     await syncToGASAsync('updateInspectors', newInspecs);
-                    showToast('บันทึกลิงก์รูปไว้ข้างชื่อในชีต รายชื่อผู้ตรวจ สำเร็จ!', 'success');
+                    showToast('บันทึกลิงก์รูปโปรไฟล์ลงคอลัมน์ C สำเร็จ!', 'success');
                 } catch (e) {
-                    showToast('บันทึกรูปไม่สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ต', 'error');
+                    showToast('บันทึกรูปโปรไฟล์ลงเครื่องสำเร็จ', 'success');
                 }
-            };
-
-            const handleUploadInspectorAvatarFile = (e) => {
-                const file = e.target.files?.[0];
-                if (!file || !editingInspectorAvatar) return;
-                setIsUploadingAvatar(true);
-                const reader = new FileReader();
-                reader.onload = (ev) => {
-                    const img = new Image();
-                    img.onload = () => {
-                        try {
-                            const canvas = document.createElement('canvas');
-                            const SIZE = 96;
-                            canvas.width = SIZE;
-                            canvas.height = SIZE;
-                            const ctx = canvas.getContext('2d');
-                            
-                            // ครอปตรงกลางภาพให้เป็นสี่เหลี่ยมจัตุรัสพอดีและขนาดเบาซิงค์ไว
-                            const minDim = Math.min(img.width, img.height);
-                            const sx = (img.width - minDim) / 2;
-                            const sy = (img.height - minDim) / 2;
-                            ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, SIZE, SIZE);
-                            
-                            const dataUrl = canvas.toDataURL('image/jpeg', 0.72);
-                            setInspectorAvatarUrlInput(dataUrl);
-                            showToast('เตรียมรูปโปรไฟล์สำเร็จ กดบันทึกรูปหน้าได้เลย!', 'success');
-                        } catch (err) {
-                            showToast('ประมวลผลรูปไม่สำเร็จ กรุณาลองใหม่', 'error');
-                        } finally {
-                            setIsUploadingAvatar(false);
-                        }
-                    };
-                    img.onerror = () => {
-                        setIsUploadingAvatar(false);
-                        showToast('ไม่สามารถอ่านไฟล์รูปภาพนี้ได้', 'error');
-                    };
-                    img.src = ev.target.result;
-                };
-                reader.readAsDataURL(file);
             };
 
             const handleDeleteInspector = (id) => { 
@@ -2064,46 +2228,28 @@
                             sortedMonths.forEach(ym => {
                                 const [year, month] = ym.split('-');
                                 const stats = {};
-                                filteredRooms.forEach((r, idx) => {
-                                    stats[r.id] = { room: r, score: 0, roomScore: 0, zoneScore: 0, maxRoomScore: 0, maxZoneScore: 0, maxScore: 0, originalIndex: idx };
-                                });
+                                filteredRooms.forEach((r, idx) => { stats[r.id] = { room: r, score: 0, roomScore: 0, zoneScore: 0, originalIndex: idx }; });
 
-                                const monthlyDayMap = {};
+                                const uniqueDaysSet = new Set();
                                 validInspections.forEach(insp => {
-                                    if(!insp?.date || !insp?.roomId || insp.totalScore === null || insp.totalScore === undefined) return;
+                                    if(!insp?.date || !insp?.roomId || insp.totalScore === null) return;
                                     const d = new Date(insp.date);
                                     if (isNaN(d.getTime())) return;
                                     if(d.getFullYear() === parseInt(year) && (d.getMonth() + 1) === parseInt(month)) {
-                                        if (guestFilterType !== 'all' && insp.type !== guestFilterType) return;
-                                        const dateStr = String(insp.date).split('T')[0];
-                                        const key = `${insp.roomId}_${dateStr}`;
-                                        if (!monthlyDayMap[key]) monthlyDayMap[key] = { roomId: insp.roomId, roomInsp: null, zoneInsp: null };
-                                        if (insp.type === 'room') monthlyDayMap[key].roomInsp = insp;
-                                        if (insp.type === 'zone') monthlyDayMap[key].zoneInsp = insp;
+                                        uniqueDaysSet.add(insp.date.split('T')[0]);
+                                        if(stats[insp.roomId]) {
+                                            const room = stats[insp.roomId].room;
+                                            if (guestFilterType !== 'all' && insp.type !== guestFilterType) return;
+                                            if (insp.type === 'room') { stats[insp.roomId].score += insp.totalScore; stats[insp.roomId].roomScore += insp.totalScore; }
+                                            if (insp.type === 'zone' && room.hasZone !== false) { stats[insp.roomId].score += insp.totalScore; stats[insp.roomId].zoneScore += insp.totalScore; }
+                                        }
                                     }
                                 });
 
-                                Object.values(monthlyDayMap).forEach(dayRecord => {
-                                    if (!stats[dayRecord.roomId]) return;
-                                    const room = stats[dayRecord.roomId].room;
-                                    if (dayRecord.roomInsp && dayRecord.roomInsp.totalScore !== null) {
-                                        const s = Number(dayRecord.roomInsp.totalScore) || 0;
-                                        stats[dayRecord.roomId].score += s;
-                                        stats[dayRecord.roomId].roomScore += s;
-                                        stats[dayRecord.roomId].maxRoomScore += 10;
-                                        stats[dayRecord.roomId].maxScore += 10;
-                                    }
-                                    if (dayRecord.zoneInsp && dayRecord.zoneInsp.totalScore !== null && room.hasZone !== false) {
-                                        const s = Number(dayRecord.zoneInsp.totalScore) || 0;
-                                        stats[dayRecord.roomId].score += s;
-                                        stats[dayRecord.roomId].zoneScore += s;
-                                        stats[dayRecord.roomId].maxZoneScore += 10;
-                                        stats[dayRecord.roomId].maxScore += 10;
-                                    }
-                                });
-
+                                const totalDays = uniqueDaysSet.size;
                                 let data = Object.values(stats).map(item => {
-                                    let max = item.maxScore;
+                                    let max = totalDays * 10;
+                                    if (guestFilterType === 'all') max = totalDays * (item.room.hasZone !== false ? 20 : 10);
                                     let pct = max > 0 ? (item.score / max) * 100 : 0;
                                     let medal = '';
                                     if (pct >= 80) medal = '🥇 ทอง'; else if (pct >= 70) medal = '🥈 เงิน'; else if (pct >= 60) medal = '🥉 ทองแดง';
@@ -2115,6 +2261,8 @@
                                         const pctDiff = (parseFloat(b.percentage) || 0) - (parseFloat(a.percentage) || 0);
                                         if (Math.abs(pctDiff) > 0.0001) return pctDiff;
                                         if (b.score !== a.score) return b.score - a.score;
+                                    } else if (exportSortOrder === 'raw_score') {
+                                        if (b.score !== a.score) return b.score - a.score;
                                     }
                                     return a.originalIndex - b.originalIndex;
                                 });
@@ -2125,20 +2273,12 @@
                                 }
 
                                 const formattedDataForMonth = data.map((item, index) => {
-                                    let rankDisplay = exportSortOrder === 'score' ? item.trueRank : (index + 1);
+                                    let rankDisplay = exportSortOrder !== 'room' ? item.trueRank : (index + 1);
                                     let baseObj = { 'ที่': rankDisplay, 'ห้องเรียน': (item.room?.name || 'ไม่ทราบ') };
-                                    if (showCombinedColumns) {
-                                        baseObj = {
-                                            ...baseObj,
-                                            'คะแนนห้อง': item.maxRoomScore > 0 ? `${item.roomScore} / ${item.maxRoomScore}` : `${item.roomScore}`,
-                                            'คะแนนเขต': item.room?.hasZone === false ? 'ไม่มีเขต' : (item.maxZoneScore > 0 ? `${item.zoneScore} / ${item.maxZoneScore}` : `${item.zoneScore}`),
-                                            'รวมคะแนน': item.maxScore > 0 ? `${item.score} / ${item.maxScore}` : `${item.score}`
-                                        };
-                                    } else {
-                                        baseObj = { ...baseObj, 'คะแนน': item.maxScore > 0 ? `${item.score} / ${item.maxScore}` : `${item.score}` };
-                                    }
+                                    if (showCombinedColumns) baseObj = { ...baseObj, 'คะแนนห้อง': item.roomScore, 'คะแนนเขต': item.zoneScore, 'รวมคะแนน': item.score };
+                                    else baseObj = { ...baseObj, 'คะแนน': item.score };
                                     if (appMode !== 'guest') {
-                                        baseObj['ร้อยละ (%)'] = `${item.percentage}%`;
+                                        baseObj['ร้อยละ (%)'] = item.percentage;
                                         baseObj['เกณฑ์ประเมิน'] = item.medal;
                                     }
                                     return baseObj;
@@ -2153,8 +2293,6 @@
                         } else {
                             let dataToExport = mode === 'leaderboard' ? [...currentLeaderboardView] : [...mergedHistoryData];
                             let formattedData = [];
-                            let roomOnlyData = [];
-                            let zoneOnlyData = [];
 
                             if (mode === 'leaderboard') {
                                 const isMonth = leaderboardTab === 'monthly';
@@ -2162,7 +2300,7 @@
                                 fileName = isMonth ? `สรุปอันดับคะแนน_เดือน_${mName}_${typeName}.xlsx` : `สรุปอันดับคะแนนสะสมทั้งหมด_${typeName}.xlsx`;
                                 
                                 formattedData = dataToExport.map((item, index) => { 
-                                    let rankDisplay = exportSortOrder === 'score' ? item.trueRank : (index + 1);
+                                    let rankDisplay = exportSortOrder !== 'room' ? item.trueRank : (index + 1);
                                     let baseObj = { 'ที่': rankDisplay, 'ห้องเรียน': (item.room?.name || 'ไม่ทราบ') }; 
                                     if (showCombinedColumns) baseObj = { ...baseObj, 'คะแนนห้อง': item.roomScore, 'คะแนนเขต': item.zoneScore, 'รวมคะแนน': item.score }; 
                                     else baseObj = { ...baseObj, 'คะแนน': item.score }; 
@@ -2172,22 +2310,6 @@
                                         baseObj['เกณฑ์ประเมิน'] = item.medal;
                                     }
                                     return baseObj;
-                                });
-
-                                roomOnlyData = dataToExport.map((item, index) => {
-                                    const rPct = item.maxRoomScore > 0 ? ((item.roomScore / item.maxRoomScore) * 100).toFixed(2) : '0.00';
-                                    const rMedal = rPct >= 80 ? '🥇 ทอง' : rPct >= 70 ? '🥈 เงิน' : rPct >= 60 ? '🥉 ทองแดง' : '';
-                                    let obj = { 'ที่': index + 1, 'ห้องเรียน': (item.room?.name || 'ไม่ทราบ'), 'คะแนนห้อง': item.roomScore };
-                                    if (appMode !== 'guest') { obj['ร้อยละ (%)'] = rPct; obj['เกณฑ์ประเมิน'] = rMedal; }
-                                    return obj;
-                                });
-
-                                zoneOnlyData = dataToExport.filter(item => item.room?.hasZone !== false).map((item, index) => {
-                                    const zPct = item.maxZoneScore > 0 ? ((item.zoneScore / item.maxZoneScore) * 100).toFixed(2) : '0.00';
-                                    const zMedal = zPct >= 80 ? '🥇 ทอง' : zPct >= 70 ? '🥈 เงิน' : zPct >= 60 ? '🥉 ทองแดง' : '';
-                                    let obj = { 'ที่': index + 1, 'ห้องเรียน': (item.room?.name || 'ไม่ทราบ'), 'คะแนนเขต': item.zoneScore };
-                                    if (appMode !== 'guest') { obj['ร้อยละ (%)'] = zPct; obj['เกณฑ์ประเมิน'] = zMedal; }
-                                    return obj;
                                 });
                             } else {
                                 const fDateStrFile = dateMode === 'today' ? todayStrFile : formatThaiDateForFile(filterDate);
@@ -2228,27 +2350,9 @@
                                     if(item.zoneInsp?.comment) commentText.push(item.zoneInsp.comment);
                                     let finalComment = commentText.join(', ');
                                     
-                                    if (showCombinedColumns) return { 'ที่': exportSortOrder === 'score' ? item.trueRank : (index + 1), 'วันที่': formatDateObj(item.dateStr), 'ห้องเรียน': roomName, 'คะแนนห้อง': rScore, 'คะแนนเขต': zScore, 'รวมคะแนน': totalScore, 'หมายเหตุ': finalComment }; 
-                                    else return { 'ที่': exportSortOrder === 'score' ? item.trueRank : (index + 1), 'วันที่': formatDateObj(item.dateStr), 'ห้องเรียน': roomName, 'คะแนน': guestFilterType==='room'?rScore:zScore, 'หมายเหตุ': finalComment };
+                                    if (showCombinedColumns) return { 'ที่': exportSortOrder !== 'room' ? item.trueRank : (index + 1), 'วันที่': formatDateObj(item.dateStr), 'ห้องเรียน': roomName, 'คะแนนห้อง': rScore, 'คะแนนเขต': zScore, 'รวมคะแนน': totalScore, 'หมายเหตุ': finalComment }; 
+                                    else return { 'ที่': exportSortOrder !== 'room' ? item.trueRank : (index + 1), 'วันที่': formatDateObj(item.dateStr), 'ห้องเรียน': roomName, 'คะแนน': guestFilterType==='room'?rScore:zScore, 'หมายเหตุ': finalComment };
                                 });
-
-                                roomOnlyData = dataToExport.map((item, index) => ({
-                                    'ที่': index + 1,
-                                    'วันที่': formatDateObj(item.dateStr),
-                                    'ห้องเรียน': item.room ? item.room.name : 'ไม่ระบุ',
-                                    'คะแนนห้อง': item.roomInsp ? (item.roomInsp.totalScore === null ? 'ข้าม' : item.roomInsp.totalScore) : '-',
-                                    'ผู้ตรวจห้อง': item.roomInsp?.inspector || '-',
-                                    'หมายเหตุ': item.roomInsp?.comment || ''
-                                }));
-
-                                zoneOnlyData = dataToExport.filter(item => item.room?.hasZone !== false).map((item, index) => ({
-                                    'ที่': index + 1,
-                                    'วันที่': formatDateObj(item.dateStr),
-                                    'ห้องเรียน': item.room ? item.room.name : 'ไม่ระบุ',
-                                    'คะแนนเขต': item.zoneInsp ? (item.zoneInsp.totalScore === null ? 'ข้าม' : item.zoneInsp.totalScore) : '-',
-                                    'ผู้ตรวจเขต': item.zoneInsp?.inspector || '-',
-                                    'หมายเหตุ': item.zoneInsp?.comment || ''
-                                }));
                             }
 
                             if(formattedData.length === 0) { 
@@ -2270,7 +2374,7 @@
                                 const grades = ['1', '2', '3', '4', '5', '6'];
                                 grades.forEach(g => {
                                     const gradeData = formattedData.filter(row => {
-                                        const match = String(row['ห้องเรียน']).match(/ม\.(\d+)/);
+                                        const match = String(row['ห้องเรียน']).match(/(\d+)/);
                                         return match && match[1] === g;
                                     });
                                     if (gradeData.length > 0) {
@@ -2278,21 +2382,66 @@
                                         XLSX.utils.book_append_sheet(wb, ws, `ม.${g}`);
                                     }
                                 });
-                                const otherData = formattedData.filter(row => !String(row['ห้องเรียน']).match(/ม\.\d+/));
+                                const otherData = formattedData.filter(row => !String(row['ห้องเรียน']).match(/\d+/));
                                 if (otherData.length > 0) {
-                                     const ws = XLSX.utils.json_to_sheet(otherData);
-                                     XLSX.utils.book_append_sheet(wb, ws, "อื่นๆ");
+                                    const ws = XLSX.utils.json_to_sheet(otherData);
+                                    XLSX.utils.book_append_sheet(wb, ws, "อื่นๆ");
                                 }
                             };
 
-                            const appendRoomZoneSheets = () => {
-                                if (roomOnlyData.length > 0) {
-                                    const wsRoom = XLSX.utils.json_to_sheet(roomOnlyData);
-                                    XLSX.utils.book_append_sheet(wb, wsRoom, "เฉพาะห้องเรียน");
-                                }
-                                if (zoneOnlyData.length > 0) {
-                                    const wsZone = XLSX.utils.json_to_sheet(zoneOnlyData);
-                                    XLSX.utils.book_append_sheet(wb, wsZone, "เฉพาะเขตพื้นที่");
+                            const appendSplitTypeSheets = () => {
+                                if (mode === 'leaderboard') {
+                                    const roomRows = dataToExport.map((item, idx) => {
+                                        const rMax = item.maxRoomScore || 0;
+                                        const rPct = rMax > 0 ? ((item.roomScore / rMax) * 100).toFixed(2) : '0.00';
+                                        const obj = { 'ที่': idx + 1, 'ห้องเรียน': item.room?.name || 'ไม่ทราบ', 'คะแนนห้อง': item.roomScore, 'คะแนนเต็มห้อง': rMax };
+                                        if (appMode !== 'guest') obj['ร้อยละห้อง (%)'] = rPct;
+                                        return obj;
+                                    });
+                                    const zoneRows = dataToExport.map((item, idx) => {
+                                        const hasZ = item.room?.hasZone !== false;
+                                        const zMax = item.maxZoneScore || 0;
+                                        const zPct = hasZ && zMax > 0 ? ((item.zoneScore / zMax) * 100).toFixed(2) : '-';
+                                        const obj = { 'ที่': idx + 1, 'ห้องเรียน': item.room?.name || 'ไม่ทราบ', 'คะแนนเขต': hasZ ? item.zoneScore : 'ไม่มีเขต', 'คะแนนเต็มเขต': hasZ ? zMax : '-' };
+                                        if (appMode !== 'guest') obj['ร้อยละเขต (%)'] = zPct;
+                                        return obj;
+                                    });
+                                    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(roomRows), "เฉพาะห้องเรียน");
+                                    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(zoneRows), "เฉพาะเขตพื้นที่");
+                                } else {
+                                    const roomRows = dataToExport.map((item, idx) => {
+                                        const rInsp = item.roomInsp;
+                                        const isSkip = rInsp?.scores?.status === 'ข้ามการตรวจ';
+                                        const isNoDuty = rInsp?.scores?.status === 'ไม่ปฏิบัติหน้าที่';
+                                        return {
+                                            'ที่': idx + 1,
+                                            'วันที่': formatDateObj(item.dateStr),
+                                            'ห้องเรียน': item.room?.name || 'ไม่ระบุ',
+                                            'โต๊ะ (2)': (!rInsp || isSkip || isNoDuty) ? '-' : (rInsp.scores?.c1 ?? '-'),
+                                            'ขยะ (2)': (!rInsp || isSkip || isNoDuty) ? '-' : (rInsp.scores?.c2 ?? '-'),
+                                            'ไฟ/หน้าต่าง (2)': (!rInsp || isSkip || isNoDuty) ? '-' : (rInsp.scores?.c3 ?? '-'),
+                                            'พื้น (2)': (!rInsp || isSkip || isNoDuty) ? '-' : (rInsp.scores?.c4 ?? '-'),
+                                            'กระดาน (2)': (!rInsp || isSkip || isNoDuty) ? '-' : (rInsp.scores?.c5 ?? '-'),
+                                            'รวมคะแนนห้อง': rInsp ? (rInsp.totalScore === null ? 'ข้าม' : rInsp.totalScore) : '-',
+                                            'ผู้ตรวจห้อง': rInsp?.inspector || '-',
+                                            'หมายเหตุห้อง': rInsp?.comment || ''
+                                        };
+                                    });
+                                    const zoneRows = dataToExport.map((item, idx) => {
+                                        const zInsp = item.zoneInsp;
+                                        const hasZ = item.room?.hasZone !== false;
+                                        return {
+                                            'ที่': idx + 1,
+                                            'วันที่': formatDateObj(item.dateStr),
+                                            'ห้องเรียน': item.room?.name || 'ไม่ระบุ',
+                                            'ผลการประเมินเขต': !hasZ ? 'ไม่มีเขตพื้นที่' : (zInsp?.scores?.status || '-'),
+                                            'คะแนนเขต': !hasZ ? 'ไม่มี' : (zInsp ? (zInsp.totalScore === null ? 'ข้าม' : zInsp.totalScore) : '-'),
+                                            'ผู้ตรวจเขต': zInsp?.inspector || '-',
+                                            'หมายเหตุเขต': zInsp?.comment || ''
+                                        };
+                                    });
+                                    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(roomRows), "เฉพาะห้องเรียน");
+                                    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(zoneRows), "เฉพาะเขตพื้นที่");
                                 }
                             };
 
@@ -2300,17 +2449,15 @@
                                 const ws = XLSX.utils.json_to_sheet(formattedData);
                                 XLSX.utils.book_append_sheet(wb, ws, "สรุปผล");
                             } else if (excelMode === 'grade') {
-                                const ws = XLSX.utils.json_to_sheet(formattedData);
-                                XLSX.utils.book_append_sheet(wb, ws, "สรุปผลรวม");
                                 appendGradeSheets();
-                            } else if (excelMode === 'room_zone') {
+                            } else if (excelMode === 'split_type') {
                                 const ws = XLSX.utils.json_to_sheet(formattedData);
-                                XLSX.utils.book_append_sheet(wb, ws, "สรุปผลรวม");
-                                appendRoomZoneSheets();
-                            } else if (excelMode === 'all_sheets') {
+                                XLSX.utils.book_append_sheet(wb, ws, "รวมทั้งหมด");
+                                appendSplitTypeSheets();
+                            } else if (excelMode === 'all_tabs') {
                                 const ws = XLSX.utils.json_to_sheet(formattedData);
-                                XLSX.utils.book_append_sheet(wb, ws, "สรุปผลรวม");
-                                appendRoomZoneSheets();
+                                XLSX.utils.book_append_sheet(wb, ws, "รวมทั้งหมด");
+                                appendSplitTypeSheets();
                                 appendGradeSheets();
                             }
                         }
@@ -2432,6 +2579,97 @@
                 </>
             );
 
+            const renderExportSignatureFooter = () => {
+                if (!activeSignersForExport || activeSignersForExport.length === 0) return null;
+                return (
+                    <div style={{
+                        marginTop: '28px',
+                        paddingTop: '10px',
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        justifyContent: 'center',
+                        alignItems: 'flex-end',
+                        rowGap: '26px',
+                        columnGap: '36px',
+                        width: '100%',
+                        pageBreakInside: 'avoid'
+                    }}>
+                        {activeSignersForExport.map((signer, idx) => {
+                            const cleanName = String(signer.name || '').trim();
+                            const displayParenName = cleanName.startsWith('(') && cleanName.endsWith(')') ? cleanName : `(${cleanName})`;
+                            return (
+                                <div key={signer.id || idx} style={{
+                                    width: '285px',
+                                    maxWidth: '30%',
+                                    minWidth: '220px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    justifyContent: 'flex-end',
+                                    textAlign: 'center',
+                                    pageBreakInside: 'avoid'
+                                }}>
+                                    <div style={{
+                                        position: 'relative',
+                                        width: '100%',
+                                        height: '54px',
+                                        display: 'flex',
+                                        alignItems: 'flex-end',
+                                        justifyContent: 'center',
+                                        marginBottom: '4px'
+                                    }}>
+                                        {showDigitalSignatureImg && signer.signatureUrl && (
+                                            <img 
+                                                src={signer.signatureUrl} 
+                                                crossOrigin="anonymous"
+                                                style={{
+                                                    maxHeight: '52px',
+                                                    maxWidth: '170px',
+                                                    objectFit: 'contain',
+                                                    position: 'absolute',
+                                                    bottom: '4px',
+                                                    zIndex: 2
+                                                }}
+                                            />
+                                        )}
+                                        <div style={{
+                                            fontSize: '13px',
+                                            color: '#334155',
+                                            fontWeight: '600',
+                                            letterSpacing: '0.5px',
+                                            position: 'relative',
+                                            zIndex: 1
+                                        }}>
+                                            ลงชื่อ........................................................
+                                        </div>
+                                    </div>
+                                    <div style={{
+                                        fontSize: '13.5px',
+                                        fontWeight: 'bold',
+                                        color: '#0f172a',
+                                        lineHeight: '1.35',
+                                        marginTop: '2px'
+                                    }}>
+                                        {displayParenName}
+                                    </div>
+                                    {signer.role && (
+                                        <div style={{
+                                            fontSize: '12.5px',
+                                            fontWeight: '600',
+                                            color: '#475569',
+                                            lineHeight: '1.35',
+                                            marginTop: '2px'
+                                        }}>
+                                            {signer.role}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                );
+            };
+
             const renderExportTable = (dataChunk, startIndex) => {
                 if (printData.mode === 'leaderboard' || printData.mode === 'monthly') {
                     return (
@@ -2455,7 +2693,7 @@
                                     const displayRoomScore = rMax > 0 ? `${item.roomScore} / ${rMax}` : `${item.roomScore}`;
                                     const displayZoneScore = item.room?.hasZone === false ? 'ไม่มีเขต' : (zMax > 0 ? `${item.zoneScore} / ${zMax}` : `${item.zoneScore}`);
                                     const displayTotalScore = totalMax > 0 ? `${item.score} / ${totalMax}` : `${item.score}`;
-                                    let rankDisplay = exportSortOrder === 'score' ? item.trueRank : (globalIdx + 1);
+                                    let rankDisplay = exportSortOrder !== 'room' ? item.trueRank : (globalIdx + 1);
                                     return(
                                     <tr key={localIdx} className="pdf-row" style={{ pageBreakInside: 'avoid' }}>
                                         <td><b>{rankDisplay}</b></td>
@@ -2518,14 +2756,14 @@
                                     let finalComment = commentText.join(', ');
                                     let isNoDuty = rInsp?.scores?.status === 'ไม่ปฏิบัติหน้าที่'; let isSkip = rInsp?.scores?.status === 'ข้ามการตรวจ';
                                     let c1 = (guestFilterType === 'zone' || !rInsp || isSkip) ? '-' : (rInsp.scores?.c1 !== undefined ? rInsp.scores.c1 : '-');
-                                    let c2 = (guestFilterType === 'zone' || !rInsp || isSkip) ? '-' : (rInsp.scores?.c2 !== undefined ? rInsp.scores.c1 !== undefined ? rInsp.scores.c2 : '-' : '-');
+                                    let c2 = (guestFilterType === 'zone' || !rInsp || isSkip) ? '-' : (rInsp.scores?.c2 !== undefined ? rInsp.scores.c2 : '-');
                                     let c3 = (guestFilterType === 'zone' || !rInsp || isSkip) ? '-' : (rInsp.scores?.c3 !== undefined ? rInsp.scores.c3 : '-');
                                     let c4 = (guestFilterType === 'zone' || !rInsp || isSkip) ? '-' : (rInsp.scores?.c4 !== undefined ? rInsp.scores.c4 : '-');
                                     let c5 = (guestFilterType === 'zone' || !rInsp || isSkip) ? '-' : (rInsp.scores?.c5 !== undefined ? rInsp.scores.c5 : '-');
                                     
                                     return (
                                     <tr key={localIdx} className="pdf-row" style={{ pageBreakInside: 'avoid' }}>
-                                        <td>{exportSortOrder === 'score' ? item.trueRank : (globalIdx + 1)}</td>
+                                        <td>{exportSortOrder !== 'room' ? item.trueRank : (globalIdx + 1)}</td>
                                         <td className="text-left"><b>{item.room?.name || 'ไม่ระบุ'}</b></td>
                                         {guestFilterType === 'zone' || !rInsp ? ( <td colSpan="5" style={{color: '#94a3b8', fontSize: '12px'}}>-</td> ) : isNoDuty ? ( <td colSpan="5" style={{color: '#e11d48', fontWeight: 'bold', fontSize: '13px'}}>ไม่ปฏิบัติหน้าที่ (-5 / 10)</td> ) : isSkip ? ( <td colSpan="5" style={{color: '#64748b', fontWeight: 'bold', fontSize: '13px'}}>ข้ามการตรวจ</td> ) : (
                                             <><td style={{color: c1 === 0 ? '#e11d48' : '#16a34a', fontWeight: 'bold'}}>{c1 > 0 ? c1 : '0'}</td><td style={{color: c2 === 0 ? '#e11d48' : '#16a34a', fontWeight: 'bold'}}>{c2 > 0 ? c2 : '0'}</td><td style={{color: c3 === 0 ? '#e11d48' : '#16a34a', fontWeight: 'bold'}}>{c3 > 0 ? c3 : '0'}</td><td style={{color: c4 === 0 ? '#e11d48' : '#16a34a', fontWeight: 'bold'}}>{c4 > 0 ? c4 : '0'}</td><td style={{color: c5 === 0 ? '#e11d48' : '#16a34a', fontWeight: 'bold'}}>{c5 > 0 ? c5 : '0'}</td></>
@@ -2567,7 +2805,7 @@
                             </div>
                             <h1 className="text-3xl font-black text-white mb-4 tracking-tight">ปิดปรับปรุงระบบ</h1>
                             <p className="text-white/80 font-medium text-sm leading-relaxed whitespace-pre-line bg-black/20 p-4 rounded-xl border border-white/10">
-                                {settings?.maintenance_msg || '⚠️ ขออภัยในความไม่สะดวก\nระบบกำลังอยู่ระหว่างการปิดปรับปรุงชั่วคราว'}
+                                {settings?.maintenance_msg || '⚠️️ ขออภัยในความไม่สะดวก\nระบบกำลังอยู่ระหว่างการปิดปรับปรุงชั่วคราว'}
                             </p>
                         </div>
                     </div>
@@ -2582,6 +2820,7 @@
                         <div id="pdf-export-container" className="pdf-export-wrapper">
                             {renderExportHeader()}
                             {renderExportTable(printData.data || [], 0)}
+                            {renderExportSignatureFooter()}
                         </div>
                     </div>
 
@@ -2615,7 +2854,7 @@
                             <button onClick={handleSync} className="w-9 h-9 rounded-full bg-gray-50 border border-gray-200 text-gray-500 hover:bg-gray-100 flex items-center justify-center transition-colors shadow-sm" title="ซิงค์ข้อมูล"><i className={`ph ph-arrows-clockwise text-lg ${isSyncing ? "animate-spin text-[#C8102E]" : ""}`}></i></button>
                             <button onClick={()=>setShowInfoModal(true)} className="w-9 h-9 rounded-full bg-gray-50 text-gray-500 border border-gray-200 hover:bg-gray-100 flex items-center justify-center transition-colors shadow-sm" title="ช่วยเหลือ"><i className="ph ph-question text-lg"></i></button>
                             {appMode !== 'guest' && (
-                                <button onClick={() => showConfirm('ต้องการออกจากระบบใช่หรือไม่?', () => { safeRemoveItem('zc26_session_mode'); safeRemoveItem('zc26_session_user'); safeRemoveItem('zc26_session_coinspectors'); safeRemoveItem('zc26_session_route'); setAppMode('guest'); setInputPasscode(''); setCurrentUser(null); setCurrentRoute('dashboard'); setCoInspectors([]); })} className="w-9 h-9 rounded-full bg-gray-900 text-white hover:bg-black flex items-center justify-center transition-colors shadow-sm" title="ออกจากระบบ"><i className="ph ph-sign-out text-lg"></i></button>
+                                <button onClick={() => showConfirm('ต้องการออกจากระบบใช่หรือไม่?', () => { safeSessionRemove('zc26_active_session'); setAppMode('guest'); setInputPasscode(''); setCurrentUser(null); setCurrentRoute('dashboard'); setCoInspectors([]); })} className="w-9 h-9 rounded-full bg-gray-900 text-white hover:bg-black flex items-center justify-center transition-colors shadow-sm" title="ออกจากระบบ"><i className="ph ph-sign-out text-lg"></i></button>
                             )}
                         </div>
                     </header>
@@ -2638,7 +2877,7 @@
                                 <button onClick={handleSync} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-50 text-gray-500 border border-gray-200 shadow-sm active:scale-95 transition-colors hover:text-[#C8102E]" title="ซิงค์ข้อมูล"><i className={`ph ph-arrows-clockwise text-base ${isSyncing ? "animate-spin text-[#C8102E]" : ""}`}></i></button>
                                 <button onClick={() => setShowInfoModal(true)} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-50 text-gray-500 border border-gray-200 shadow-sm active:scale-95 transition-colors" title="ช่วยเหลือ"><i className="ph ph-question text-base"></i></button>
                                 {appMode !== 'guest' && (
-                                    <button onClick={() => { showConfirm('ต้องการออกจากระบบใช่หรือไม่?', () => { safeRemoveItem('zc26_session_mode'); safeRemoveItem('zc26_session_user'); safeRemoveItem('zc26_session_coinspectors'); safeRemoveItem('zc26_session_route'); setAppMode('guest'); setInputPasscode(''); setCurrentUser(null); setCurrentRoute('dashboard'); setCoInspectors([]); }); }} className="px-2.5 h-8 flex items-center justify-center gap-1 rounded-full bg-gray-900 text-white shadow-sm active:scale-95 transition-colors hover:bg-black text-[11px] font-bold" title="ออกจากระบบ">
+                                    <button onClick={() => { showConfirm('ต้องการออกจากระบบใช่หรือไม่?', () => { safeSessionRemove('zc26_active_session'); setAppMode('guest'); setInputPasscode(''); setCurrentUser(null); setCurrentRoute('dashboard'); setCoInspectors([]); }); }} className="px-2.5 h-8 flex items-center justify-center gap-1 rounded-full bg-gray-900 text-white shadow-sm active:scale-95 transition-colors hover:bg-black text-[11px] font-bold" title="ออกจากระบบ">
                                         <i className="ph ph-sign-out text-sm"></i>
                                         <span className="hidden sm:inline">ออก</span>
                                     </button>
@@ -2647,10 +2886,11 @@
                         </div>
                     </header>
 
+                    {}
                     {/* การแสดงผลหน้าต่างๆ */}
                     <main className="flex-1 flex flex-col overflow-y-auto relative pb-[100px] lg:pb-12 custom-scrollbar p-4 md:p-6 lg:p-8 max-w-5xl mx-auto w-full">
                         
-                        {/* แถบการ์ดโปรไฟล์ทักทายผู้ตรวจ (แสดงเฉพาะเมื่อเข้าสู่ระบบแล้ว แทนการเด้งแจ้งเตือนบังหน้าจอ) */}
+                        {/* แถบการ์ดโปรไฟล์ทักทายผู้ตรวจ */}
                         {appMode !== 'guest' && currentUser && (
                             <div className="bg-white px-4 py-3.5 rounded-[1.75rem] shadow-sm border border-gray-100 mb-5 flex items-center justify-between gap-3 animate-in fade-in">
                                 <div className="flex items-center gap-3.5 min-w-0">
@@ -2685,7 +2925,6 @@
                                     </div>
                                 </div>
 
-                                {/* แสดงรูปโปรไฟล์เพื่อนที่เดินตรวจร่วมกันเรียงซ้อนกัน */}
                                 {coInspectors.length > 0 && (
                                     <div className="flex -space-x-2 overflow-hidden shrink-0 pl-1">
                                         {coInspectors.slice(0, 4).map((coName, idx) => (
@@ -2785,11 +3024,9 @@
                             </div>
                         )}
                         
-                        {}
                         {/* --- เส้นทาง: อันดับคะแนน (Leaderboard) --- */}
                         {currentRoute === 'leaderboard' && (
                              <div className="space-y-4 pb-10 animate-in fade-in">
-                                {/* กล่องค้นหา เลือกระดับชั้น เลือกหมวดหมู่ และปุ่มพิมพ์ด้านบน (เหมือนหน้าประวัติ) */}
                                 <div className="bg-white p-4 sm:p-6 rounded-[1.5rem] shadow-sm border border-gray-100 relative">
                                     <div className="relative mb-5">
                                         <input type="text" placeholder="พิมพ์เลขห้อง (เช่น ม.1/1)..." value={guestSearch} onChange={e=>setGuestSearch(e.target.value)} className="w-full pl-12 pr-4 py-3.5 rounded-2xl border border-gray-200 focus:outline-none focus:border-[#C8102E] font-medium bg-gray-50 text-sm transition-all" />
@@ -2815,17 +3052,36 @@
                                     </div>
 
                                     {appMode !== 'guest' && (
-                                        <div className="mt-5 flex flex-wrap justify-end gap-2 border-t border-gray-100 pt-4">
+                                        <div className="mt-5 flex flex-wrap justify-end items-center gap-2 border-t border-gray-100 pt-4">
                                             <select value={exportSortOrder} onChange={e => setExportSortOrder(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-lg p-2 text-xs font-bold text-gray-600 outline-none">
-                                                <option value="score">เรียงตามเปอร์เซ็นต์ (%)</option><option value="room">เรียงตามห้อง</option>
+                                                <option value="score">เรียงตามเปอร์เซ็นต์ (%)</option>
+                                                <option value="raw_score">เรียงตามคะแนนรวม (pts)</option>
+                                                <option value="room">เรียงตามห้อง</option>
                                             </select>
-                                            <select value={excelMode} onChange={e => setExcelMode(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-lg p-2 text-xs font-bold text-gray-600 outline-none">
-                                                <option value="single">Excel: รวมชีตเดียว</option>
-                                                <option value="grade">Excel: แยกชีต ม.1-ม.6</option>
-                                                <option value="room_zone">Excel: แยกชีต ห้อง/เขต</option>
-                                                <option value="all_sheets">Excel: รวม + ห้อง/เขต + ม.1-ม.6</option>
-                                                <option value="months">Excel: แยกชีตรายเดือนทั้งหมด</option>
+                                            <select value={excelMode} onChange={e => setExcelMode(e.target.value)} className="bg-emerald-50/70 border border-emerald-200 rounded-lg p-2 text-xs font-bold text-emerald-700 outline-none">
+                                                <option value="single">📄 Excel: รวมชีตเดียว</option>
+                                                <option value="grade">📚 Excel: แยกชีต ม.1-ม.6</option>
+                                                <option value="split_type">🗂️ Excel: แยกชีต ห้อง/เขต</option>
+                                                <option value="all_tabs">✨ Excel: รวม + ห้อง/เขต + ม.1-ม.6</option>
+                                                <option value="months">🗓️ Excel: แยกชีตรายเดือนทั้งหมด</option>
                                             </select>
+                                            <div className="flex items-center gap-1 bg-purple-50/70 border border-purple-200 rounded-lg px-2 py-1">
+                                                <i className="ph ph-signature text-purple-600 text-sm"></i>
+                                                <select value={activeSignatureMode} onChange={e => {
+                                                    const val = e.target.value;
+                                                    setActiveSignatureMode(val);
+                                                    if (val === 'custom') setShowCustomSignerPickerModal(true);
+                                                }} className="bg-transparent text-xs font-bold text-purple-700 outline-none py-1">
+                                                    <option value="none">🚫 ไม่ใส่ลายเซ็น</option>
+                                                    {signaturePresets.map(p => (
+                                                        <option key={p.id} value={p.id}>✒️ {p.name} ({p.signerIds?.length || 0} คน)</option>
+                                                    ))}
+                                                    <option value="custom">⚙️ เลือกคนลงนามเอง ({customSelectedSignerIds.length} คน)</option>
+                                                </select>
+                                                {activeSignatureMode === 'custom' && (
+                                                    <button onClick={() => setShowCustomSignerPickerModal(true)} className="px-1.5 py-0.5 bg-purple-600 text-white rounded text-[10px] font-bold">เลือก</button>
+                                                )}
+                                            </div>
                                             <select value={exportDestination} onChange={e => setExportDestination(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-lg p-2 text-xs font-bold text-gray-600 outline-none hidden md:block">
                                                 <option value="local">💻 โหลดลงเครื่อง</option><option value="drive">☁️ เซฟลง Drive</option>
                                             </select>
@@ -2836,6 +3092,7 @@
                                     )}
                                 </div>
 
+                                {}
                                 <div className="bg-gradient-to-b from-[#C8102E] to-red-900 rounded-[2.5rem] shadow-xl border border-red-400/30 relative">
                                 <div className="p-4 flex justify-center z-20 relative">
                                     <div className="bg-black/20 backdrop-blur-md p-1.5 rounded-2xl flex gap-1 w-full max-w-sm">
@@ -2891,11 +3148,11 @@
                                         </div>
                                         <div className="bg-white rounded-[2.5rem] p-4 pb-10 shadow-[0_-15px_40px_-15px_rgba(0,0,0,0.4)] relative z-20 md:p-8">
                                             <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-4 md:mb-8"></div>
-                                            {currentLeaderboardView.length <= 3 && exportSortOrder === 'score' ? ( <p className="text-center text-gray-400 font-medium py-4">สิ้นสุดรายชื่อ</p> ) : (
+                                            {currentLeaderboardView.length <= 3 && exportSortOrder !== 'room' ? ( <p className="text-center text-gray-400 font-medium py-4">สิ้นสุดรายชื่อ</p> ) : (
                                                 <div className="space-y-3 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-4 md:space-y-0">
                                                     {currentLeaderboardView.map((item, idx) => {
-                                                        if (exportSortOrder === 'score' && idx < 3) return null; 
-                                                        const realRank = exportSortOrder === 'score' ? item.trueRank : (idx + 1);
+                                                        if (exportSortOrder !== 'room' && idx < 3) return null; 
+                                                        const realRank = exportSortOrder !== 'room' ? item.trueRank : (idx + 1);
                                                         return ( 
                                                             <div key={item.key || idx} className="flex items-center gap-3 p-3 bg-gray-50 rounded-2xl border border-gray-100 shadow-sm">
                                                                 <div className="w-10 h-10 rounded-full flex items-center justify-center font-black text-gray-500 bg-white border border-gray-200">{realRank}</div>
@@ -2991,19 +3248,33 @@
                                                 </div>
                                                 )}
                                             </div>
-                                            
+
                                             {/* ปุ่มดาวน์โหลด Export History (เฉพาะเจ้าหน้าที่) */}
                                             {appMode !== 'guest' && (
-                                                <div className="mt-6 flex flex-wrap justify-end gap-2 border-t pt-4">
-                                                    <select value={exportSortOrder} onChange={e => setExportSortOrder(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-lg p-2 text-xs font-bold text-gray-600 outline-none">
-                                                        <option value="room">เรียงตามห้อง</option><option value="score">เรียงตามคะแนน</option>
+                                                <div className="mt-6 flex flex-wrap justify-end items-center gap-2 border-t pt-4">
+                                                    <select value={excelMode === 'months' ? 'single' : excelMode} onChange={e => setExcelMode(e.target.value)} className="bg-emerald-50/70 border border-emerald-200 rounded-lg p-2 text-xs font-bold text-emerald-700 outline-none">
+                                                        <option value="single">📄 Excel: รวมชีตเดียว</option>
+                                                        <option value="grade">📚 Excel: แยกชีต ม.1-ม.6</option>
+                                                        <option value="split_type">🗂️ Excel: แยกชีต ห้อง/เขต</option>
+                                                        <option value="all_tabs">✨ Excel: รวม + ห้อง/เขต + ม.1-ม.6</option>
                                                     </select>
-                                                    <select value={excelMode} onChange={e => setExcelMode(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-lg p-2 text-xs font-bold text-gray-600 outline-none">
-                                                        <option value="single">Excel: รวมชีตเดียว</option>
-                                                        <option value="grade">Excel: แยกชีต ม.1-ม.6</option>
-                                                        <option value="room_zone">Excel: แยกชีต ห้อง/เขต</option>
-                                                        <option value="all_sheets">Excel: รวม + ห้อง/เขต + ม.1-ม.6</option>
-                                                    </select>
+                                                    <div className="flex items-center gap-1 bg-purple-50/70 border border-purple-200 rounded-lg px-2 py-1">
+                                                        <i className="ph ph-signature text-purple-600 text-sm"></i>
+                                                        <select value={activeSignatureMode} onChange={e => {
+                                                            const val = e.target.value;
+                                                            setActiveSignatureMode(val);
+                                                            if (val === 'custom') setShowCustomSignerPickerModal(true);
+                                                        }} className="bg-transparent text-xs font-bold text-purple-700 outline-none py-1">
+                                                            <option value="none">🚫 ไม่ใส่ลายเซ็น</option>
+                                                            {signaturePresets.map(p => (
+                                                                <option key={p.id} value={p.id}>✒️ {p.name} ({p.signerIds?.length || 0} คน)</option>
+                                                            ))}
+                                                            <option value="custom">⚙️ เลือกคนลงนามเอง ({customSelectedSignerIds.length} คน)</option>
+                                                        </select>
+                                                        {activeSignatureMode === 'custom' && (
+                                                            <button onClick={() => setShowCustomSignerPickerModal(true)} className="px-1.5 py-0.5 bg-purple-600 text-white rounded text-[10px] font-bold">เลือก</button>
+                                                        )}
+                                                    </div>
                                                     <select value={exportDestination} onChange={e => setExportDestination(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-lg p-2 text-xs font-bold text-gray-600 outline-none hidden md:block">
                                                         <option value="local">💻 โหลดลงเครื่อง</option><option value="drive">☁️ เซฟลง Drive</option>
                                                     </select>
@@ -3016,6 +3287,7 @@
                                     )}
                                 </div>
 
+                                {}
                                 {/* ตารางประวัติ */}
                                 {historyViewMode === 'table' && (
                                     <div className="bg-white p-4 rounded-[2rem] shadow-sm border border-gray-100 animate-in fade-in pb-8 overflow-hidden">
@@ -3109,7 +3381,6 @@
                              </div>
                         )}
 
-                        {}
                         {/* --- เส้นทาง: ประเมินผล (Inspect) --- */}
                         {(appMode === 'admin' || appMode === 'inspector') && currentRoute === 'inspect' && (
                              <div className="animate-in fade-in space-y-4 pb-12">
@@ -3336,6 +3607,129 @@
                                    </div>
                                 </div>
 
+                                {/* ส่วนจัดการคลังผู้ลงนาม & เซตลายเซ็นท้ายเอกสาร PDF / รูปภาพ */}
+                                <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 col-span-full space-y-5">
+                                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 pb-3">
+                                        <div>
+                                            <h3 className="font-bold text-gray-800 flex items-center gap-2 text-sm"><i className="ph ph-signature text-purple-600 text-lg"></i> ตั้งค่าคลังผู้ลงนาม & เซตลายเซ็นท้ายเอกสาร (PDF / รูปภาพ)</h3>
+                                            <p className="text-[11px] text-gray-400 font-medium mt-0.5">จัดเก็บรายชื่อผู้ลงนามและจัดเป็นเซตไว้ล่วงหน้า เวลาพิมพ์เอกสารจะจัดกึ่งกลางกระดาษให้อัตโนมัติ</p>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[11px] font-bold text-gray-500">เซตเริ่มต้น:</span>
+                                            <select value={defaultSignaturePreset} onChange={e => handleSetDefaultPreset(e.target.value)} className="bg-purple-50 border border-purple-200 text-purple-700 rounded-xl px-3 py-1.5 text-xs font-bold outline-none">
+                                                <option value="none">🚫 ไม่ใส่ลายเซ็นเป็นค่าเริ่มต้น</option>
+                                                {signaturePresets.map(p => (
+                                                    <option key={p.id} value={p.id}>✒️ {p.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                        {/* คอลัมน์ซ้าย: คลังรายชื่อผู้ลงนาม */}
+                                        <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200/80 space-y-3">
+                                            <h4 className="text-xs font-black text-gray-700 flex items-center gap-1.5">
+                                                <i className="ph ph-user-list text-purple-600 text-base"></i> 1. คลังรายชื่อผู้ลงนาม ({signersList.length} คน)
+                                            </h4>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                <input type="text" value={newSignerName} onChange={e => setNewSignerName(e.target.value)} placeholder="ชื่อ-นามสกุล (เช่น นายภูธนากร หงษ์ทอง)" className="p-2.5 rounded-xl border border-gray-200 bg-white text-xs font-bold outline-none focus:border-purple-500" />
+                                                <input type="text" value={newSignerRole} onChange={e => setNewSignerRole(e.target.value)} placeholder="ตำแหน่ง (เช่น เลขานุการสภานักเรียน)" className="p-2.5 rounded-xl border border-gray-200 bg-white text-xs font-medium outline-none focus:border-purple-500" />
+                                                <input type="text" value={newSignerImgUrl} onChange={e => setNewSignerImgUrl(e.target.value)} placeholder="ลิงก์รูปลายเซ็นพื้นหลังใส URL (ถ้ามี - ไม่ใส่ก็ได้)" className="sm:col-span-2 p-2.5 rounded-xl border border-gray-200 bg-white text-xs font-medium outline-none focus:border-purple-500" />
+                                            </div>
+                                            <div className="flex gap-2">
+                                                {editingSignerId && (
+                                                    <button onClick={() => { setEditingSignerId(null); setNewSignerName(''); setNewSignerRole(''); setNewSignerImgUrl(''); }} className="px-4 py-2 rounded-xl bg-gray-200 text-gray-600 font-bold text-xs">ยกเลิกแก้ไข</button>
+                                                )}
+                                                <button onClick={handleAddOrUpdateSigner} className="flex-1 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold text-xs shadow-sm transition-colors">
+                                                    {editingSignerId ? 'บันทึกการแก้ไขผู้ลงนาม' : '+ เพิ่มรายชื่อเข้าคลังผู้ลงนาม'}
+                                                </button>
+                                            </div>
+
+                                            <div className="max-h-52 overflow-y-auto custom-scrollbar divide-y divide-gray-100 bg-white rounded-xl border border-gray-200 p-2">
+                                                {signersList.length === 0 ? (
+                                                    <p className="text-center text-gray-400 text-xs py-6 font-medium">ยังไม่มีรายชื่อผู้ลงนามในคลัง</p>
+                                                ) : signersList.map(s => (
+                                                    <div key={s.id} className="py-2 px-2 flex items-center justify-between gap-2 text-xs">
+                                                        <div className="min-w-0">
+                                                            <div className="font-bold text-gray-800 truncate">{s.name}</div>
+                                                            <div className="text-[10px] text-gray-500 truncate">{s.role || 'ไม่ได้ระบุตำแหน่ง'} {s.signatureUrl ? '• มีรูปลายเซ็น' : '• เซ็นสด'}</div>
+                                                        </div>
+                                                        <div className="flex items-center gap-1 shrink-0">
+                                                            <button onClick={() => { setEditingSignerId(s.id); setNewSignerName(s.name); setNewSignerRole(s.role || ''); setNewSignerImgUrl(s.signatureUrl || ''); }} className="px-2 py-1 rounded-lg bg-blue-50 text-blue-600 font-bold text-[10px]">แก้ไข</button>
+                                                            <button onClick={() => handleDeleteSigner(s.id)} className="p-1.5 text-red-400 hover:text-red-600"><i className="ph ph-trash"></i></button>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* คอลัมน์ขวา: สร้างและจัดการเซตลายเซ็น */}
+                                        <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200/80 space-y-3">
+                                            <h4 className="text-xs font-black text-gray-700 flex items-center gap-1.5">
+                                                <i className="ph ph-folders text-purple-600 text-base"></i> 2. จัดเซตลายเซ็นสำเร็จรูป ({signaturePresets.length} เซต)
+                                            </h4>
+                                            <input type="text" value={newPresetName} onChange={e => setNewPresetName(e.target.value)} placeholder="ตั้งชื่อเซต (เช่น เซตส่งครูที่ปรึกษา / เฉพาะเลขาฯ)..." className="w-full p-2.5 rounded-xl border border-gray-200 bg-white text-xs font-bold outline-none focus:border-purple-500" />
+                                            
+                                            <div>
+                                                <p className="text-[10px] font-bold text-gray-500 mb-1.5">ติ๊กเลือกคนตามลำดับที่จะให้ขึ้นจากซ้ายไปขวา (เกิน 3 คนปัดบรรทัดใหม่อัตโนมัติ):</p>
+                                                <div className="max-h-36 overflow-y-auto custom-scrollbar bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
+                                                    {signersList.length === 0 ? (
+                                                        <p className="text-center text-gray-400 text-[11px] py-4">กรุณาเพิ่มรายชื่อผู้ลงนามฝั่งซ้ายก่อนครับ</p>
+                                                    ) : signersList.map(s => {
+                                                        const orderIdx = newPresetSignerIds.indexOf(s.id);
+                                                        const isChecked = orderIdx !== -1;
+                                                        return (
+                                                            <div key={s.id} onClick={() => toggleSignerInNewPreset(s.id)} className={`flex items-center justify-between px-3 py-2 cursor-pointer select-none transition-colors ${isChecked ? 'bg-purple-50/70' : 'hover:bg-gray-50'}`}>
+                                                                <div className="min-w-0">
+                                                                    <span className={`text-xs block truncate ${isChecked ? 'font-black text-purple-700' : 'font-bold text-gray-700'}`}>{s.name}</span>
+                                                                    <span className="text-[10px] text-gray-400 block truncate">{s.role}</span>
+                                                                </div>
+                                                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black shrink-0 ${isChecked ? 'bg-purple-600 text-white shadow-sm' : 'border border-gray-300 bg-white text-transparent'}`}>
+                                                                    {isChecked ? (orderIdx + 1) : ''}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+
+                                            <button onClick={handleCreateSignaturePreset} className="w-full py-2.5 bg-[#C8102E] hover:bg-red-800 text-white rounded-xl font-bold text-xs shadow-sm transition-colors">
+                                                + บันทึกเป็นเซตลายเซ็นใหม่
+                                            </button>
+
+                                            <div className="max-h-40 overflow-y-auto custom-scrollbar divide-y divide-gray-100 bg-white rounded-xl border border-gray-200 p-2">
+                                                {signaturePresets.length === 0 ? (
+                                                    <p className="text-center text-gray-400 text-xs py-4 font-medium">ยังไม่มีเซตลายเซ็นที่สร้างไว้</p>
+                                                ) : signaturePresets.map(p => {
+                                                    const namesInPreset = (p.signerIds || []).map((id, i) => {
+                                                        const found = signersList.find(s => s.id === id);
+                                                        return found ? `${i + 1}.${found.name}` : null;
+                                                    }).filter(Boolean).join(' -> ');
+                                                    const isDefault = defaultSignaturePreset === p.id;
+                                                    return (
+                                                        <div key={p.id} className="py-2 px-2 flex items-center justify-between gap-2 text-xs">
+                                                            <div className="min-w-0">
+                                                                <div className="font-bold text-gray-800 flex items-center gap-1.5">
+                                                                    <span className="truncate">{p.name}</span>
+                                                                    {isDefault && <span className="text-[9px] bg-emerald-50 text-emerald-600 border border-emerald-200 px-1.5 py-0.5 rounded-full font-black shrink-0">ค่าเริ่มต้น</span>}
+                                                                </div>
+                                                                <div className="text-[10px] text-gray-500 truncate">{namesInPreset || 'ไม่มีรายชื่อ'}</div>
+                                                            </div>
+                                                            <div className="flex items-center gap-1 shrink-0">
+                                                                {!isDefault && (
+                                                                    <button onClick={() => handleSetDefaultPreset(p.id)} className="px-2 py-1 rounded-lg bg-gray-100 hover:bg-emerald-50 text-gray-600 hover:text-emerald-600 font-bold text-[10px]">ตั้งเป็นค่าเริ่มต้น</button>
+                                                                )}
+                                                                <button onClick={() => handleDeleteSignaturePreset(p.id)} className="p-1.5 text-red-400 hover:text-red-600"><i className="ph ph-trash"></i></button>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {}
                                 <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 col-span-full">
                                    <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2 text-sm"><i className="ph ph-shield-check text-amber-600"></i> รหัสผ่านและโหมดปิดปรับปรุง</h3>
                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
@@ -3359,7 +3753,6 @@
                         )}
                     </main>
 
-                    {}
                     {/* Login Modal */}
                     {isLoginModalOpen && (
                         <div className="fixed inset-0 z-[9999] bg-gray-900/50 backdrop-blur-md flex items-start sm:items-center justify-center p-4 pt-10 sm:pt-4 overflow-y-auto animate-in fade-in zoom-in duration-200">
@@ -3858,7 +4251,7 @@
                         </div>
                     )}
 
-                    {/* Modal แก้ไขรูปโปรไฟล์ผู้ตรวจ */}
+                    {/* Modal แก้ไขรูปโปรไฟล์ผู้ตรวจ (วางลิงก์รูปภาพ URL อย่างเดียว เสถียรและซิงค์ขึ้นทุกเครื่อง 100%) */}
                     {editingInspectorAvatar && (
                         <div className="fixed inset-0 z-[99998] bg-gray-900/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
                             <div className="bg-white rounded-[2rem] w-full max-w-sm p-6 shadow-2xl relative">
@@ -3870,19 +4263,67 @@
                                 </div>
                                 <div className="space-y-3">
                                     <div>
-                                        <label className="text-[10px] font-bold text-gray-500 mb-1 block">ลิงก์รูปภาพโดยตรง (Direct Image URL เช่น Postimages)</label>
-                                        <input type="text" value={inspectorAvatarUrlInput} onChange={e => setInspectorAvatarUrlInput(e.target.value)} placeholder="วางลิงก์รูปภาพ https://i.postimg.cc/..." className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-xs font-medium outline-none focus:border-[#C8102E]" />
+                                        <label className="text-[11px] font-bold text-gray-500 mb-1 block">ลิงก์รูปภาพ (Direct Image URL)</label>
+                                        <input type="text" value={inspectorAvatarUrlInput} onChange={e => setInspectorAvatarUrlInput(e.target.value)} placeholder="วางลิงก์ https://i.postimg.cc/..." className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-xs font-medium outline-none focus:border-[#C8102E]" />
                                     </div>
-                                    <div className="flex gap-2 pt-2">
+                                    <div className="flex gap-2 pt-1">
                                         <button onClick={() => setInspectorAvatarUrlInput('')} className="px-4 py-2.5 rounded-xl bg-gray-100 text-gray-600 font-bold text-xs hover:bg-gray-200">ล้างลิงก์</button>
-                                        <button onClick={handleSaveInspectorAvatar} className="flex-1 py-2.5 rounded-xl bg-[#C8102E] text-white font-bold text-xs shadow-md hover:bg-red-800">บันทึกรูปหน้า</button>
+                                        <button onClick={handleSaveInspectorAvatar} className="flex-1 py-2.5 rounded-xl bg-[#C8102E] text-white font-bold text-xs shadow-md hover:bg-red-800">บันทึกลิงก์รูปหน้า</button>
                                     </div>
                                 </div>
                             </div>
                         </div>
                     )}
 
-                    {/* Modal แสดงตัวอย่างไฟล์ที่ส่งออกในแอป */}
+                    {/* Modal เลือกผู้ลงนามและจัดลำดับเองหน้างาน (Custom Signer Picker) */}
+                    {showCustomSignerPickerModal && (
+                        <div className="fixed inset-0 z-[99998] bg-gray-900/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+                            <div className="bg-white rounded-[2rem] w-full max-w-md p-6 shadow-2xl relative flex flex-col max-h-[88vh]">
+                                <button onClick={() => setShowCustomSignerPickerModal(false)} className="absolute top-4 right-4 w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center hover:bg-gray-200"><i className="ph ph-x"></i></button>
+                                <h3 className="text-base font-black text-gray-800 flex items-center gap-2 mb-1">
+                                    <i className="ph ph-signature text-purple-600 text-xl"></i> เลือกผู้ลงนามท้ายเอกสาร
+                                </h3>
+                                <p className="text-xs text-gray-500 font-medium mb-3">ติ๊กเลือกตามลำดับ (คนที่ติ๊กก่อนจะขึ้นก่อนจากซ้ายไปขวา และจัดกึ่งกลางกระดาษให้อัตโนมัติ)</p>
+
+                                <label className="flex items-center justify-between p-3 rounded-xl bg-purple-50 border border-purple-100 mb-3 cursor-pointer">
+                                    <span className="text-xs font-bold text-purple-800">แสดงรูปลายเซ็นดิจิทัลเหนือเส้นประ (ถ้ามี)</span>
+                                    <input type="checkbox" checked={showDigitalSignatureImg} onChange={e => setShowDigitalSignatureImg(e.target.checked)} className="w-4 h-4 accent-purple-600" />
+                                </label>
+
+                                <div className="flex-1 overflow-y-auto custom-scrollbar divide-y divide-gray-100 border border-gray-200 rounded-2xl bg-gray-50">
+                                    {signersList.length === 0 ? (
+                                        <div className="p-6 text-center space-y-2">
+                                            <p className="text-xs text-gray-400 font-bold">ยังไม่มีรายชื่อผู้ลงนามในคลัง</p>
+                                            {appMode === 'admin' && (
+                                                <button onClick={() => { setShowCustomSignerPickerModal(false); setCurrentRoute('settings'); }} className="px-3 py-1.5 bg-purple-600 text-white rounded-xl text-xs font-bold">ไปหน้าตั้งค่าเพื่อเพิ่มรายชื่อ</button>
+                                            )}
+                                        </div>
+                                    ) : signersList.map(s => {
+                                        const orderIdx = customSelectedSignerIds.indexOf(s.id);
+                                        const isChecked = orderIdx !== -1;
+                                        return (
+                                            <div key={s.id} onClick={() => toggleCustomSignerId(s.id)} className={`p-3 flex items-center justify-between cursor-pointer select-none transition-colors ${isChecked ? 'bg-white' : 'hover:bg-white/60'}`}>
+                                                <div className="min-w-0 pr-2">
+                                                    <div className={`text-xs truncate ${isChecked ? 'font-black text-purple-700' : 'font-bold text-gray-700'}`}>{s.name}</div>
+                                                    <div className="text-[10px] text-gray-400 truncate">{s.role || 'ไม่ได้ระบุตำแหน่ง'}</div>
+                                                </div>
+                                                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black shrink-0 transition-all ${isChecked ? 'bg-purple-600 text-white shadow-sm' : 'border border-gray-300 bg-white text-transparent'}`}>
+                                                    {isChecked ? `ลำดับ ${orderIdx + 1}` : ''}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                <div className="flex gap-2 pt-4 mt-2 border-t border-gray-100">
+                                    <button onClick={() => setCustomSelectedSignerIds([])} className="px-4 py-2.5 rounded-xl bg-gray-100 text-gray-600 font-bold text-xs hover:bg-gray-200">ล้างที่เลือก</button>
+                                    <button onClick={() => setShowCustomSignerPickerModal(false)} className="flex-1 py-2.5 rounded-xl bg-purple-600 text-white font-bold text-xs shadow-md hover:bg-purple-700">ตกลง ({customSelectedSignerIds.length} คน)</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Modal แสดงตัวอย่างไฟล์ที่ส่งออกในแอป (ป้องกันการเด้งหลุดออกจากแอปบน iPad/iPhone) */}
                     {exportedFilePreview && (
                         <div className="fixed inset-0 z-[99997] bg-gray-900/85 backdrop-blur-md flex flex-col items-center justify-center p-4 animate-in fade-in">
                             <div className="bg-white rounded-[2rem] w-full max-w-4xl p-5 shadow-2xl flex flex-col max-h-[90vh]">
@@ -4162,6 +4603,7 @@
                         </div>
                     )}
 
+                    {}
                     {/* Bottom Nav สำหรับ Mobile และ iPad แนวตั้ง */}
                     <div className="lg:hidden fixed bottom-0 w-full z-50">
                         <div className="absolute inset-0 bg-white/95 backdrop-blur-xl border-t border-gray-200 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]"></div>
@@ -4175,6 +4617,7 @@
                                 <span className="text-[10px] font-bold">อันดับ</span>
                             </button>
 
+                            {/* ปุ่มประเมินสีแดงกลมตรงกลาง (เฉพาะตอนล็อกอินแล้ว) */}
                             {(appMode === 'admin' || appMode === 'inspector') && (
                                 <button onClick={() => setCurrentRoute('inspect')} className="flex flex-col items-center justify-center flex-1 py-1">
                                     <div className={`w-11 h-11 rounded-full flex items-center justify-center shadow-md transition-transform active:scale-95 ${currentRoute === 'inspect' ? 'bg-[#C8102E] text-white ring-4 ring-red-100' : 'bg-[#C8102E] text-white'}`}>
