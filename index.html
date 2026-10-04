@@ -287,6 +287,9 @@
             const [showPasscode, setShowPasscode] = useState(false);
             const [currentUser, setCurrentUser] = useState(() => getValidSessionState()?.user || null);
             const [showLoginSuggestions, setShowLoginSuggestions] = useState(false);
+            const [loginSignatureDataUrl, setLoginSignatureDataUrl] = useState(() => getValidSessionState()?.user?.dailySignature || '');
+            const loginSigCanvasRef = useRef(null);
+            const isDrawingSigRef = useRef(false);
 
             // State สำหรับแสดงตัวอย่างไฟล์ที่ส่งออกในแอป (ป้องกันการเด้งออกนอกแอปบน iPad/iOS)
             const [exportedFilePreview, setExportedFilePreview] = useState(null);
@@ -325,7 +328,8 @@
             const [signersList, setSignersList] = useState([]);
             const [signaturePresets, setSignaturePresets] = useState([]);
             const [defaultSignaturePreset, setDefaultSignaturePreset] = useState('none');
-            const [activeSignatureMode, setActiveSignatureMode] = useState('none'); // 'none', presetId, or 'custom'
+            const [activeSignatureMode, setActiveSignatureMode] = useState('none'); // 'none', 'daily_inspectors', 'blank_inspectors', presetId, or 'custom'
+            const [blankInspectorCount, setBlankInspectorCount] = useState(2);
             const [customSelectedSignerIds, setCustomSelectedSignerIds] = useState([]);
             const [showDigitalSignatureImg, setShowDigitalSignatureImg] = useState(true);
             const [showCustomSignerPickerModal, setShowCustomSignerPickerModal] = useState(false);
@@ -525,12 +529,71 @@
                         setCoInspectors([]);
                         setShowCoInspectorPicker(false);
                         setCoInspectorSearch('');
+                        setLoginSignatureDataUrl('');
                         return 0; 
                     }
                     return next;
                 });
                 if (tapTimeoutRef.current) clearTimeout(tapTimeoutRef.current);
                 tapTimeoutRef.current = setTimeout(() => { setLogoTaps(0); }, 3000);
+            };
+
+            const getSigPadCoords = (e, canvas) => {
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+                if (e.touches && e.touches.length > 0) {
+                    return {
+                        x: (e.touches[0].clientX - rect.left) * scaleX,
+                        y: (e.touches[0].clientY - rect.top) * scaleY
+                    };
+                }
+                return {
+                    x: (e.clientX - rect.left) * scaleX,
+                    y: (e.clientY - rect.top) * scaleY
+                };
+            };
+
+            const startDrawingLoginSig = (e) => {
+                const canvas = loginSigCanvasRef.current;
+                if (!canvas) return;
+                isDrawingSigRef.current = true;
+                const ctx = canvas.getContext('2d');
+                ctx.strokeStyle = '#0f172a';
+                ctx.lineWidth = 2.6;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                const pos = getSigPadCoords(e, canvas);
+                ctx.beginPath();
+                ctx.moveTo(pos.x, pos.y);
+            };
+
+            const moveDrawingLoginSig = (e) => {
+                if (!isDrawingSigRef.current) return;
+                const canvas = loginSigCanvasRef.current;
+                if (!canvas) return;
+                if (e.cancelable) e.preventDefault();
+                const ctx = canvas.getContext('2d');
+                const pos = getSigPadCoords(e, canvas);
+                ctx.lineTo(pos.x, pos.y);
+                ctx.stroke();
+            };
+
+            const endDrawingLoginSig = () => {
+                if (!isDrawingSigRef.current) return;
+                isDrawingSigRef.current = false;
+                const canvas = loginSigCanvasRef.current;
+                if (!canvas) return;
+                setLoginSignatureDataUrl(canvas.toDataURL('image/png'));
+            };
+
+            const clearLoginSigPad = () => {
+                const canvas = loginSigCanvasRef.current;
+                if (canvas) {
+                    const ctx = canvas.getContext('2d');
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                }
+                setLoginSignatureDataUrl('');
             };
 
             const toggleCoInspector = (name) => {
@@ -562,9 +625,9 @@
                 let userObj = validInspectors.find(u => u.name === finalName);
                 const resolvedAvatar = getInspectorAvatar(finalName);
                 if (!userObj) { 
-                    userObj = { id: generateId('u'), name: finalName, avatar_url: resolvedAvatar }; 
-                } else if (!userObj.avatar_url && resolvedAvatar) {
-                    userObj = { ...userObj, avatar_url: resolvedAvatar };
+                    userObj = { id: generateId('u'), name: finalName, avatar_url: resolvedAvatar, dailySignature: loginSignatureDataUrl || '' }; 
+                } else {
+                    userObj = { ...userObj, avatar_url: userObj.avatar_url || resolvedAvatar, dailySignature: loginSignatureDataUrl || '' };
                 }
 
                 const isMaster = inputPasscode === (settings.master_passcode || '9999');
@@ -949,7 +1012,10 @@
 
                     const newInsp = { 
                         id: generateId('insp'), roomId: loc.id, type: type, date: finalDateISO, 
-                        inspector: getActiveInspectorTeamString(), scores: breakdown, totalScore, comment: evalComment, photoUrl: photoUrl 
+                        inspector: getActiveInspectorTeamString(), 
+                        mainInspector: currentUser?.name || '',
+                        inspectorSignature: currentUser?.dailySignature || loginSignatureDataUrl || '',
+                        scores: breakdown, totalScore, comment: evalComment, photoUrl: photoUrl 
                     };
 
                     await syncToGASAsync('saveInspection', newInsp);
@@ -1077,6 +1143,8 @@
                                     type: batchModal.type,
                                     date: finalDateISO,
                                     inspector: inspectorTeam,
+                                    mainInspector: currentUser?.name || '',
+                                    inspectorSignature: currentUser?.dailySignature || loginSignatureDataUrl || '',
                                     scores: breakdown,
                                     totalScore,
                                     comment: batchModal.comment.trim() || '',
@@ -1279,7 +1347,7 @@
                     let max = item.maxScore;
                     let pct = max > 0 ? (item.score / max) * 100 : 0;
                     let medal = '';
-                    if (pct >= 80) medal = '🥇 ทอง'; else if (pct >= 70) medal = '🥈 เงิน'; else if (pct >= 60) medal = '🥉 ทองแดง';
+                    if (pct >= 80) medal = 'เหรียญทอง'; else if (pct >= 70) medal = 'เหรียญเงิน'; else if (pct >= 60) medal = 'เหรียญทองแดง';
                     return { ...item, percentage: pct.toFixed(2), medal };
                 });
 
@@ -1330,7 +1398,7 @@
                     let max = item.maxScore;
                     let pct = max > 0 ? (item.score / max) * 100 : 0;
                     let medal = '';
-                    if (pct >= 80) medal = '🥇 ทอง'; else if (pct >= 70) medal = '🥈 เงิน'; else if (pct >= 60) medal = '🥉 ทองแดง';
+                    if (pct >= 80) medal = 'เหรียญทอง'; else if (pct >= 70) medal = 'เหรียญเงิน'; else if (pct >= 60) medal = 'เหรียญทองแดง';
                     return { ...item, percentage: pct.toFixed(2), medal };
                 });
 
@@ -1613,7 +1681,7 @@
             };
 
             const handleAddOrUpdateSigner = async () => {
-                if (!newSignerName.trim()) return showToast('กรุณากรอกชื่อ-นามสกุลผู้ลงนาม', 'warning');
+                if (!newSignerName.trim() && !newSignerRole.trim()) return showToast('กรุณากรอกชื่อผู้ลงนาม หรือ ตำแหน่ง อย่างน้อย 1 ช่อง', 'warning');
                 let updated = [...signersList];
                 if (editingSignerId) {
                     updated = updated.map(s => s.id === editingSignerId ? {
@@ -1691,6 +1759,61 @@
             // คำนวณรายชื่อผู้ลงนามที่จะนำไปแสดงท้ายกระดาษ PDF / รูปภาพ ตามลำดับที่เลือก
             const activeSignersForExport = useMemo(() => {
                 if (!activeSignatureMode || activeSignatureMode === 'none') return [];
+
+                if (activeSignatureMode === 'daily_inspectors') {
+                    const todayStr = new Date().toISOString().split('T')[0];
+                    const targetDateStr = (currentRoute === 'history' && dateMode !== 'today') ? filterDate : todayStr;
+                    const validInspections = Array.isArray(inspections) ? inspections : [];
+                    const dayInsps = validInspections.filter(i => i.date && String(i.date).startsWith(targetDateStr));
+
+                    const inspectorMap = new Map();
+                    dayInsps.forEach(insp => {
+                        const rawTeam = String(insp.inspector || '').split(',').map(s => s.trim()).filter(Boolean);
+                        const mainName = String(insp.mainInspector || rawTeam[0] || '').trim();
+                        const sigUrl = insp.inspectorSignature || '';
+
+                        rawTeam.forEach(personName => {
+                            if (!inspectorMap.has(personName)) {
+                                inspectorMap.set(personName, {
+                                    name: personName,
+                                    signatureUrl: (personName === mainName && sigUrl) ? sigUrl : ''
+                                });
+                            } else if (personName === mainName && sigUrl && !inspectorMap.get(personName).signatureUrl) {
+                                inspectorMap.get(personName).signatureUrl = sigUrl;
+                            }
+                        });
+                    });
+
+                    if (inspectorMap.size === 0 && currentUser?.name) {
+                        inspectorMap.set(currentUser.name, {
+                            name: currentUser.name,
+                            signatureUrl: currentUser.dailySignature || loginSignatureDataUrl || ''
+                        });
+                        (coInspectors || []).forEach(coName => {
+                            if (coName && !inspectorMap.has(coName)) {
+                                inspectorMap.set(coName, { name: coName, signatureUrl: '' });
+                            }
+                        });
+                    }
+
+                    return Array.from(inspectorMap.values()).map((item, idx) => ({
+                        id: `daily_insp_${idx + 1}`,
+                        name: item.name,
+                        role: `ผู้ตรวจ ${idx + 1}`,
+                        signatureUrl: item.signatureUrl
+                    }));
+                }
+
+                if (activeSignatureMode === 'blank_inspectors') {
+                    const count = Math.max(1, Math.min(12, Number(blankInspectorCount) || 2));
+                    return Array.from({ length: count }, (_, idx) => ({
+                        id: `blank_insp_${idx + 1}`,
+                        name: '',
+                        role: `ผู้ตรวจ ${idx + 1}`,
+                        signatureUrl: ''
+                    }));
+                }
+
                 let targetIds = [];
                 if (activeSignatureMode === 'custom') {
                     targetIds = customSelectedSignerIds;
@@ -1703,7 +1826,7 @@
                 return targetIds
                     .map(id => signersList.find(s => s.id === id))
                     .filter(Boolean);
-            }, [activeSignatureMode, customSelectedSignerIds, signaturePresets, signersList]);
+            }, [activeSignatureMode, blankInspectorCount, customSelectedSignerIds, signaturePresets, signersList, inspections, currentRoute, dateMode, filterDate, currentUser, coInspectors, loginSignatureDataUrl]);
 
             const handleOpenOmrScanner = () => {
                 const validRooms = Array.isArray(rooms) ? rooms : [];
@@ -2019,6 +2142,8 @@
                             type: 'room',
                             date: finalDateISO,
                             inspector: inspectorTeam,
+                            mainInspector: currentUser?.name || '',
+                            inspectorSignature: currentUser?.dailySignature || loginSignatureDataUrl || '',
                             scores: breakdown,
                             totalScore,
                             comment: item.roomScores.skip ? 'สแกนจากใบตรวจภาคสนาม' : '',
@@ -2041,6 +2166,8 @@
                             type: 'zone',
                             date: finalDateISO,
                             inspector: inspectorTeam,
+                            mainInspector: currentUser?.name || '',
+                            inspectorSignature: currentUser?.dailySignature || loginSignatureDataUrl || '',
                             scores: breakdown,
                             totalScore,
                             comment: item.zoneSkip ? 'สแกนจากใบตรวจภาคสนาม' : '',
@@ -2252,7 +2379,7 @@
                                     if (guestFilterType === 'all') max = totalDays * (item.room.hasZone !== false ? 20 : 10);
                                     let pct = max > 0 ? (item.score / max) * 100 : 0;
                                     let medal = '';
-                                    if (pct >= 80) medal = '🥇 ทอง'; else if (pct >= 70) medal = '🥈 เงิน'; else if (pct >= 60) medal = '🥉 ทองแดง';
+                                    if (pct >= 80) medal = 'เหรียญทอง'; else if (pct >= 70) medal = 'เหรียญเงิน'; else if (pct >= 60) medal = 'เหรียญทองแดง';
                                     return { ...item, percentage: pct.toFixed(2), medal };
                                 });
 
@@ -2581,27 +2708,36 @@
 
             const renderExportSignatureFooter = () => {
                 if (!activeSignersForExport || activeSignersForExport.length === 0) return null;
+                const totalSigners = activeSignersForExport.length;
+                const isCompact = totalSigners > 4;
+                const boxWidth = totalSigners >= 7 ? '215px' : (totalSigners >= 4 ? '245px' : '285px');
+                const maxPerRowPct = totalSigners >= 4 ? '23%' : '30%';
+                const dotLineText = isCompact ? 'ลงชื่อ..............................................' : 'ลงชื่อ........................................................';
+                const blankParenText = isCompact ? '(..............................................)' : '(........................................................)';
+
                 return (
                     <div style={{
-                        marginTop: '28px',
-                        paddingTop: '10px',
+                        marginTop: isCompact ? '20px' : '28px',
+                        paddingTop: '8px',
                         display: 'flex',
                         flexWrap: 'wrap',
                         justifyContent: 'center',
                         alignItems: 'flex-end',
-                        rowGap: '26px',
-                        columnGap: '36px',
+                        rowGap: isCompact ? '18px' : '26px',
+                        columnGap: isCompact ? '22px' : '36px',
                         width: '100%',
                         pageBreakInside: 'avoid'
                     }}>
                         {activeSignersForExport.map((signer, idx) => {
                             const cleanName = String(signer.name || '').trim();
-                            const displayParenName = cleanName.startsWith('(') && cleanName.endsWith(')') ? cleanName : `(${cleanName})`;
+                            const displayParenName = cleanName
+                                ? (cleanName.startsWith('(') && cleanName.endsWith(')') ? cleanName : `(${cleanName})`)
+                                : blankParenText;
                             return (
                                 <div key={signer.id || idx} style={{
-                                    width: '285px',
-                                    maxWidth: '30%',
-                                    minWidth: '220px',
+                                    width: boxWidth,
+                                    maxWidth: maxPerRowPct,
+                                    minWidth: isCompact ? '195px' : '220px',
                                     display: 'flex',
                                     flexDirection: 'column',
                                     alignItems: 'center',
@@ -2612,7 +2748,7 @@
                                     <div style={{
                                         position: 'relative',
                                         width: '100%',
-                                        height: '54px',
+                                        height: isCompact ? '46px' : '54px',
                                         display: 'flex',
                                         alignItems: 'flex-end',
                                         justifyContent: 'center',
@@ -2623,8 +2759,8 @@
                                                 src={signer.signatureUrl} 
                                                 crossOrigin="anonymous"
                                                 style={{
-                                                    maxHeight: '52px',
-                                                    maxWidth: '170px',
+                                                    maxHeight: isCompact ? '44px' : '52px',
+                                                    maxWidth: isCompact ? '145px' : '170px',
                                                     objectFit: 'contain',
                                                     position: 'absolute',
                                                     bottom: '4px',
@@ -2633,28 +2769,30 @@
                                             />
                                         )}
                                         <div style={{
-                                            fontSize: '13px',
+                                            fontSize: isCompact ? '12px' : '13px',
                                             color: '#334155',
                                             fontWeight: '600',
-                                            letterSpacing: '0.5px',
+                                            letterSpacing: '0.3px',
                                             position: 'relative',
-                                            zIndex: 1
+                                            zIndex: 1,
+                                            whiteSpace: 'nowrap'
                                         }}>
-                                            ลงชื่อ........................................................
+                                            {dotLineText}
                                         </div>
                                     </div>
                                     <div style={{
-                                        fontSize: '13.5px',
-                                        fontWeight: 'bold',
-                                        color: '#0f172a',
+                                        fontSize: isCompact ? '12.5px' : '13.5px',
+                                        fontWeight: cleanName ? 'bold' : '600',
+                                        color: cleanName ? '#0f172a' : '#475569',
                                         lineHeight: '1.35',
-                                        marginTop: '2px'
+                                        marginTop: '2px',
+                                        whiteSpace: 'nowrap'
                                     }}>
                                         {displayParenName}
                                     </div>
                                     {signer.role && (
                                         <div style={{
-                                            fontSize: '12.5px',
+                                            fontSize: isCompact ? '11.5px' : '12.5px',
                                             fontWeight: '600',
                                             color: '#475569',
                                             lineHeight: '1.35',
@@ -3059,31 +3197,38 @@
                                                 <option value="room">เรียงตามห้อง</option>
                                             </select>
                                             <select value={excelMode} onChange={e => setExcelMode(e.target.value)} className="bg-emerald-50/70 border border-emerald-200 rounded-lg p-2 text-xs font-bold text-emerald-700 outline-none">
-                                                <option value="single">📄 Excel: รวมชีตเดียว</option>
-                                                <option value="grade">📚 Excel: แยกชีต ม.1-ม.6</option>
-                                                <option value="split_type">🗂️ Excel: แยกชีต ห้อง/เขต</option>
-                                                <option value="all_tabs">✨ Excel: รวม + ห้อง/เขต + ม.1-ม.6</option>
-                                                <option value="months">🗓️ Excel: แยกชีตรายเดือนทั้งหมด</option>
+                                                <option value="single">Excel: รวมชีตเดียว</option>
+                                                <option value="grade">Excel: แยกชีต ม.1-ม.6</option>
+                                                <option value="split_type">Excel: แยกชีต ห้อง/เขต</option>
+                                                <option value="all_tabs">Excel: รวม + ห้อง/เขต + ม.1-ม.6</option>
+                                                <option value="months">Excel: แยกชีตรายเดือนทั้งหมด</option>
                                             </select>
-                                            <div className="flex items-center gap-1 bg-purple-50/70 border border-purple-200 rounded-lg px-2 py-1">
+                                            <div className="flex items-center gap-1.5 bg-purple-50/70 border border-purple-200 rounded-lg px-2.5 py-1">
                                                 <i className="ph ph-signature text-purple-600 text-sm"></i>
                                                 <select value={activeSignatureMode} onChange={e => {
                                                     const val = e.target.value;
                                                     setActiveSignatureMode(val);
                                                     if (val === 'custom') setShowCustomSignerPickerModal(true);
                                                 }} className="bg-transparent text-xs font-bold text-purple-700 outline-none py-1">
-                                                    <option value="none">🚫 ไม่ใส่ลายเซ็น</option>
+                                                    <option value="none">ไม่ใส่ลายเซ็น</option>
+                                                    <option value="daily_inspectors">ผู้ตรวจประจำวัน (ผู้ตรวจ 1, 2, ...)</option>
+                                                    <option value="blank_inspectors">ช่องลงนามว่าง (ไม่ระบุชื่อ)</option>
                                                     {signaturePresets.map(p => (
-                                                        <option key={p.id} value={p.id}>✒️ {p.name} ({p.signerIds?.length || 0} คน)</option>
+                                                        <option key={p.id} value={p.id}>{p.name} ({p.signerIds?.length || 0} คน)</option>
                                                     ))}
-                                                    <option value="custom">⚙️ เลือกคนลงนามเอง ({customSelectedSignerIds.length} คน)</option>
+                                                    <option value="custom">เลือกผู้ลงนามเอง ({customSelectedSignerIds.length} คน)</option>
                                                 </select>
+                                                {activeSignatureMode === 'blank_inspectors' && (
+                                                    <select value={blankInspectorCount} onChange={e => setBlankInspectorCount(Number(e.target.value))} className="bg-white border border-purple-200 text-purple-700 rounded px-1.5 py-0.5 text-[11px] font-bold outline-none">
+                                                        {[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n} คน</option>)}
+                                                    </select>
+                                                )}
                                                 {activeSignatureMode === 'custom' && (
-                                                    <button onClick={() => setShowCustomSignerPickerModal(true)} className="px-1.5 py-0.5 bg-purple-600 text-white rounded text-[10px] font-bold">เลือก</button>
+                                                    <button onClick={() => setShowCustomSignerPickerModal(true)} className="px-2 py-0.5 bg-purple-600 text-white rounded text-[10px] font-bold">เลือก</button>
                                                 )}
                                             </div>
                                             <select value={exportDestination} onChange={e => setExportDestination(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-lg p-2 text-xs font-bold text-gray-600 outline-none hidden md:block">
-                                                <option value="local">💻 โหลดลงเครื่อง</option><option value="drive">☁️ เซฟลง Drive</option>
+                                                <option value="local">โหลดลงเครื่อง</option><option value="drive">บันทึกลง Drive</option>
                                             </select>
                                             <button onClick={()=>executeDirectExport('leaderboard', 'png')} disabled={printData.isPreparing} className="bg-blue-50 text-blue-600 border border-blue-200 px-3 py-2 rounded-lg font-bold text-xs shadow-sm flex items-center gap-1 hover:bg-blue-100"><i className="ph ph-image"></i> รูปภาพ</button>
                                             <button onClick={()=>exportExcel('leaderboard')} disabled={printData.isPreparing} className="bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-2 rounded-lg font-bold text-xs shadow-sm flex items-center gap-1 hover:bg-emerald-100"><i className="ph ph-microsoft-excel-logo"></i> Excel</button>
@@ -3253,30 +3398,37 @@
                                             {appMode !== 'guest' && (
                                                 <div className="mt-6 flex flex-wrap justify-end items-center gap-2 border-t pt-4">
                                                     <select value={excelMode === 'months' ? 'single' : excelMode} onChange={e => setExcelMode(e.target.value)} className="bg-emerald-50/70 border border-emerald-200 rounded-lg p-2 text-xs font-bold text-emerald-700 outline-none">
-                                                        <option value="single">📄 Excel: รวมชีตเดียว</option>
-                                                        <option value="grade">📚 Excel: แยกชีต ม.1-ม.6</option>
-                                                        <option value="split_type">🗂️ Excel: แยกชีต ห้อง/เขต</option>
-                                                        <option value="all_tabs">✨ Excel: รวม + ห้อง/เขต + ม.1-ม.6</option>
+                                                        <option value="single">Excel: รวมชีตเดียว</option>
+                                                        <option value="grade">Excel: แยกชีต ม.1-ม.6</option>
+                                                        <option value="split_type">Excel: แยกชีต ห้อง/เขต</option>
+                                                        <option value="all_tabs">Excel: รวม + ห้อง/เขต + ม.1-ม.6</option>
                                                     </select>
-                                                    <div className="flex items-center gap-1 bg-purple-50/70 border border-purple-200 rounded-lg px-2 py-1">
+                                                    <div className="flex items-center gap-1.5 bg-purple-50/70 border border-purple-200 rounded-lg px-2.5 py-1">
                                                         <i className="ph ph-signature text-purple-600 text-sm"></i>
                                                         <select value={activeSignatureMode} onChange={e => {
                                                             const val = e.target.value;
                                                             setActiveSignatureMode(val);
                                                             if (val === 'custom') setShowCustomSignerPickerModal(true);
                                                         }} className="bg-transparent text-xs font-bold text-purple-700 outline-none py-1">
-                                                            <option value="none">🚫 ไม่ใส่ลายเซ็น</option>
+                                                            <option value="none">ไม่ใส่ลายเซ็น</option>
+                                                            <option value="daily_inspectors">ผู้ตรวจประจำวัน (ผู้ตรวจ 1, 2, ...)</option>
+                                                            <option value="blank_inspectors">ช่องลงนามว่าง (ไม่ระบุชื่อ)</option>
                                                             {signaturePresets.map(p => (
-                                                                <option key={p.id} value={p.id}>✒️ {p.name} ({p.signerIds?.length || 0} คน)</option>
+                                                                <option key={p.id} value={p.id}>{p.name} ({p.signerIds?.length || 0} คน)</option>
                                                             ))}
-                                                            <option value="custom">⚙️ เลือกคนลงนามเอง ({customSelectedSignerIds.length} คน)</option>
+                                                            <option value="custom">เลือกผู้ลงนามเอง ({customSelectedSignerIds.length} คน)</option>
                                                         </select>
+                                                        {activeSignatureMode === 'blank_inspectors' && (
+                                                            <select value={blankInspectorCount} onChange={e => setBlankInspectorCount(Number(e.target.value))} className="bg-white border border-purple-200 text-purple-700 rounded px-1.5 py-0.5 text-[11px] font-bold outline-none">
+                                                                {[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n} คน</option>)}
+                                                            </select>
+                                                        )}
                                                         {activeSignatureMode === 'custom' && (
-                                                            <button onClick={() => setShowCustomSignerPickerModal(true)} className="px-1.5 py-0.5 bg-purple-600 text-white rounded text-[10px] font-bold">เลือก</button>
+                                                            <button onClick={() => setShowCustomSignerPickerModal(true)} className="px-2 py-0.5 bg-purple-600 text-white rounded text-[10px] font-bold">เลือก</button>
                                                         )}
                                                     </div>
                                                     <select value={exportDestination} onChange={e => setExportDestination(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-lg p-2 text-xs font-bold text-gray-600 outline-none hidden md:block">
-                                                        <option value="local">💻 โหลดลงเครื่อง</option><option value="drive">☁️ เซฟลง Drive</option>
+                                                        <option value="local">โหลดลงเครื่อง</option><option value="drive">บันทึกลง Drive</option>
                                                     </select>
                                                     <button onClick={()=>executeDirectExport('history', 'png')} disabled={printData.isPreparing} className="bg-blue-50 text-blue-600 border border-blue-200 px-3 py-2 rounded-lg font-bold text-xs shadow-sm flex items-center gap-1 hover:bg-blue-100"><i className="ph ph-image"></i> รูปภาพ</button>
                                                     <button onClick={()=>exportExcel('history')} disabled={printData.isPreparing} className="bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-2 rounded-lg font-bold text-xs shadow-sm flex items-center gap-1 hover:bg-emerald-100"><i className="ph ph-microsoft-excel-logo"></i> Excel</button>
@@ -3611,15 +3763,17 @@
                                 <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 col-span-full space-y-5">
                                     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 pb-3">
                                         <div>
-                                            <h3 className="font-bold text-gray-800 flex items-center gap-2 text-sm"><i className="ph ph-signature text-purple-600 text-lg"></i> ตั้งค่าคลังผู้ลงนาม & เซตลายเซ็นท้ายเอกสาร (PDF / รูปภาพ)</h3>
-                                            <p className="text-[11px] text-gray-400 font-medium mt-0.5">จัดเก็บรายชื่อผู้ลงนามและจัดเป็นเซตไว้ล่วงหน้า เวลาพิมพ์เอกสารจะจัดกึ่งกลางกระดาษให้อัตโนมัติ</p>
+                                            <h3 className="font-bold text-gray-800 flex items-center gap-2 text-sm"><i className="ph ph-signature text-purple-600 text-lg"></i> ตั้งค่าคลังผู้ลงนามและเซตลายเซ็นท้ายเอกสาร (PDF / รูปภาพ)</h3>
+                                            <p className="text-[11px] text-gray-400 font-medium mt-0.5">จัดเก็บรายชื่อผู้ลงนาม (หรือเว้นชื่อว่างเพื่อใส่เฉพาะตำแหน่ง) และจัดเป็นเซตไว้ล่วงหน้า</p>
                                         </div>
                                         <div className="flex items-center gap-2">
                                             <span className="text-[11px] font-bold text-gray-500">เซตเริ่มต้น:</span>
                                             <select value={defaultSignaturePreset} onChange={e => handleSetDefaultPreset(e.target.value)} className="bg-purple-50 border border-purple-200 text-purple-700 rounded-xl px-3 py-1.5 text-xs font-bold outline-none">
-                                                <option value="none">🚫 ไม่ใส่ลายเซ็นเป็นค่าเริ่มต้น</option>
+                                                <option value="none">ไม่ใส่ลายเซ็นเป็นค่าเริ่มต้น</option>
+                                                <option value="daily_inspectors">ผู้ตรวจประจำวัน (ผู้ตรวจ 1, 2, ...)</option>
+                                                <option value="blank_inspectors">ช่องลงนามว่าง (ไม่ระบุชื่อ)</option>
                                                 {signaturePresets.map(p => (
-                                                    <option key={p.id} value={p.id}>✒️ {p.name}</option>
+                                                    <option key={p.id} value={p.id}>{p.name}</option>
                                                 ))}
                                             </select>
                                         </div>
@@ -3629,11 +3783,11 @@
                                         {/* คอลัมน์ซ้าย: คลังรายชื่อผู้ลงนาม */}
                                         <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200/80 space-y-3">
                                             <h4 className="text-xs font-black text-gray-700 flex items-center gap-1.5">
-                                                <i className="ph ph-user-list text-purple-600 text-base"></i> 1. คลังรายชื่อผู้ลงนาม ({signersList.length} คน)
+                                                <i className="ph ph-user-list text-purple-600 text-base"></i> 1. คลังรายชื่อผู้ลงนาม ({signersList.length} รายการ)
                                             </h4>
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                                <input type="text" value={newSignerName} onChange={e => setNewSignerName(e.target.value)} placeholder="ชื่อ-นามสกุล (เช่น นายภูธนากร หงษ์ทอง)" className="p-2.5 rounded-xl border border-gray-200 bg-white text-xs font-bold outline-none focus:border-purple-500" />
-                                                <input type="text" value={newSignerRole} onChange={e => setNewSignerRole(e.target.value)} placeholder="ตำแหน่ง (เช่น เลขานุการสภานักเรียน)" className="p-2.5 rounded-xl border border-gray-200 bg-white text-xs font-medium outline-none focus:border-purple-500" />
+                                                <input type="text" value={newSignerName} onChange={e => setNewSignerName(e.target.value)} placeholder="ชื่อ-นามสกุล (เว้นว่างได้ถ้าไม่ระบุชื่อ)" className="p-2.5 rounded-xl border border-gray-200 bg-white text-xs font-bold outline-none focus:border-purple-500" />
+                                                <input type="text" value={newSignerRole} onChange={e => setNewSignerRole(e.target.value)} placeholder="ตำแหน่ง (เช่น ผู้ตรวจ 1 / ผู้แทนสภานักเรียน)" className="p-2.5 rounded-xl border border-gray-200 bg-white text-xs font-medium outline-none focus:border-purple-500" />
                                                 <input type="text" value={newSignerImgUrl} onChange={e => setNewSignerImgUrl(e.target.value)} placeholder="ลิงก์รูปลายเซ็นพื้นหลังใส URL (ถ้ามี - ไม่ใส่ก็ได้)" className="sm:col-span-2 p-2.5 rounded-xl border border-gray-200 bg-white text-xs font-medium outline-none focus:border-purple-500" />
                                             </div>
                                             <div className="flex gap-2">
@@ -3641,7 +3795,7 @@
                                                     <button onClick={() => { setEditingSignerId(null); setNewSignerName(''); setNewSignerRole(''); setNewSignerImgUrl(''); }} className="px-4 py-2 rounded-xl bg-gray-200 text-gray-600 font-bold text-xs">ยกเลิกแก้ไข</button>
                                                 )}
                                                 <button onClick={handleAddOrUpdateSigner} className="flex-1 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold text-xs shadow-sm transition-colors">
-                                                    {editingSignerId ? 'บันทึกการแก้ไขผู้ลงนาม' : '+ เพิ่มรายชื่อเข้าคลังผู้ลงนาม'}
+                                                    {editingSignerId ? 'บันทึกการแก้ไขผู้ลงนาม' : '+ เพิ่มรายการเข้าคลังผู้ลงนาม'}
                                                 </button>
                                             </div>
 
@@ -3651,11 +3805,11 @@
                                                 ) : signersList.map(s => (
                                                     <div key={s.id} className="py-2 px-2 flex items-center justify-between gap-2 text-xs">
                                                         <div className="min-w-0">
-                                                            <div className="font-bold text-gray-800 truncate">{s.name}</div>
+                                                            <div className="font-bold text-gray-800 truncate">{s.name || '(เว้นชื่อว่าง - เซ็นสด)'}</div>
                                                             <div className="text-[10px] text-gray-500 truncate">{s.role || 'ไม่ได้ระบุตำแหน่ง'} {s.signatureUrl ? '• มีรูปลายเซ็น' : '• เซ็นสด'}</div>
                                                         </div>
                                                         <div className="flex items-center gap-1 shrink-0">
-                                                            <button onClick={() => { setEditingSignerId(s.id); setNewSignerName(s.name); setNewSignerRole(s.role || ''); setNewSignerImgUrl(s.signatureUrl || ''); }} className="px-2 py-1 rounded-lg bg-blue-50 text-blue-600 font-bold text-[10px]">แก้ไข</button>
+                                                            <button onClick={() => { setEditingSignerId(s.id); setNewSignerName(s.name || ''); setNewSignerRole(s.role || ''); setNewSignerImgUrl(s.signatureUrl || ''); }} className="px-2 py-1 rounded-lg bg-blue-50 text-blue-600 font-bold text-[10px]">แก้ไข</button>
                                                             <button onClick={() => handleDeleteSigner(s.id)} className="p-1.5 text-red-400 hover:text-red-600"><i className="ph ph-trash"></i></button>
                                                         </div>
                                                     </div>
@@ -3668,20 +3822,20 @@
                                             <h4 className="text-xs font-black text-gray-700 flex items-center gap-1.5">
                                                 <i className="ph ph-folders text-purple-600 text-base"></i> 2. จัดเซตลายเซ็นสำเร็จรูป ({signaturePresets.length} เซต)
                                             </h4>
-                                            <input type="text" value={newPresetName} onChange={e => setNewPresetName(e.target.value)} placeholder="ตั้งชื่อเซต (เช่น เซตส่งครูที่ปรึกษา / เฉพาะเลขาฯ)..." className="w-full p-2.5 rounded-xl border border-gray-200 bg-white text-xs font-bold outline-none focus:border-purple-500" />
+                                            <input type="text" value={newPresetName} onChange={e => setNewPresetName(e.target.value)} placeholder="ตั้งชื่อเซต (เช่น เซตส่งครูที่ปรึกษา / เฉพาะผู้ตรวจ)..." className="w-full p-2.5 rounded-xl border border-gray-200 bg-white text-xs font-bold outline-none focus:border-purple-500" />
                                             
                                             <div>
-                                                <p className="text-[10px] font-bold text-gray-500 mb-1.5">ติ๊กเลือกคนตามลำดับที่จะให้ขึ้นจากซ้ายไปขวา (เกิน 3 คนปัดบรรทัดใหม่อัตโนมัติ):</p>
+                                                <p className="text-[10px] font-bold text-gray-500 mb-1.5">ติ๊กเลือกรายการตามลำดับจากซ้ายไปขวา (เกินบรรทัดปัดลงให้อัตโนมัติ):</p>
                                                 <div className="max-h-36 overflow-y-auto custom-scrollbar bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
                                                     {signersList.length === 0 ? (
-                                                        <p className="text-center text-gray-400 text-[11px] py-4">กรุณาเพิ่มรายชื่อผู้ลงนามฝั่งซ้ายก่อนครับ</p>
+                                                        <p className="text-center text-gray-400 text-[11px] py-4">กรุณาเพิ่มรายการผู้ลงนามฝั่งซ้ายก่อนครับ</p>
                                                     ) : signersList.map(s => {
                                                         const orderIdx = newPresetSignerIds.indexOf(s.id);
                                                         const isChecked = orderIdx !== -1;
                                                         return (
                                                             <div key={s.id} onClick={() => toggleSignerInNewPreset(s.id)} className={`flex items-center justify-between px-3 py-2 cursor-pointer select-none transition-colors ${isChecked ? 'bg-purple-50/70' : 'hover:bg-gray-50'}`}>
                                                                 <div className="min-w-0">
-                                                                    <span className={`text-xs block truncate ${isChecked ? 'font-black text-purple-700' : 'font-bold text-gray-700'}`}>{s.name}</span>
+                                                                    <span className={`text-xs block truncate ${isChecked ? 'font-black text-purple-700' : 'font-bold text-gray-700'}`}>{s.name || '(เว้นชื่อว่าง)'}</span>
                                                                     <span className="text-[10px] text-gray-400 block truncate">{s.role}</span>
                                                                 </div>
                                                                 <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black shrink-0 ${isChecked ? 'bg-purple-600 text-white shadow-sm' : 'border border-gray-300 bg-white text-transparent'}`}>
@@ -3703,7 +3857,7 @@
                                                 ) : signaturePresets.map(p => {
                                                     const namesInPreset = (p.signerIds || []).map((id, i) => {
                                                         const found = signersList.find(s => s.id === id);
-                                                        return found ? `${i + 1}.${found.name}` : null;
+                                                        return found ? `${i + 1}.${found.name || found.role || 'เว้นว่าง'}` : null;
                                                     }).filter(Boolean).join(' -> ');
                                                     const isDefault = defaultSignaturePreset === p.id;
                                                     return (
@@ -3923,6 +4077,38 @@
                                                     </div>
                                                 </div>
                                             )}
+                                        </div>
+
+                                        {/* แผ่นรองเซ็นลายมือชื่อยืนยันตัวตน (เฉพาะผู้ตรวจหลัก) */}
+                                        <div className="bg-gray-50/90 border border-gray-200 rounded-2xl p-3 space-y-2">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-[11px] font-bold text-gray-700 flex items-center gap-1.5">
+                                                    <i className="ph ph-pen-nib text-[#C8102E] text-sm"></i> ลายมือชื่อผู้ตรวจหลัก (ยืนยันตัวตน)
+                                                </span>
+                                                <button type="button" onClick={clearLoginSigPad} className="text-[10px] font-bold text-gray-500 hover:text-[#C8102E] flex items-center gap-1 bg-white px-2 py-0.5 rounded-lg border border-gray-200">
+                                                    <i className="ph ph-eraser"></i> ล้างเขียนใหม่
+                                                </button>
+                                            </div>
+                                            <div className="relative bg-white border border-dashed border-gray-300 rounded-xl overflow-hidden h-24 touch-none">
+                                                <canvas
+                                                    ref={loginSigCanvasRef}
+                                                    width={320}
+                                                    height={96}
+                                                    onMouseDown={startDrawingLoginSig}
+                                                    onMouseMove={moveDrawingLoginSig}
+                                                    onMouseUp={endDrawingLoginSig}
+                                                    onMouseLeave={endDrawingLoginSig}
+                                                    onTouchStart={startDrawingLoginSig}
+                                                    onTouchMove={moveDrawingLoginSig}
+                                                    onTouchEnd={endDrawingLoginSig}
+                                                    className="w-full h-full cursor-crosshair block"
+                                                />
+                                                {!loginSignatureDataUrl && (
+                                                    <div className="absolute inset-0 pointer-events-none flex items-center justify-center text-[11px] font-bold text-gray-300">
+                                                        ใช้นิ้วหรือปากกาเซ็นชื่อตรงนี้...
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
 
                                         <div className="relative flex items-center">
@@ -4304,11 +4490,11 @@
                                         return (
                                             <div key={s.id} onClick={() => toggleCustomSignerId(s.id)} className={`p-3 flex items-center justify-between cursor-pointer select-none transition-colors ${isChecked ? 'bg-white' : 'hover:bg-white/60'}`}>
                                                 <div className="min-w-0 pr-2">
-                                                    <div className={`text-xs truncate ${isChecked ? 'font-black text-purple-700' : 'font-bold text-gray-700'}`}>{s.name}</div>
+                                                    <div className={`text-xs truncate ${isChecked ? 'font-black text-purple-700' : 'font-bold text-gray-700'}`}>{s.name || '(เว้นชื่อว่าง - เซ็นสด)'}</div>
                                                     <div className="text-[10px] text-gray-400 truncate">{s.role || 'ไม่ได้ระบุตำแหน่ง'}</div>
                                                 </div>
                                                 <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black shrink-0 transition-all ${isChecked ? 'bg-purple-600 text-white shadow-sm' : 'border border-gray-300 bg-white text-transparent'}`}>
-                                                    {isChecked ? `ลำดับ ${orderIdx + 1}` : ''}
+                                                    {isChecked ? `${orderIdx + 1}` : ''}
                                                 </div>
                                             </div>
                                         );
