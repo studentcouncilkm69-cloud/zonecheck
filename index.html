@@ -287,6 +287,7 @@
             const [showPasscode, setShowPasscode] = useState(false);
             const [currentUser, setCurrentUser] = useState(() => getValidSessionState()?.user || null);
             const [showLoginSuggestions, setShowLoginSuggestions] = useState(false);
+            const [loginStep, setLoginStep] = useState(1); // 1 = เลือกชื่อ+รหัสผ่าน, 2 = เซ็นลายมือชื่อยืนยันตัวตนขนาดใหญ่
             const [loginSignatureDataUrl, setLoginSignatureDataUrl] = useState(() => getValidSessionState()?.user?.dailySignature || '');
             const loginSigCanvasRef = useRef(null);
             const isDrawingSigRef = useRef(false);
@@ -523,6 +524,7 @@
                     const next = prev + 1;
                     if (next >= 5) {
                         setIsLoginModalOpen(true); 
+                        setLoginStep(1);
                         setInputPasscode(''); 
                         setShowPasscode(false);
                         setLoginError('');
@@ -620,6 +622,21 @@
                 e.preventDefault(); 
                 const finalName = (selectedLoginName || loginInspector || '').trim();
                 if (!finalName) { setLoginError('กรุณาเลือกหรือพิมพ์ชื่อผู้ตรวจ'); return; }
+
+                const isMaster = inputPasscode === (settings.master_passcode || '9999');
+                const isStandard = inputPasscode === (settings.passcode || '1234');
+
+                if (!isMaster && !isStandard) {
+                    setLoginError('รหัสผ่านไม่ถูกต้อง');
+                    return;
+                }
+
+                // สเต็ปที่ 1 ผ่านแล้ว -> ไปสเต็ปที่ 2 เพื่อเซ็นลายมือชื่อยืนยันตัวตนบนพื้นที่ขนาดใหญ่
+                if (loginStep === 1) {
+                    setLoginError('');
+                    setLoginStep(2);
+                    return;
+                }
                 
                 const validInspectors = Array.isArray(inspectors) ? inspectors : [];
                 let userObj = validInspectors.find(u => u.name === finalName);
@@ -630,19 +647,15 @@
                     userObj = { ...userObj, avatar_url: userObj.avatar_url || resolvedAvatar, dailySignature: loginSignatureDataUrl || '' };
                 }
 
-                const isMaster = inputPasscode === (settings.master_passcode || '9999');
-                const isStandard = inputPasscode === (settings.passcode || '1234');
-
-                if (isMaster || isStandard) { 
-                    setLoginError(''); 
-                    setIsLoginModalOpen(false); 
-                    if (isMaster) setAppMode('admin'); 
-                    else setAppMode('inspector');
-                    setCurrentUser(userObj);
-                    setCurrentRoute('dashboard'); 
-                    safeSetItem('zc26_last_user', finalName);
-                    handleSync(true); 
-                } else { setLoginError('รหัสผ่านไม่ถูกต้อง'); }
+                setLoginError(''); 
+                setIsLoginModalOpen(false); 
+                setLoginStep(1);
+                if (isMaster) setAppMode('admin'); 
+                else setAppMode('inspector');
+                setCurrentUser(userObj);
+                setCurrentRoute('dashboard'); 
+                safeSetItem('zc26_last_user', finalName);
+                handleSync(true); 
             };
 
             const filteredLoginInspectors = useMemo(() => {
@@ -1757,51 +1770,55 @@
             };
 
             // คำนวณรายชื่อผู้ลงนามที่จะนำไปแสดงท้ายกระดาษ PDF / รูปภาพ ตามลำดับที่เลือก
+            const buildDailyInspectorsSignerList = () => {
+                const todayStr = new Date().toISOString().split('T')[0];
+                const targetDateStr = (currentRoute === 'history' && dateMode !== 'today') ? filterDate : todayStr;
+                const validInspections = Array.isArray(inspections) ? inspections : [];
+                const dayInsps = validInspections.filter(i => i.date && String(i.date).startsWith(targetDateStr));
+
+                const inspectorMap = new Map();
+                dayInsps.forEach(insp => {
+                    const rawTeam = String(insp.inspector || '').split(',').map(s => s.trim()).filter(Boolean);
+                    const mainName = String(insp.mainInspector || rawTeam[0] || '').trim();
+                    const sigUrl = insp.inspectorSignature || '';
+
+                    rawTeam.forEach(personName => {
+                        if (!inspectorMap.has(personName)) {
+                            inspectorMap.set(personName, {
+                                name: personName,
+                                signatureUrl: (personName === mainName && sigUrl) ? sigUrl : ''
+                            });
+                        } else if (personName === mainName && sigUrl && !inspectorMap.get(personName).signatureUrl) {
+                            inspectorMap.get(personName).signatureUrl = sigUrl;
+                        }
+                    });
+                });
+
+                if (inspectorMap.size === 0 && currentUser?.name) {
+                    inspectorMap.set(currentUser.name, {
+                        name: currentUser.name,
+                        signatureUrl: currentUser.dailySignature || loginSignatureDataUrl || ''
+                    });
+                    (coInspectors || []).forEach(coName => {
+                        if (coName && !inspectorMap.has(coName)) {
+                            inspectorMap.set(coName, { name: coName, signatureUrl: '' });
+                        }
+                    });
+                }
+
+                return Array.from(inspectorMap.values()).map((item, idx) => ({
+                    id: `daily_insp_${idx + 1}`,
+                    name: item.name,
+                    role: `ผู้ตรวจ ${idx + 1}`,
+                    signatureUrl: item.signatureUrl
+                }));
+            };
+
             const activeSignersForExport = useMemo(() => {
                 if (!activeSignatureMode || activeSignatureMode === 'none') return [];
 
                 if (activeSignatureMode === 'daily_inspectors') {
-                    const todayStr = new Date().toISOString().split('T')[0];
-                    const targetDateStr = (currentRoute === 'history' && dateMode !== 'today') ? filterDate : todayStr;
-                    const validInspections = Array.isArray(inspections) ? inspections : [];
-                    const dayInsps = validInspections.filter(i => i.date && String(i.date).startsWith(targetDateStr));
-
-                    const inspectorMap = new Map();
-                    dayInsps.forEach(insp => {
-                        const rawTeam = String(insp.inspector || '').split(',').map(s => s.trim()).filter(Boolean);
-                        const mainName = String(insp.mainInspector || rawTeam[0] || '').trim();
-                        const sigUrl = insp.inspectorSignature || '';
-
-                        rawTeam.forEach(personName => {
-                            if (!inspectorMap.has(personName)) {
-                                inspectorMap.set(personName, {
-                                    name: personName,
-                                    signatureUrl: (personName === mainName && sigUrl) ? sigUrl : ''
-                                });
-                            } else if (personName === mainName && sigUrl && !inspectorMap.get(personName).signatureUrl) {
-                                inspectorMap.get(personName).signatureUrl = sigUrl;
-                            }
-                        });
-                    });
-
-                    if (inspectorMap.size === 0 && currentUser?.name) {
-                        inspectorMap.set(currentUser.name, {
-                            name: currentUser.name,
-                            signatureUrl: currentUser.dailySignature || loginSignatureDataUrl || ''
-                        });
-                        (coInspectors || []).forEach(coName => {
-                            if (coName && !inspectorMap.has(coName)) {
-                                inspectorMap.set(coName, { name: coName, signatureUrl: '' });
-                            }
-                        });
-                    }
-
-                    return Array.from(inspectorMap.values()).map((item, idx) => ({
-                        id: `daily_insp_${idx + 1}`,
-                        name: item.name,
-                        role: `ผู้ตรวจ ${idx + 1}`,
-                        signatureUrl: item.signatureUrl
-                    }));
+                    return buildDailyInspectorsSignerList();
                 }
 
                 if (activeSignatureMode === 'blank_inspectors') {
@@ -1823,9 +1840,18 @@
                         targetIds = foundPreset.signerIds;
                     }
                 }
-                return targetIds
-                    .map(id => signersList.find(s => s.id === id))
-                    .filter(Boolean);
+
+                const resolvedSigners = [];
+                targetIds.forEach(id => {
+                    if (id === '__DAILY_INSPECTORS__') {
+                        const dailyList = buildDailyInspectorsSignerList();
+                        resolvedSigners.push(...dailyList);
+                    } else {
+                        const found = signersList.find(s => s.id === id);
+                        if (found) resolvedSigners.push(found);
+                    }
+                });
+                return resolvedSigners;
             }, [activeSignatureMode, blankInspectorCount, customSelectedSignerIds, signaturePresets, signersList, inspections, currentRoute, dateMode, filterDate, currentUser, coInspectors, loginSignatureDataUrl]);
 
             const handleOpenOmrScanner = () => {
@@ -3211,12 +3237,12 @@
                                                     if (val === 'custom') setShowCustomSignerPickerModal(true);
                                                 }} className="bg-transparent text-xs font-bold text-purple-700 outline-none py-1">
                                                     <option value="none">ไม่ใส่ลายเซ็น</option>
-                                                    <option value="daily_inspectors">ผู้ตรวจประจำวัน (ผู้ตรวจ 1, 2, ...)</option>
+                                                    <option value="daily_inspectors">ผู้ตรวจประจำวัน</option>
                                                     <option value="blank_inspectors">ช่องลงนามว่าง (ไม่ระบุชื่อ)</option>
                                                     {signaturePresets.map(p => (
-                                                        <option key={p.id} value={p.id}>{p.name} ({p.signerIds?.length || 0} คน)</option>
+                                                        <option key={p.id} value={p.id}>{p.name}</option>
                                                     ))}
-                                                    <option value="custom">เลือกผู้ลงนามเอง ({customSelectedSignerIds.length} คน)</option>
+                                                    <option value="custom">เลือกผู้ลงนามเอง ({customSelectedSignerIds.length})</option>
                                                 </select>
                                                 {activeSignatureMode === 'blank_inspectors' && (
                                                     <select value={blankInspectorCount} onChange={e => setBlankInspectorCount(Number(e.target.value))} className="bg-white border border-purple-200 text-purple-700 rounded px-1.5 py-0.5 text-[11px] font-bold outline-none">
@@ -3411,12 +3437,12 @@
                                                             if (val === 'custom') setShowCustomSignerPickerModal(true);
                                                         }} className="bg-transparent text-xs font-bold text-purple-700 outline-none py-1">
                                                             <option value="none">ไม่ใส่ลายเซ็น</option>
-                                                            <option value="daily_inspectors">ผู้ตรวจประจำวัน (ผู้ตรวจ 1, 2, ...)</option>
+                                                            <option value="daily_inspectors">ผู้ตรวจประจำวัน</option>
                                                             <option value="blank_inspectors">ช่องลงนามว่าง (ไม่ระบุชื่อ)</option>
                                                             {signaturePresets.map(p => (
-                                                                <option key={p.id} value={p.id}>{p.name} ({p.signerIds?.length || 0} คน)</option>
+                                                                <option key={p.id} value={p.id}>{p.name}</option>
                                                             ))}
-                                                            <option value="custom">เลือกผู้ลงนามเอง ({customSelectedSignerIds.length} คน)</option>
+                                                            <option value="custom">เลือกผู้ลงนามเอง ({customSelectedSignerIds.length})</option>
                                                         </select>
                                                         {activeSignatureMode === 'blank_inspectors' && (
                                                             <select value={blankInspectorCount} onChange={e => setBlankInspectorCount(Number(e.target.value))} className="bg-white border border-purple-200 text-purple-700 rounded px-1.5 py-0.5 text-[11px] font-bold outline-none">
@@ -3770,7 +3796,7 @@
                                             <span className="text-[11px] font-bold text-gray-500">เซตเริ่มต้น:</span>
                                             <select value={defaultSignaturePreset} onChange={e => handleSetDefaultPreset(e.target.value)} className="bg-purple-50 border border-purple-200 text-purple-700 rounded-xl px-3 py-1.5 text-xs font-bold outline-none">
                                                 <option value="none">ไม่ใส่ลายเซ็นเป็นค่าเริ่มต้น</option>
-                                                <option value="daily_inspectors">ผู้ตรวจประจำวัน (ผู้ตรวจ 1, 2, ...)</option>
+                                                <option value="daily_inspectors">ผู้ตรวจประจำวัน</option>
                                                 <option value="blank_inspectors">ช่องลงนามว่าง (ไม่ระบุชื่อ)</option>
                                                 {signaturePresets.map(p => (
                                                     <option key={p.id} value={p.id}>{p.name}</option>
@@ -3822,14 +3848,29 @@
                                             <h4 className="text-xs font-black text-gray-700 flex items-center gap-1.5">
                                                 <i className="ph ph-folders text-purple-600 text-base"></i> 2. จัดเซตลายเซ็นสำเร็จรูป ({signaturePresets.length} เซต)
                                             </h4>
-                                            <input type="text" value={newPresetName} onChange={e => setNewPresetName(e.target.value)} placeholder="ตั้งชื่อเซต (เช่น เซตส่งครูที่ปรึกษา / เฉพาะผู้ตรวจ)..." className="w-full p-2.5 rounded-xl border border-gray-200 bg-white text-xs font-bold outline-none focus:border-purple-500" />
+                                            <input type="text" value={newPresetName} onChange={e => setNewPresetName(e.target.value)} placeholder="ตั้งชื่อเซต (เช่น ผู้ตรวจประจำวัน + เลขาฯ + ประธาน)..." className="w-full p-2.5 rounded-xl border border-gray-200 bg-white text-xs font-bold outline-none focus:border-purple-500" />
                                             
                                             <div>
-                                                <p className="text-[10px] font-bold text-gray-500 mb-1.5">ติ๊กเลือกรายการตามลำดับจากซ้ายไปขวา (เกินบรรทัดปัดลงให้อัตโนมัติ):</p>
-                                                <div className="max-h-36 overflow-y-auto custom-scrollbar bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
-                                                    {signersList.length === 0 ? (
-                                                        <p className="text-center text-gray-400 text-[11px] py-4">กรุณาเพิ่มรายการผู้ลงนามฝั่งซ้ายก่อนครับ</p>
-                                                    ) : signersList.map(s => {
+                                                <p className="text-[10px] font-bold text-gray-500 mb-1.5">ติ๊กเลือกรายการตามลำดับจากซ้ายไปขวา (เลือกผู้ตรวจประจำวันรวมกับตำแหน่งอื่นได้):</p>
+                                                <div className="max-h-40 overflow-y-auto custom-scrollbar bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
+                                                    {/* ตัวเลือกพิเศษ: ดึงผู้ตรวจประจำวันทุกคน */}
+                                                    {(() => {
+                                                        const specialId = '__DAILY_INSPECTORS__';
+                                                        const orderIdx = newPresetSignerIds.indexOf(specialId);
+                                                        const isChecked = orderIdx !== -1;
+                                                        return (
+                                                            <div onClick={() => toggleSignerInNewPreset(specialId)} className={`flex items-center justify-between px-3 py-2.5 cursor-pointer select-none transition-colors ${isChecked ? 'bg-red-50/70' : 'bg-amber-50/40 hover:bg-amber-50/70'}`}>
+                                                                <div className="min-w-0">
+                                                                    <span className={`text-xs block truncate ${isChecked ? 'font-black text-[#C8102E]' : 'font-bold text-gray-800'}`}>+ ผู้ตรวจประจำวัน (ดึงทุกคนที่ตรวจในวันนั้น)</span>
+                                                                    <span className="text-[10px] text-gray-500 block truncate">แสดงเป็น ผู้ตรวจ 1, ผู้ตรวจ 2, ... ตามจริงของวันนั้น</span>
+                                                                </div>
+                                                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black shrink-0 ${isChecked ? 'bg-[#C8102E] text-white shadow-sm' : 'border border-gray-300 bg-white text-transparent'}`}>
+                                                                    {isChecked ? (orderIdx + 1) : ''}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })()}
+                                                    {signersList.map(s => {
                                                         const orderIdx = newPresetSignerIds.indexOf(s.id);
                                                         const isChecked = orderIdx !== -1;
                                                         return (
@@ -3856,9 +3897,10 @@
                                                     <p className="text-center text-gray-400 text-xs py-4 font-medium">ยังไม่มีเซตลายเซ็นที่สร้างไว้</p>
                                                 ) : signaturePresets.map(p => {
                                                     const namesInPreset = (p.signerIds || []).map((id, i) => {
+                                                        if (id === '__DAILY_INSPECTORS__') return `${i + 1}.ผู้ตรวจประจำวัน`;
                                                         const found = signersList.find(s => s.id === id);
                                                         return found ? `${i + 1}.${found.name || found.role || 'เว้นว่าง'}` : null;
-                                                    }).filter(Boolean).join(' -> ');
+                                                    }).filter(Boolean).join(' + ');
                                                     const isDefault = defaultSignaturePreset === p.id;
                                                     return (
                                                         <div key={p.id} className="py-2 px-2 flex items-center justify-between gap-2 text-xs">
@@ -3883,217 +3925,278 @@
                                     </div>
                                 </div>
 
-                                {}
-                                <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 col-span-full">
-                                   <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2 text-sm"><i className="ph ph-shield-check text-amber-600"></i> รหัสผ่านและโหมดปิดปรับปรุง</h3>
-                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                                      <div>
-                                         <label className="text-[10px] font-bold text-gray-500 mb-1 block">รหัสผู้ตรวจ (Standard PIN)</label>
-                                         <input type="text" value={sysPasscode} onChange={e=>setSysPasscode(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-xs font-bold outline-none focus:border-[#C8102E]" />
-                                      </div>
-                                      <div>
-                                         <label className="text-[10px] font-bold text-gray-500 mb-1 block">รหัสแอดมินสูงสุด (Master PIN)</label>
-                                         <input type="text" value={sysMasterPasscode} onChange={e=>setSysMasterPasscode(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-xs font-bold outline-none focus:border-[#C8102E]" />
-                                      </div>
-                                   </div>
-                                   <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200 mb-3">
-                                      <span className="text-xs font-bold text-gray-700">เปิดโหมดปิดปรับปรุงระบบ (Maintenance Mode)</span>
-                                      <input type="checkbox" checked={maintenanceToggle} onChange={e=>setMaintenanceToggle(e.target.checked)} className="w-5 h-5 accent-[#C8102E] cursor-pointer" />
-                                   </div>
-                                   <textarea value={maintenanceMsg} onChange={e=>setMaintenanceMsg(e.target.value)} rows="2" placeholder="ข้อความแสดงเมื่อปิดปรับปรุง..." className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-xs font-medium outline-none focus:border-[#C8102E] mb-4"></textarea>
-                                   <button onClick={handleSaveMaintenance} className="w-full py-3.5 bg-gray-900 hover:bg-black text-white rounded-xl font-bold text-xs shadow-md transition-all">บันทึกตั้งค่าความปลอดภัย</button>
+                                <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 col-span-full space-y-4">
+                                    <h3 className="font-bold text-gray-800 flex items-center gap-2 text-sm"><i className="ph ph-shield-check text-amber-500"></i> ตั้งค่ารหัสผ่านและสถานะระบบ</h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="text-xs font-bold text-gray-600 mb-1 block">รหัสผ่านผู้ตรวจทั่วไป (Passcode)</label>
+                                            <input type="text" value={sysPasscode} onChange={e=>setSysPasscode(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-sm font-bold outline-none focus:border-[#C8102E]" />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-bold text-gray-600 mb-1 block">รหัสผ่านแอดมิน (Master Passcode)</label>
+                                            <input type="text" value={sysMasterPasscode} onChange={e=>setSysMasterPasscode(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-sm font-bold outline-none focus:border-[#C8102E]" />
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center justify-between p-4 bg-red-50/50 rounded-2xl border border-red-100">
+                                        <div>
+                                            <p className="text-sm font-bold text-red-700">โหมดปิดปรับปรุงระบบ (Maintenance Mode)</p>
+                                            <p className="text-[11px] text-red-500">เมื่อเปิดใช้งาน ผู้เยี่ยมชมทั่วไปจะไม่สามารถดูข้อมูลชั่วคราว</p>
+                                        </div>
+                                        <input type="checkbox" checked={maintenanceToggle} onChange={e=>setMaintenanceToggle(e.target.checked)} className="w-5 h-5 accent-[#C8102E] cursor-pointer" />
+                                    </div>
+                                    {maintenanceToggle && (
+                                        <textarea value={maintenanceMsg} onChange={e=>setMaintenanceMsg(e.target.value)} rows="2" className="w-full p-3 rounded-xl border border-red-200 bg-white text-xs font-medium outline-none"></textarea>
+                                    )}
+                                    <button onClick={handleSaveMaintenance} className="w-full py-3.5 bg-gray-900 hover:bg-black text-white rounded-xl font-bold text-xs shadow-md transition-all">บันทึกการตั้งค่าความปลอดภัย</button>
                                 </div>
                              </div>
                         )}
                     </main>
 
-                    {/* Login Modal */}
+                    {/* Login Modal (แบ่งเป็น 2 สเต็ป: สเต็ป 1 ใส่รหัสผ่าน -> สเต็ป 2 เซ็นลายมือชื่อขนาดใหญ่) */}
                     {isLoginModalOpen && (
-                        <div className="fixed inset-0 z-[9999] bg-gray-900/50 backdrop-blur-md flex items-start sm:items-center justify-center p-4 pt-10 sm:pt-4 overflow-y-auto animate-in fade-in zoom-in duration-200">
-                            <div className="bg-white w-full max-w-sm rounded-[2.25rem] p-7 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.25)] border border-gray-100 relative max-h-[88vh] overflow-y-auto custom-scrollbar my-auto">
-                                <button onClick={() => setIsLoginModalOpen(false)} className="absolute top-5 right-5 w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 transition-colors"><i className="ph ph-x text-base"></i></button>
+                        <div className="fixed inset-0 z-[9999] bg-gray-900/50 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-in fade-in zoom-in duration-200">
+                            <div className={`bg-white w-full ${loginStep === 2 ? 'max-w-md' : 'max-w-sm'} rounded-[2.25rem] p-7 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.25)] border border-gray-100 relative max-h-[90vh] overflow-y-auto custom-scrollbar my-auto transition-all`}>
+                                <button onClick={() => { setIsLoginModalOpen(false); setLoginStep(1); }} className="absolute top-5 right-5 w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 transition-colors"><i className="ph ph-x text-base"></i></button>
                                 
-                                <div className="w-20 h-20 bg-white rounded-full mx-auto flex items-center justify-center mb-3 shadow-md border border-gray-100 overflow-hidden p-1">
-                                    <img src={settings?.app_logo_url || HARDCODED_LOGO} alt="Login Logo" className="w-full h-full object-contain rounded-full" crossOrigin="anonymous"/>
-                                </div>
-                                <h2 className="text-2xl font-black text-center text-gray-800 tracking-tight">ระบบเจ้าหน้าที่</h2>
-                                <p className="text-[11px] font-bold text-gray-400 text-center mt-0.5">เลือกชื่อผู้ตรวจและระบุรหัสผ่านเพื่อเข้าใช้งาน</p>
-
-                                <form onSubmit={handleLoginSubmit} autoComplete="off">
-                                    <div className="space-y-3.5 mt-5">
-                                        <div className="relative">
-                                            <div className="relative flex items-center">
-                                                <i className="ph ph-user text-gray-400 absolute left-4 text-lg pointer-events-none"></i>
-                                                <input 
-                                                    type="text" 
-                                                    placeholder="ค้นหาหรือพิมพ์ชื่อผู้ตรวจ..." 
-                                                    value={loginInspector} 
-                                                    onFocus={() => setShowLoginSuggestions(true)}
-                                                    onBlur={() => setTimeout(() => setShowLoginSuggestions(false), 180)}
-                                                    onChange={(e) => { 
-                                                        setLoginInspector(e.target.value); 
-                                                        setSelectedLoginName(e.target.value); 
-                                                        setShowLoginSuggestions(true); 
-                                                    }} 
-                                                    className="w-full pl-11 pr-10 py-3.5 rounded-2xl border border-gray-200 bg-gray-50/80 focus:bg-white focus:outline-none focus:border-[#C8102E] text-sm font-bold text-gray-800 transition-all" 
-                                                />
-                                                {loginInspector ? (
-                                                    <button type="button" onClick={() => { setLoginInspector(''); setSelectedLoginName(''); }} className="absolute right-3 w-6 h-6 rounded-full bg-gray-200/70 text-gray-500 hover:bg-gray-300 flex items-center justify-center text-xs">
-                                                        <i className="ph ph-x"></i>
-                                                    </button>
-                                                ) : (
-                                                    <i className="ph ph-caret-down text-gray-400 absolute right-4 text-sm pointer-events-none"></i>
-                                                )}
-                                            </div>
-
-                                            {showLoginSuggestions && (
-                                                <div className="absolute z-30 w-full mt-1.5 bg-white border border-gray-200 rounded-2xl shadow-xl max-h-48 overflow-y-auto custom-scrollbar divide-y divide-gray-50">
-                                                    {filteredLoginInspectors.length > 0 ? filteredLoginInspectors.map(u => (
-                                                        <div 
-                                                            key={u.id} 
-                                                            onMouseDown={(e) => { 
-                                                                e.preventDefault(); 
-                                                                setLoginInspector(u.name); 
-                                                                setSelectedLoginName(u.name); 
-                                                                setCoInspectors(prev => prev.filter(n => n !== u.name));
-                                                                setShowLoginSuggestions(false); 
-                                                            }} 
-                                                            className="px-3.5 py-2.5 hover:bg-red-50/70 cursor-pointer text-sm font-bold text-gray-700 flex items-center justify-between transition-colors"
-                                                        >
-                                                            <div className="flex items-center gap-2.5 min-w-0">
-                                                                <img 
-                                                                    src={u.avatar_url || settings?.app_logo_url || HARDCODED_LOGO} 
-                                                                    className="w-7 h-7 rounded-full object-cover border border-gray-200 shrink-0 bg-gray-50"
-                                                                    onError={(e) => { e.target.src = settings?.app_logo_url || HARDCODED_LOGO; }}
-                                                                />
-                                                                <span className="truncate">{u.name}</span>
-                                                            </div>
-                                                            {selectedLoginName === u.name && <i className="ph ph-check-circle ph-fill text-[#C8102E] shrink-0"></i>}
-                                                        </div>
-                                                    )) : (
-                                                        <div className="px-4 py-3 text-xs text-gray-400 text-center font-medium">
-                                                            {(inspectors || []).length === 0 ? 'ยังไม่มีรายชื่อในฐานข้อมูล (ใช้ชื่อที่พิมพ์ได้)' : 'ไม่พบรายชื่อที่ค้นหา (ใช้ชื่อที่พิมพ์ได้)'}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )}
+                                {loginStep === 1 ? (
+                                    <>
+                                        <div className="w-20 h-20 bg-white rounded-full mx-auto flex items-center justify-center mb-3 shadow-md border border-gray-100 overflow-hidden p-1">
+                                            <img src={settings?.app_logo_url || HARDCODED_LOGO} alt="Login Logo" className="w-full h-full object-contain rounded-full" crossOrigin="anonymous"/>
                                         </div>
+                                        <h2 className="text-2xl font-black text-center text-gray-800 tracking-tight">ระบบเจ้าหน้าที่</h2>
+                                        <p className="text-[11px] font-bold text-gray-400 text-center mt-0.5">เลือกชื่อผู้ตรวจและระบุรหัสผ่านเพื่อเข้าใช้งาน</p>
 
-                                        <div className="space-y-2">
-                                            {coInspectors.length > 0 && (
-                                                <div className="bg-red-50/60 border border-red-100 rounded-2xl p-3 space-y-2">
-                                                    <div className="flex items-center justify-between">
-                                                        <span className="text-[11px] font-bold text-[#C8102E] flex items-center gap-1.5">
-                                                            <i className="ph ph-users-three text-sm"></i> เพื่อนที่เลือก ({coInspectors.length} คน)
-                                                        </span>
-                                                        <button type="button" onClick={() => setCoInspectors([])} className="text-[10px] font-bold text-gray-400 hover:text-red-600">ล้างทั้งหมด</button>
-                                                    </div>
-                                                    <div className="flex flex-wrap gap-1.5">
-                                                        {coInspectors.map(name => (
-                                                            <span key={name} className="inline-flex items-center gap-1.5 pl-3 pr-2 py-1 rounded-full bg-white border border-red-200 text-gray-700 text-xs font-bold shadow-sm">
-                                                                {name}
-                                                                <button type="button" onClick={() => toggleCoInspector(name)} className="w-4 h-4 rounded-full bg-red-50 text-[#C8102E] hover:bg-red-100 flex items-center justify-center">
-                                                                    <i className="ph ph-x text-[10px]"></i>
-                                                                </button>
-                                                            </span>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            <button 
-                                                type="button" 
-                                                onClick={() => setShowCoInspectorPicker(!showCoInspectorPicker)} 
-                                                className={`w-full py-2.5 px-4 rounded-2xl border border-dashed font-bold text-xs flex items-center justify-center gap-2 transition-all ${showCoInspectorPicker ? 'border-[#C8102E] bg-red-50/40 text-[#C8102E]' : 'border-gray-300 bg-gray-50/60 text-gray-600 hover:bg-gray-100'}`}
-                                            >
-                                                <div className={`w-5 h-5 rounded-full flex items-center justify-center ${showCoInspectorPicker ? 'bg-[#C8102E] text-white' : 'bg-gray-200 text-gray-600'}`}>
-                                                    <i className={`ph ${showCoInspectorPicker ? 'ph-minus' : 'ph-plus'} text-xs font-bold`}></i>
-                                                </div>
-                                                <span>{showCoInspectorPicker ? 'ซ่อนรายชื่อเพื่อน' : 'เพิ่มเพื่อนที่เดินตรวจด้วยกัน (ถ้ามี)'}</span>
-                                            </button>
-
-                                            {showCoInspectorPicker && (
-                                                <div className="bg-gray-50 p-3 rounded-2xl border border-gray-200 space-y-2.5 animate-in fade-in">
+                                        <form onSubmit={handleLoginSubmit} autoComplete="off">
+                                            <div className="space-y-3.5 mt-5">
+                                                <div className="relative">
                                                     <div className="relative flex items-center">
-                                                        <i className="ph ph-magnifying-glass text-gray-400 absolute left-3.5 text-sm"></i>
+                                                        <i className="ph ph-user text-gray-400 absolute left-4 text-lg pointer-events-none"></i>
                                                         <input 
                                                             type="text" 
-                                                            placeholder="พิมพ์ค้นหาชื่อเพื่อน..." 
-                                                            value={coInspectorSearch}
-                                                            onChange={(e) => setCoInspectorSearch(e.target.value)}
-                                                            className="w-full pl-9 pr-8 py-2 rounded-xl border border-gray-200 bg-white text-xs font-bold text-gray-700 focus:outline-none focus:border-[#C8102E]"
+                                                            placeholder="ค้นหาหรือพิมพ์ชื่อผู้ตรวจ..." 
+                                                            value={loginInspector} 
+                                                            onFocus={() => setShowLoginSuggestions(true)}
+                                                            onBlur={() => setTimeout(() => setShowLoginSuggestions(false), 180)}
+                                                            onChange={(e) => { 
+                                                                setLoginInspector(e.target.value); 
+                                                                setSelectedLoginName(e.target.value); 
+                                                                setShowLoginSuggestions(true); 
+                                                            }} 
+                                                            className="w-full pl-11 pr-10 py-3.5 rounded-2xl border border-gray-200 bg-gray-50/80 focus:bg-white focus:outline-none focus:border-[#C8102E] text-sm font-bold text-gray-800 transition-all" 
                                                         />
-                                                        {coInspectorSearch && (
-                                                            <button type="button" onClick={() => setCoInspectorSearch('')} className="absolute right-2.5 text-gray-400 hover:text-gray-600">
-                                                                <i className="ph ph-x text-xs"></i>
+                                                        {loginInspector ? (
+                                                            <button type="button" onClick={() => { setLoginInspector(''); setSelectedLoginName(''); }} className="absolute right-3 w-6 h-6 rounded-full bg-gray-200/70 text-gray-500 hover:bg-gray-300 flex items-center justify-center text-xs">
+                                                                <i className="ph ph-x"></i>
                                                             </button>
+                                                        ) : (
+                                                            <i className="ph ph-caret-down text-gray-400 absolute right-4 text-sm pointer-events-none"></i>
                                                         )}
                                                     </div>
 
-                                                    <div className="max-h-40 overflow-y-auto custom-scrollbar bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
-                                                        {filteredCoInspectorsList.length > 0 ? filteredCoInspectorsList.map(u => {
-                                                            const isChecked = coInspectors.includes(u.name);
-                                                            return (
+                                                    {showLoginSuggestions && (
+                                                        <div className="absolute z-30 w-full mt-1.5 bg-white border border-gray-200 rounded-2xl shadow-xl max-h-48 overflow-y-auto custom-scrollbar divide-y divide-gray-50">
+                                                            {filteredLoginInspectors.length > 0 ? filteredLoginInspectors.map(u => (
                                                                 <div 
                                                                     key={u.id} 
-                                                                    onClick={() => toggleCoInspector(u.name)} 
-                                                                    className={`flex items-center justify-between px-3 py-2 cursor-pointer transition-colors select-none ${isChecked ? 'bg-red-50/60' : 'hover:bg-gray-50'}`}
+                                                                    onMouseDown={(e) => { 
+                                                                        e.preventDefault(); 
+                                                                        setLoginInspector(u.name); 
+                                                                        setSelectedLoginName(u.name); 
+                                                                        setCoInspectors(prev => prev.filter(n => n !== u.name));
+                                                                        setShowLoginSuggestions(false); 
+                                                                    }} 
+                                                                    className="px-3.5 py-2.5 hover:bg-red-50/70 cursor-pointer text-sm font-bold text-gray-700 flex items-center justify-between transition-colors"
                                                                 >
                                                                     <div className="flex items-center gap-2.5 min-w-0">
                                                                         <img 
-                                                                            src={getInspectorAvatar(u.name)} 
-                                                                            className="w-6 h-6 rounded-full object-cover border border-gray-200 shrink-0 bg-gray-50"
+                                                                            src={u.avatar_url || settings?.app_logo_url || HARDCODED_LOGO} 
+                                                                            className="w-7 h-7 rounded-full object-cover border border-gray-200 shrink-0 bg-gray-50"
                                                                             onError={(e) => { e.target.src = settings?.app_logo_url || HARDCODED_LOGO; }}
                                                                         />
-                                                                        <span className={`text-xs truncate ${isChecked ? 'font-black text-[#C8102E]' : 'font-bold text-gray-700'}`}>{u.name}</span>
+                                                                        <span className="truncate">{u.name}</span>
                                                                     </div>
-                                                                    <div className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-all ${isChecked ? 'bg-[#C8102E] border-[#C8102E] text-white shadow-sm' : 'border-gray-300 bg-white text-transparent'}`}>
-                                                                        <i className="ph ph-check text-xs font-bold"></i>
-                                                                    </div>
+                                                                    {selectedLoginName === u.name && <i className="ph ph-check-circle ph-fill text-[#C8102E] shrink-0"></i>}
                                                                 </div>
-                                                            );
-                                                        }) : (
-                                                            <div className="p-3 text-center space-y-2">
-                                                                <p className="text-xs text-gray-400 font-medium">
-                                                                    {coInspectorSearch.trim() ? `ไม่พบชื่อ "${coInspectorSearch}" ในระบบ` : 'ยังไม่มีรายชื่ออื่นในระบบ'}
-                                                                </p>
-                                                                {coInspectorSearch.trim() && (
-                                                                    <button 
-                                                                        type="button"
-                                                                        onClick={() => {
-                                                                            const customName = coInspectorSearch.trim();
-                                                                            if (customName && !coInspectors.includes(customName)) {
-                                                                                toggleCoInspector(customName);
-                                                                                setCoInspectorSearch('');
-                                                                            }
-                                                                        }}
-                                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#C8102E] text-white text-xs font-bold shadow-sm"
-                                                                    >
-                                                                        <i className="ph ph-plus-circle"></i> เพิ่ม "{coInspectorSearch.trim()}"
+                                                            )) : (
+                                                                <div className="px-4 py-3 text-xs text-gray-400 text-center font-medium">
+                                                                    {(inspectors || []).length === 0 ? 'ยังไม่มีรายชื่อในฐานข้อมูล (ใช้ชื่อที่พิมพ์ได้)' : 'ไม่พบรายชื่อที่ค้นหา (ใช้ชื่อที่พิมพ์ได้)'}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                <div className="space-y-2">
+                                                    {coInspectors.length > 0 && (
+                                                        <div className="bg-red-50/60 border border-red-100 rounded-2xl p-3 space-y-2">
+                                                            <div className="flex items-center justify-between">
+                                                                <span className="text-[11px] font-bold text-[#C8102E] flex items-center gap-1.5">
+                                                                    <i className="ph ph-users-three text-sm"></i> เพื่อนที่เลือก ({coInspectors.length} คน)
+                                                                </span>
+                                                                <button type="button" onClick={() => setCoInspectors([])} className="text-[10px] font-bold text-gray-400 hover:text-red-600">ล้างทั้งหมด</button>
+                                                            </div>
+                                                            <div className="flex flex-wrap gap-1.5">
+                                                                {coInspectors.map(name => (
+                                                                    <span key={name} className="inline-flex items-center gap-1.5 pl-3 pr-2 py-1 rounded-full bg-white border border-red-200 text-gray-700 text-xs font-bold shadow-sm">
+                                                                        {name}
+                                                                        <button type="button" onClick={() => toggleCoInspector(name)} className="w-4 h-4 rounded-full bg-red-50 text-[#C8102E] hover:bg-red-100 flex items-center justify-center">
+                                                                            <i className="ph ph-x text-[10px]"></i>
+                                                                        </button>
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    <button 
+                                                        type="button" 
+                                                        onClick={() => setShowCoInspectorPicker(!showCoInspectorPicker)} 
+                                                        className={`w-full py-2.5 px-4 rounded-2xl border border-dashed font-bold text-xs flex items-center justify-center gap-2 transition-all ${showCoInspectorPicker ? 'border-[#C8102E] bg-red-50/40 text-[#C8102E]' : 'border-gray-300 bg-gray-50/60 text-gray-600 hover:bg-gray-100'}`}
+                                                    >
+                                                        <div className={`w-5 h-5 rounded-full flex items-center justify-center ${showCoInspectorPicker ? 'bg-[#C8102E] text-white' : 'bg-gray-200 text-gray-600'}`}>
+                                                            <i className={`ph ${showCoInspectorPicker ? 'ph-minus' : 'ph-plus'} text-xs font-bold`}></i>
+                                                        </div>
+                                                        <span>{showCoInspectorPicker ? 'ซ่อนรายชื่อเพื่อน' : 'เพิ่มเพื่อนที่เดินตรวจด้วยกัน (ถ้ามี)'}</span>
+                                                    </button>
+
+                                                    {showCoInspectorPicker && (
+                                                        <div className="bg-gray-50 p-3 rounded-2xl border border-gray-200 space-y-2.5 animate-in fade-in">
+                                                            <div className="relative flex items-center">
+                                                                <i className="ph ph-magnifying-glass text-gray-400 absolute left-3.5 text-sm"></i>
+                                                                <input 
+                                                                    type="text" 
+                                                                    placeholder="พิมพ์ค้นหาชื่อเพื่อน..." 
+                                                                    value={coInspectorSearch}
+                                                                    onChange={(e) => setCoInspectorSearch(e.target.value)}
+                                                                    className="w-full pl-9 pr-8 py-2 rounded-xl border border-gray-200 bg-white text-xs font-bold text-gray-700 focus:outline-none focus:border-[#C8102E]"
+                                                                />
+                                                                {coInspectorSearch && (
+                                                                    <button type="button" onClick={() => setCoInspectorSearch('')} className="absolute right-2.5 text-gray-400 hover:text-gray-600">
+                                                                        <i className="ph ph-x text-xs"></i>
                                                                     </button>
                                                                 )}
                                                             </div>
-                                                        )}
-                                                    </div>
+
+                                                            <div className="max-h-40 overflow-y-auto custom-scrollbar bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
+                                                                {filteredCoInspectorsList.length > 0 ? filteredCoInspectorsList.map(u => {
+                                                                    const isChecked = coInspectors.includes(u.name);
+                                                                    return (
+                                                                        <div 
+                                                                            key={u.id} 
+                                                                            onClick={() => toggleCoInspector(u.name)} 
+                                                                            className={`flex items-center justify-between px-3 py-2 cursor-pointer transition-colors select-none ${isChecked ? 'bg-red-50/60' : 'hover:bg-gray-50'}`}
+                                                                        >
+                                                                            <div className="flex items-center gap-2.5 min-w-0">
+                                                                                <img 
+                                                                                    src={getInspectorAvatar(u.name)} 
+                                                                                    className="w-6 h-6 rounded-full object-cover border border-gray-200 shrink-0 bg-gray-50"
+                                                                                    onError={(e) => { e.target.src = settings?.app_logo_url || HARDCODED_LOGO; }}
+                                                                                />
+                                                                                <span className={`text-xs truncate ${isChecked ? 'font-black text-[#C8102E]' : 'font-bold text-gray-700'}`}>{u.name}</span>
+                                                                            </div>
+                                                                            <div className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-all ${isChecked ? 'bg-[#C8102E] border-[#C8102E] text-white shadow-sm' : 'border-gray-300 bg-white text-transparent'}`}>
+                                                                                <i className="ph ph-check text-xs font-bold"></i>
+                                                                            </div>
+                                                                        </div>
+                                                                    );
+                                                                }) : (
+                                                                    <div className="p-3 text-center space-y-2">
+                                                                        <p className="text-xs text-gray-400 font-medium">
+                                                                            {coInspectorSearch.trim() ? `ไม่พบชื่อ "${coInspectorSearch}" ในระบบ` : 'ยังไม่มีรายชื่ออื่นในระบบ'}
+                                                                        </p>
+                                                                        {coInspectorSearch.trim() && (
+                                                                            <button 
+                                                                                type="button"
+                                                                                onClick={() => {
+                                                                                    const customName = coInspectorSearch.trim();
+                                                                                    if (customName && !coInspectors.includes(customName)) {
+                                                                                        toggleCoInspector(customName);
+                                                                                        setCoInspectorSearch('');
+                                                                                    }
+                                                                                }}
+                                                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#C8102E] text-white text-xs font-bold shadow-sm"
+                                                                            >
+                                                                                <i className="ph ph-plus-circle"></i> เพิ่ม "{coInspectorSearch.trim()}"
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                 </div>
-                                            )}
+
+                                                <div className="relative flex items-center">
+                                                    <input 
+                                                        type="text" 
+                                                        name="zc_staff_access_code"
+                                                        autoComplete="off"
+                                                        autoCorrect="off"
+                                                        autoCapitalize="off"
+                                                        spellCheck="false"
+                                                        placeholder="รหัสผ่าน (PIN)..." 
+                                                        value={inputPasscode} 
+                                                        onChange={(e) => setInputPasscode(e.target.value)} 
+                                                        style={!showPasscode && inputPasscode ? { WebkitTextSecurity: 'disc', textSecurity: 'disc' } : {}}
+                                                        className={`w-full py-3.5 px-11 rounded-2xl border border-gray-200 bg-gray-50/80 focus:bg-white focus:outline-none focus:border-[#C8102E] text-center font-bold text-gray-800 placeholder:text-gray-400 placeholder:text-sm placeholder:font-medium placeholder:tracking-normal transition-all ${showPasscode ? 'text-base tracking-wide' : (inputPasscode ? 'masked-pin-input text-lg tracking-[0.18em]' : 'text-sm tracking-normal')}`} 
+                                                    />
+                                                    <button 
+                                                        type="button" 
+                                                        onClick={() => setShowPasscode(!showPasscode)} 
+                                                        className="absolute right-3.5 w-8 h-8 rounded-full text-gray-400 hover:text-gray-600 flex items-center justify-center transition-colors"
+                                                        tabIndex="-1"
+                                                    >
+                                                        <i className={`ph ${showPasscode ? 'ph-eye-slash' : 'ph-eye'} text-lg`}></i>
+                                                    </button>
+                                                </div>
+
+                                                {loginError && (
+                                                    <div className="bg-red-50 border border-red-100 text-red-600 text-xs font-bold py-2.5 px-3 rounded-xl text-center flex items-center justify-center gap-1.5">
+                                                        <i className="ph ph-warning-circle text-sm"></i> {loginError}
+                                                    </div>
+                                                )}
+
+                                                <button type="submit" className="w-full py-4 rounded-2xl bg-[#C8102E] hover:bg-red-800 text-white font-black text-sm shadow-lg shadow-red-500/25 active:scale-[0.98] transition-all mt-1 flex items-center justify-center gap-2">
+                                                    <span>ถัดไป (ลงลายมือชื่อ)</span>
+                                                    <i className="ph ph-arrow-right font-bold"></i>
+                                                </button>
+                                            </div>
+                                        </form>
+                                    </>
+                                ) : (
+                                    <form onSubmit={handleLoginSubmit} className="space-y-4 animate-in fade-in">
+                                        <div className="flex items-center gap-3 pb-2 border-b border-gray-100">
+                                            <img 
+                                                src={getInspectorAvatar(selectedLoginName || loginInspector)} 
+                                                className="w-12 h-12 rounded-full object-cover border-2 border-[#C8102E] bg-gray-50 shrink-0"
+                                                onError={(e) => { e.target.src = settings?.app_logo_url || HARDCODED_LOGO; }}
+                                            />
+                                            <div className="min-w-0">
+                                                <span className="text-[10px] font-bold text-[#C8102E] bg-red-50 px-2 py-0.5 rounded-full border border-red-100">ยืนยันตัวตนผู้ตรวจหลัก</span>
+                                                <h3 className="text-base font-black text-gray-800 truncate mt-0.5">{selectedLoginName || loginInspector}</h3>
+                                                {coInspectors.length > 0 && (
+                                                    <p className="text-[10px] text-gray-400 font-bold truncate">ร่วมกับ: {coInspectors.join(', ')}</p>
+                                                )}
+                                            </div>
                                         </div>
 
-                                        {/* แผ่นรองเซ็นลายมือชื่อยืนยันตัวตน (เฉพาะผู้ตรวจหลัก) */}
-                                        <div className="bg-gray-50/90 border border-gray-200 rounded-2xl p-3 space-y-2">
+                                        <div className="bg-gray-50 border border-gray-200 rounded-2xl p-3.5 space-y-2.5">
                                             <div className="flex items-center justify-between">
-                                                <span className="text-[11px] font-bold text-gray-700 flex items-center gap-1.5">
-                                                    <i className="ph ph-pen-nib text-[#C8102E] text-sm"></i> ลายมือชื่อผู้ตรวจหลัก (ยืนยันตัวตน)
+                                                <span className="text-xs font-black text-gray-700 flex items-center gap-1.5">
+                                                    <i className="ph ph-pen-nib text-[#C8102E] text-base"></i> ลงลายมือชื่อผู้ตรวจประจำวัน
                                                 </span>
-                                                <button type="button" onClick={clearLoginSigPad} className="text-[10px] font-bold text-gray-500 hover:text-[#C8102E] flex items-center gap-1 bg-white px-2 py-0.5 rounded-lg border border-gray-200">
+                                                <button type="button" onClick={clearLoginSigPad} className="text-xs font-bold text-gray-600 hover:text-[#C8102E] flex items-center gap-1 bg-white px-2.5 py-1 rounded-xl border border-gray-200 shadow-sm">
                                                     <i className="ph ph-eraser"></i> ล้างเขียนใหม่
                                                 </button>
                                             </div>
-                                            <div className="relative bg-white border border-dashed border-gray-300 rounded-xl overflow-hidden h-24 touch-none">
+
+                                            {/* แผ่นรองเซ็นขนาดใหญ่พิเศษ กว้างและสูง เซ็นถนัดมือ */}
+                                            <div className="relative bg-white border-2 border-dashed border-gray-300 rounded-2xl overflow-hidden h-48 sm:h-52 touch-none shadow-inner">
                                                 <canvas
                                                     ref={loginSigCanvasRef}
-                                                    width={320}
-                                                    height={96}
+                                                    width={520}
+                                                    height={220}
                                                     onMouseDown={startDrawingLoginSig}
                                                     onMouseMove={moveDrawingLoginSig}
                                                     onMouseUp={endDrawingLoginSig}
@@ -4101,51 +4204,29 @@
                                                     onTouchStart={startDrawingLoginSig}
                                                     onTouchMove={moveDrawingLoginSig}
                                                     onTouchEnd={endDrawingLoginSig}
-                                                    className="w-full h-full cursor-crosshair block"
+                                                    className="w-full h-full cursor-crosshair block relative z-10"
                                                 />
+                                                <div className="absolute bottom-9 left-8 right-8 border-b border-gray-200 pointer-events-none"></div>
                                                 {!loginSignatureDataUrl && (
-                                                    <div className="absolute inset-0 pointer-events-none flex items-center justify-center text-[11px] font-bold text-gray-300">
-                                                        ใช้นิ้วหรือปากกาเซ็นชื่อตรงนี้...
+                                                    <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center text-gray-300 gap-1">
+                                                        <i className="ph ph-signature text-3xl"></i>
+                                                        <span className="text-xs font-bold">ใช้นิ้วหรือปากกาเซ็นชื่อในกรอบนี้...</span>
                                                     </div>
                                                 )}
                                             </div>
+                                            <p className="text-[10px] text-gray-400 font-medium text-center">ลายมือชื่อนี้ใช้สำหรับยืนยันตัวตนและแสดงในรายงานประจำวัน (สามารถข้ามได้หากไม่ต้องการแสดงรูปลายเซ็น)</p>
                                         </div>
 
-                                        <div className="relative flex items-center">
-                                            <input 
-                                                type="text" 
-                                                name="zc_staff_access_code"
-                                                autoComplete="off"
-                                                autoCorrect="off"
-                                                autoCapitalize="off"
-                                                spellCheck="false"
-                                                placeholder="รหัสผ่าน (PIN)..." 
-                                                value={inputPasscode} 
-                                                onChange={(e) => setInputPasscode(e.target.value)} 
-                                                style={!showPasscode && inputPasscode ? { WebkitTextSecurity: 'disc', textSecurity: 'disc' } : {}}
-                                                className={`w-full py-3.5 px-11 rounded-2xl border border-gray-200 bg-gray-50/80 focus:bg-white focus:outline-none focus:border-[#C8102E] text-center font-bold text-gray-800 placeholder:text-gray-400 placeholder:text-sm placeholder:font-medium placeholder:tracking-normal transition-all ${showPasscode ? 'text-base tracking-wide' : (inputPasscode ? 'masked-pin-input text-lg tracking-[0.18em]' : 'text-sm tracking-normal')}`} 
-                                            />
-                                            <button 
-                                                type="button" 
-                                                onClick={() => setShowPasscode(!showPasscode)} 
-                                                className="absolute right-3.5 w-8 h-8 rounded-full text-gray-400 hover:text-gray-600 flex items-center justify-center transition-colors"
-                                                tabIndex="-1"
-                                            >
-                                                <i className={`ph ${showPasscode ? 'ph-eye-slash' : 'ph-eye'} text-lg`}></i>
+                                        <div className="flex gap-2.5 pt-1">
+                                            <button type="button" onClick={() => setLoginStep(1)} className="px-4 py-3.5 rounded-2xl bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold text-xs transition-colors">
+                                                ย้อนกลับ
+                                            </button>
+                                            <button type="submit" className="flex-1 py-3.5 rounded-2xl bg-[#C8102E] hover:bg-red-800 text-white font-black text-sm shadow-lg shadow-red-500/25 active:scale-[0.98] transition-all">
+                                                ยืนยันเข้าสู่ระบบ
                                             </button>
                                         </div>
-
-                                        {loginError && (
-                                            <div className="bg-red-50 border border-red-100 text-red-600 text-xs font-bold py-2.5 px-3 rounded-xl text-center flex items-center justify-center gap-1.5">
-                                                <i className="ph ph-warning-circle text-sm"></i> {loginError}
-                                            </div>
-                                        )}
-
-                                        <button type="submit" className="w-full py-4 rounded-2xl bg-[#C8102E] hover:bg-red-800 text-white font-black text-sm shadow-lg shadow-red-500/25 active:scale-[0.98] transition-all mt-1">
-                                            เข้าสู่ระบบ
-                                        </button>
-                                    </div>
-                                </form>
+                                    </form>
+                                )}
                             </div>
                         </div>
                     )}
@@ -4469,7 +4550,7 @@
                                 <h3 className="text-base font-black text-gray-800 flex items-center gap-2 mb-1">
                                     <i className="ph ph-signature text-purple-600 text-xl"></i> เลือกผู้ลงนามท้ายเอกสาร
                                 </h3>
-                                <p className="text-xs text-gray-500 font-medium mb-3">ติ๊กเลือกตามลำดับ (คนที่ติ๊กก่อนจะขึ้นก่อนจากซ้ายไปขวา และจัดกึ่งกลางกระดาษให้อัตโนมัติ)</p>
+                                <p className="text-xs text-gray-500 font-medium mb-3">ติ๊กเลือกตามลำดับ (สามารถเลือกผู้ตรวจประจำวันรวมกับตำแหน่งอื่นได้)</p>
 
                                 <label className="flex items-center justify-between p-3 rounded-xl bg-purple-50 border border-purple-100 mb-3 cursor-pointer">
                                     <span className="text-xs font-bold text-purple-800">แสดงรูปลายเซ็นดิจิทัลเหนือเส้นประ (ถ้ามี)</span>
@@ -4477,9 +4558,25 @@
                                 </label>
 
                                 <div className="flex-1 overflow-y-auto custom-scrollbar divide-y divide-gray-100 border border-gray-200 rounded-2xl bg-gray-50">
+                                    {(() => {
+                                        const specialId = '__DAILY_INSPECTORS__';
+                                        const orderIdx = customSelectedSignerIds.indexOf(specialId);
+                                        const isChecked = orderIdx !== -1;
+                                        return (
+                                            <div onClick={() => toggleCustomSignerId(specialId)} className={`p-3 flex items-center justify-between cursor-pointer select-none transition-colors ${isChecked ? 'bg-red-50/80' : 'bg-amber-50/40 hover:bg-amber-50/70'}`}>
+                                                <div className="min-w-0 pr-2">
+                                                    <div className={`text-xs truncate ${isChecked ? 'font-black text-[#C8102E]' : 'font-bold text-gray-800'}`}>+ ผู้ตรวจประจำวัน (ดึงทุกคนที่ตรวจในวันนั้น)</div>
+                                                    <div className="text-[10px] text-gray-500 truncate">แสดงเป็น ผู้ตรวจ 1, ผู้ตรวจ 2, ... ตามจริงของวันนั้น</div>
+                                                </div>
+                                                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black shrink-0 transition-all ${isChecked ? 'bg-[#C8102E] text-white shadow-sm' : 'border border-gray-300 bg-white text-transparent'}`}>
+                                                    {isChecked ? `${orderIdx + 1}` : ''}
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
                                     {signersList.length === 0 ? (
                                         <div className="p-6 text-center space-y-2">
-                                            <p className="text-xs text-gray-400 font-bold">ยังไม่มีรายชื่อผู้ลงนามในคลัง</p>
+                                            <p className="text-xs text-gray-400 font-bold">ยังไม่มีรายชื่อผู้ลงนามเพิ่มเติมในคลัง</p>
                                             {appMode === 'admin' && (
                                                 <button onClick={() => { setShowCustomSignerPickerModal(false); setCurrentRoute('settings'); }} className="px-3 py-1.5 bg-purple-600 text-white rounded-xl text-xs font-bold">ไปหน้าตั้งค่าเพื่อเพิ่มรายชื่อ</button>
                                             )}
@@ -4503,7 +4600,7 @@
 
                                 <div className="flex gap-2 pt-4 mt-2 border-t border-gray-100">
                                     <button onClick={() => setCustomSelectedSignerIds([])} className="px-4 py-2.5 rounded-xl bg-gray-100 text-gray-600 font-bold text-xs hover:bg-gray-200">ล้างที่เลือก</button>
-                                    <button onClick={() => setShowCustomSignerPickerModal(false)} className="flex-1 py-2.5 rounded-xl bg-purple-600 text-white font-bold text-xs shadow-md hover:bg-purple-700">ตกลง ({customSelectedSignerIds.length} คน)</button>
+                                    <button onClick={() => setShowCustomSignerPickerModal(false)} className="flex-1 py-2.5 rounded-xl bg-purple-600 text-white font-bold text-xs shadow-md hover:bg-purple-700">ตกลง ({customSelectedSignerIds.length} รายการ)</button>
                                 </div>
                             </div>
                         </div>
@@ -4730,52 +4827,98 @@
                     {(showRoomMap || showZoneMap) && (
                         <div className="fixed inset-0 z-[9997] bg-gray-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in" onClick={() => { setShowRoomMap(false); setShowZoneMap(false); }}>
                             <div className="bg-white rounded-[2rem] w-full max-w-3xl p-5 shadow-2xl relative" onClick={e => e.stopPropagation()}>
-                                <div className="flex justify-between items-center mb-3">
-                                    <h3 className="font-black text-gray-800 text-base">{showRoomMap ? 'แผนผังห้องเรียน' : 'แผนผังเขตพื้นที่รับผิดชอบ'}</h3>
-                                    <button onClick={() => { setShowRoomMap(false); setShowZoneMap(false); }} className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center"><i className="ph ph-x"></i></button>
+                                <div className="flex justify-between items-center mb-3 pb-2 border-b border-gray-100">
+                                    <h3 className="font-black text-gray-800 text-base">{showRoomMap ? 'แผนผังห้องเรียน' : 'แผนผังเขตพื้นที่'}</h3>
+                                    <button onClick={() => { setShowRoomMap(false); setShowZoneMap(false); }} className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center hover:bg-gray-200"><i className="ph ph-x"></i></button>
                                 </div>
-                                {(showRoomMap ? settings?.room_map_url : settings?.zone_map_url) ? (
-                                    <img src={showRoomMap ? settings.room_map_url : settings.zone_map_url} className="w-full max-h-[75vh] object-contain rounded-xl" />
-                                ) : (
-                                    <p className="text-center text-gray-400 font-bold py-16 text-xs">ยังไม่ได้ตั้งค่ารูปแผนผังในระบบ</p>
-                                )}
+                                <div className="max-h-[75vh] overflow-auto flex items-center justify-center bg-gray-50 rounded-xl p-2">
+                                    {(showRoomMap ? settings?.room_map_url : settings?.zone_map_url) ? (
+                                        <img src={showRoomMap ? settings.room_map_url : settings.zone_map_url} className="max-w-full max-h-[70vh] object-contain rounded-lg" />
+                                    ) : (
+                                        <p className="text-center text-gray-400 py-16 text-sm font-bold">ยังไม่ได้ตั้งค่ารูปแผนผังในหน้าแอดมิน</p>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     )}
 
                     {/* Modal ประกาศสภานักเรียน */}
                     {showAnnouncement && (
-                        <div className="fixed inset-0 z-[9997] bg-gray-900/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in" onClick={() => setShowAnnouncement(false)}>
+                        <div className="fixed inset-0 z-[9997] bg-gray-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in" onClick={() => setShowAnnouncement(false)}>
                             <div className="bg-white rounded-[2rem] w-full max-w-md p-6 shadow-2xl relative" onClick={e => e.stopPropagation()}>
                                 <button onClick={() => setShowAnnouncement(false)} className="absolute top-4 right-4 w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center"><i className="ph ph-x"></i></button>
-                                <div className="flex items-center gap-2.5 mb-4">
-                                    <div className="w-10 h-10 rounded-full bg-red-50 text-[#C8102E] flex items-center justify-center"><i className="ph ph-megaphone text-xl"></i></div>
-                                    <div>
-                                        <h3 className="font-black text-gray-800 text-base">{settings?.announcement_title || 'ประกาศสภานักเรียน'}</h3>
-                                        <p className="text-[10px] text-gray-400 font-bold">สภานักเรียนโรงเรียนคำม่วง</p>
-                                    </div>
-                                </div>
+                                <div className="flex items-center gap-2 text-[#C8102E] font-black text-base mb-3"><i className="ph ph-megaphone text-xl"></i> ประกาศสภานักเรียน</div>
                                 {(settings?.announce_banner_url || settings?.banner_url) && (
                                     <img src={settings.announce_banner_url || settings.banner_url} className="w-full rounded-xl mb-3 object-cover max-h-56" />
                                 )}
-                                <p className="text-xs font-medium text-gray-700 whitespace-pre-line leading-relaxed bg-gray-50 p-4 rounded-xl border border-gray-100">
-                                    {settings?.announcement_msg || 'ยังไม่มีประกาศใหม่ในขณะนี้'}
-                                </p>
+                                <h4 className="font-bold text-gray-800 text-sm mb-1">{settings?.announcement_title || 'ประกาศแจ้งเตือน'}</h4>
+                                <p className="text-xs text-gray-600 whitespace-pre-line leading-relaxed">{settings?.announcement_msg || 'ยังไม่มีประกาศใหม่ในขณะนี้'}</p>
                             </div>
                         </div>
                     )}
 
-                    {/* Modal ช่วยเหลือ / ติดต่อผู้ดูแลระบบ */}
+                    {/* Modal แบนเนอร์ป๊อปอัปหน้าแรก */}
+                    {showMainBannerPopup && settings?.popup_banner_url && (
+                        <div className="fixed inset-0 z-[9996] bg-gray-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+                            <div className="bg-white rounded-[2rem] w-full max-w-md overflow-hidden shadow-2xl relative">
+                                <img src={settings.popup_banner_url} className="w-full max-h-[65vh] object-contain bg-gray-900" />
+                                <div className="p-4 flex items-center justify-between bg-white">
+                                    <label className="flex items-center gap-2 text-xs font-bold text-gray-600 cursor-pointer">
+                                        <input type="checkbox" checked={hideBannerFor7Days} onChange={e => setHideBannerFor7Days(e.target.checked)} className="accent-[#C8102E]" /> ไม่แสดงอีกใน 7 วัน
+                                    </label>
+                                    <button onClick={handleCloseMainBannerPopup} className="px-5 py-2 rounded-xl bg-[#C8102E] text-white font-bold text-xs">ปิดหน้าต่าง</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Modal ช่วยเหลือ / ติดต่อผู้ดูแลระบบ (ดีไซน์นามบัตรแนวนอน รูปซ้าย-ข้อความขวา พร้อมคำอธิบายครบถ้วน) */}
                     {showInfoModal && (
                         <div className="fixed inset-0 z-[9997] bg-gray-900/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in" onClick={() => setShowInfoModal(false)}>
-                            <div className="bg-white rounded-[2rem] w-full max-w-sm p-6 shadow-2xl relative text-center" onClick={e => e.stopPropagation()}>
-                                <button onClick={() => setShowInfoModal(false)} className="absolute top-4 right-4 w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center"><i className="ph ph-x"></i></button>
-                                <img src={settings?.admin_avatar_url || ADMIN_AVATAR_URL} className="w-20 h-20 rounded-full object-cover mx-auto mb-3 border-2 border-[#C8102E] shadow-md" onError={(e)=>{e.target.src=HARDCODED_LOGO}} />
-                                <h3 className="font-black text-gray-800 text-base">{settings?.admin_name || 'นายภูธนากร หงษ์ทอง (พี่ภีม)'}</h3>
-                                <p className="text-xs font-bold text-gray-500 mt-0.5 mb-4">{settings?.admin_role || 'เลขานุการสภานักเรียนโรงเรียนคำม่วง'}</p>
+                            <div className="bg-white rounded-[2.25rem] w-full max-w-md p-6 shadow-2xl relative border border-gray-100" onClick={e => e.stopPropagation()}>
+                                <button onClick={() => setShowInfoModal(false)} className="absolute top-5 right-5 w-8 h-8 rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 flex items-center justify-center transition-colors"><i className="ph ph-x"></i></button>
+                                
+                                <div className="flex items-center gap-2.5 mb-3">
+                                    <div className="w-10 h-10 rounded-2xl bg-red-50 text-[#C8102E] flex items-center justify-center shrink-0">
+                                        <i className="ph ph-question text-xl font-bold"></i>
+                                    </div>
+                                    <div>
+                                        <h3 className="font-black text-gray-800 text-base leading-tight">ศูนย์ช่วยเหลือและติดต่อผู้ดูแลระบบ</h3>
+                                        <p className="text-[10px] font-bold text-gray-400">ZoneCheck V2.1 • สภานักเรียนโรงเรียนคำม่วง</p>
+                                    </div>
+                                </div>
+
+                                <div className="bg-gray-50 border border-gray-100 rounded-2xl p-3.5 mb-4 text-xs text-gray-600 font-medium leading-relaxed">
+                                    หากพบปัญหาในการใช้งาน ระบบขัดข้อง ข้อมูลคะแนนไม่ถูกต้อง หรือ<span className="font-bold text-[#C8102E]">เจ้าหน้าที่ลืมรหัสผ่าน (PIN)</span> สามารถติดต่อผู้ดูแลระบบได้โดยตรงผ่านช่องทางด้านล่างนี้
+                                </div>
+
+                                {/* การ์ดนามบัตรแนวนอน: รูปโปรไฟล์ด้านซ้าย - ข้อมูลด้านขวา */}
+                                <div className="bg-gradient-to-br from-white to-red-50/30 border border-gray-200/80 rounded-2xl p-4 mb-4 flex items-center gap-4 shadow-sm">
+                                    <div className="relative shrink-0">
+                                        <img 
+                                            src={settings?.admin_avatar_url || ADMIN_AVATAR_URL} 
+                                            className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover border-2 border-[#C8102E] shadow-sm bg-white" 
+                                            onError={(e)=>{e.target.src=HARDCODED_LOGO}} 
+                                        />
+                                        <span className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 border-2 border-white rounded-full"></span>
+                                    </div>
+                                    <div className="min-w-0 flex-1 text-left">
+                                        <span className="inline-block text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-red-100/80 text-[#C8102E] mb-1">
+                                            SYSTEM ADMIN
+                                        </span>
+                                        <h4 className="font-black text-gray-800 text-sm sm:text-base truncate">
+                                            {settings?.admin_name || 'นายภูธนากร หงษ์ทอง (พี่ภีม)'}
+                                        </h4>
+                                        <p className="text-xs font-bold text-gray-500 leading-snug mt-0.5">
+                                            {settings?.admin_role || 'เลขานุการสภานักเรียนโรงเรียนคำม่วง'}
+                                        </p>
+                                    </div>
+                                </div>
+
                                 {settings?.admin_line_url && (
-                                    <a href={settings.admin_line_url} target="_blank" rel="noreferrer" className="w-full py-3 rounded-xl bg-[#06C755] text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md hover:opacity-95">
-                                        ติดต่อสอบถามผ่าน LINE
+                                    <a href={settings.admin_line_url} target="_blank" rel="noreferrer" className="w-full py-3.5 rounded-2xl bg-[#06C755] hover:bg-[#05b34c] text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 active:scale-[0.98] transition-all">
+                                        <i className="ph ph-chat-circle-dots text-lg ph-fill"></i>
+                                        <span>ติดต่อสอบถาม / แจ้งปัญหาผ่าน LINE</span>
                                     </a>
                                 )}
                             </div>
