@@ -86,7 +86,7 @@
             height: 793px !important;
             max-width: 1122px !important;
             max-height: 793px !important;
-            padding: 20px 38px !important;
+            padding: 16px 36px !important;
             margin: 0 auto !important;
             display: flex;
             flex-direction: column;
@@ -94,8 +94,8 @@
             overflow: hidden;
         }
         .omr-table { width: 100%; border-collapse: collapse; font-size: 9px; border: 1.5px solid #111827; table-layout: fixed; }
-        .omr-table th { background-color: #f3f4f6 !important; color: #111827 !important; padding: 2.5px 1px; border: 1px solid #374151; font-weight: 700; text-align: center; vertical-align: middle; line-height: 1.1; white-space: nowrap; }
-        .omr-table td { padding: 1px 0.5px; border: 1px solid #9ca3af; text-align: center; vertical-align: middle; color: #111827; height: 17px; }
+        .omr-table th { background-color: #f3f4f6 !important; color: #111827 !important; padding: 2px 1px; border: 1px solid #374151; font-weight: 700; text-align: center; vertical-align: middle; line-height: 1.05; white-space: nowrap; }
+        .omr-table td { padding: 0.5px 0.5px; border: 1px solid #9ca3af; text-align: center; vertical-align: middle; color: #111827; height: 15.5px; }
         .omr-table tr:nth-child(even) td { background-color: #f8fafc !important; }
         .omr-bubble {
             display: inline-flex;
@@ -5569,7 +5569,7 @@
                                 <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 pb-4 border-b border-gray-100 shrink-0">
                                     <div>
                                         <h2 className="text-base sm:text-lg font-black text-gray-800 flex items-center gap-2">
-                                            <i className="ph ph-file-text text-[#C8102E] text-xl"></i> แบบประเมินความสะอาดภาคสนาม (รูปแบบกระดาษคำตอบ OMR)
+                                            <i className="ph ph-file-text text-[#C8102E] text-xl"></i> แบบประเมินความสะอาดเรียบร้อย (รูปแบบกระดาษคำตอบ OMR)
                                         </h2>
                                         <p className="text-[11px] text-gray-500 font-medium mt-0.5">จัดหน้าอัตโนมัติลงใน A4 แนวนอน 1 แผ่นพอดี • รองรับการถ่ายรูปสแกนเข้าสู่ระบบ</p>
                                     </div>
@@ -5624,12 +5624,12 @@
                                             </div>
 
                                             {/* หัวกระดาษราชการ/สภานักเรียน (กระชับสำหรับ A4 แผ่นเดียว) */}
-                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1.5px solid #111827', paddingBottom: '6px', marginBottom: '6px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1.5px solid #111827', paddingBottom: '5px', marginBottom: '5px' }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                                    <img src={settings?.school_logo_url || HARDCODED_LOGO} style={{ width: '38px', height: '38px', objectFit: 'contain' }} crossOrigin="anonymous" />
+                                                    <img src={settings?.school_logo_url || HARDCODED_LOGO} style={{ width: '36px', height: '36px', objectFit: 'contain' }} crossOrigin="anonymous" />
                                                     <div>
                                                         <div style={{ fontSize: '15px', fontWeight: 'bold', color: '#111827', lineHeight: '1.15' }}>
-                                                            แบบบันทึกการตรวจความสะอาดและความเป็นระเบียบเรียบร้อย (ใบตรวจภาคสนาม)
+                                                            แบบประเมินความสะอาดเรียบร้อย
                                                         </div>
                                                         <div style={{ fontSize: '10.5px', fontWeight: '600', color: '#4b5563', marginTop: '1px' }}>
                                                             สภานักเรียนโรงเรียนคำม่วง อำเภอคำม่วง จังหวัดกาฬสินธุ์
@@ -5643,12 +5643,21 @@
                                             </div>
 
                                             {/* คำชี้แจงวิธีฝนกระดาษคำตอบ */}
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f9fafb', border: '1px solid #d1d5db', borderRadius: '4px', padding: '3px 8px', marginBottom: '6px', fontSize: '9.5px', color: '#1f2937' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f9fafb', border: '1px solid #d1d5db', borderRadius: '4px', padding: '3px 8px', marginBottom: '5px', fontSize: '9.5px', color: '#1f2937' }}>
                                                 <div>
-                                                    <b>วิธีทำเครื่องหมาย:</b> ใช้ปากกาสีเข้มหรือดินสอ <b>ระบายทึบ ●</b> หรือ <b>กากบาท ✕</b> ทับวงกลม (หากห้องเรียนสะอาดครบทั้ง 5 ข้อ ไม่ต้องระบายใดๆ ระบบจะให้เต็ม +10 อัตโนมัติ / ระบายเฉพาะข้อที่ <b>ผ่านเกณฑ์ (+2)</b> หรือกรณีพิเศษ)
+                                                    <b>วิธีทำเครื่องหมาย:</b> ใช้ปากกาหรือดินสอ <b>ระบายทึบ ●</b> หรือ <b>กากบาท ✕</b> ทับวงกลม (หากห้องเรียนสะอาดครบทั้ง 5 ข้อ ไม่ต้องระบายใดๆ ระบบจะให้เต็ม +10 อัตโนมัติ / ระบายเฉพาะข้อที่ <b>ผ่านเกณฑ์ (+2)</b> หรือกรณีพิเศษ)
                                                 </div>
-                                                <div style={{ fontWeight: 'bold', whiteSpace: 'nowrap', marginLeft: '8px' }}>
-                                                    ตัวอย่างที่ถูกต้อง: <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '999px', backgroundColor: '#111827', verticalAlign: 'middle', margin: '0 3px' }}></span> ปกติ
+                                                <div style={{ fontWeight: 'bold', whiteSpace: 'nowrap', marginLeft: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                    <span>ตัวอย่างที่ถูกต้อง:</span>
+                                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                                        <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '999px', backgroundColor: '#111827' }}></span>
+                                                        <span>หรือ</span>
+                                                        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '12px', height: '12px', borderRadius: '999px', border: '1.3px solid #4b5563', position: 'relative', backgroundColor: '#ffffff' }}>
+                                                            <svg viewBox="0 0 12 12" style={{ width: '11px', height: '11px', overflow: 'visible' }}>
+                                                                <path d="M 1.5 1.5 L 10.5 10.5 M 10.5 1.5 L 1.5 10.5" stroke="#1d4ed8" strokeWidth="2.2" strokeLinecap="round" />
+                                                            </svg>
+                                                        </span>
+                                                    </span>
                                                 </div>
                                             </div>
 
@@ -5705,21 +5714,21 @@
                                                                         ) : (
                                                                             <td colSpan="6" style={{ color: '#9ca3af', fontSize: '8.5px', backgroundColor: '#f3f4f6' }}>ไม่มีเขตพื้นที่รับผิดชอบ</td>
                                                                         )}
-                                                                    </tr>
-                                                                );
-                                                            })}
-                                                        </tbody>
-                                                    </table>
-                                                ))}
-                                            </div>
-
-                                            {/* ช่องลงลายมือชื่อและจุดมาร์คล่าง */}
-                                            <div style={{ marginTop: '6px', paddingTop: '4px', borderTop: '1px dashed #9ca3af', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', fontSize: '10px', color: '#111827' }}>
+                                            {/* ช่องลงลายมือชื่อและจุดมาร์คล่าง (ขยับขึ้นมาและเว้นพื้นที่ให้เซ็นชื่อได้ง่าย ไม่เบียดขอบกระดาษ) */}
+                                            <div style={{ marginTop: '4px', paddingTop: '8px', paddingBottom: '4px', borderTop: '1px dashed #9ca3af', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', fontSize: '10.5px', color: '#111827' }}>
                                                 <div className="omr-corner-mark"></div>
-                                                <div><b>หมายเหตุเพิ่มเติม:</b> .......................................................................................................................................</div>
-                                                <div style={{ display: 'flex', gap: '28px', fontWeight: '600' }}>
-                                                    <div>ลงชื่อ ...................................................... ผู้ตรวจ</div>
-                                                    <div>ลงชื่อ ...................................................... ผู้รับรองผล</div>
+                                                <div style={{ paddingBottom: '6px' }}>
+                                                    <b>หมายเหตุเพิ่มเติม:</b> .....................................................................................................................
+                                                </div>
+                                                <div style={{ display: 'flex', gap: '32px', fontWeight: '600', textAlign: 'center' }}>
+                                                    <div style={{ lineHeight: '1.6' }}>
+                                                        <div>ลงชื่อ ........................................................ ผู้ตรวจ</div>
+                                                        <div style={{ fontSize: '9.5px', color: '#374151' }}>(........................................................)</div>
+                                                    </div>
+                                                    <div style={{ lineHeight: '1.6' }}>
+                                                        <div>ลงชื่อ ........................................................ ผู้รับรองผล</div>
+                                                        <div style={{ fontSize: '9.5px', color: '#374151' }}>(........................................................)</div>
+                                                    </div>
                                                 </div>
                                                 <div className="omr-corner-mark"></div>
                                             </div>
