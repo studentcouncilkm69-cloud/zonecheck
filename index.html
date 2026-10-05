@@ -753,93 +753,6 @@
                 });
             };
 
-            const handleMapReset = () => {
-                setMapZoom(1);
-                setMapPan({ x: 0, y: 0 });
-            };
-
-            const handleMapTouchStart = (e) => {
-                if (e.touches.length === 2) {
-                    const dx = e.touches[0].clientX - e.touches[1].clientX;
-                    const dy = e.touches[0].clientY - e.touches[1].clientY;
-                    mapTouchStateRef.current.initialPinchDist = Math.hypot(dx, dy);
-                    mapTouchStateRef.current.initialZoom = mapZoom;
-                    mapTouchStateRef.current.isDragging = false;
-                } else if (e.touches.length === 1) {
-                    const now = Date.now();
-                    if (now - mapTouchStateRef.current.lastTap < 300) {
-                        if (mapZoom > 1) {
-                            setMapZoom(1);
-                            setMapPan({ x: 0, y: 0 });
-                        } else {
-                            setMapZoom(2.2);
-                        }
-                        mapTouchStateRef.current.lastTap = 0;
-                        return;
-                    }
-                    mapTouchStateRef.current.lastTap = now;
-                    if (mapZoom > 1) {
-                        mapTouchStateRef.current.isDragging = true;
-                        mapTouchStateRef.current.startX = e.touches[0].clientX - mapPan.x;
-                        mapTouchStateRef.current.startY = e.touches[0].clientY - mapPan.y;
-                    }
-                }
-            };
-
-            const handleMapTouchMove = (e) => {
-                if (e.touches.length === 2 && mapTouchStateRef.current.initialPinchDist) {
-                    if (e.cancelable) e.preventDefault();
-                    const dx = e.touches[0].clientX - e.touches[1].clientX;
-                    const dy = e.touches[0].clientY - e.touches[1].clientY;
-                    const dist = Math.hypot(dx, dy);
-                    const scaleFactor = dist / mapTouchStateRef.current.initialPinchDist;
-                    const nextZoom = Math.max(1, Math.min(4, +(mapTouchStateRef.current.initialZoom * scaleFactor).toFixed(2)));
-                    setMapZoom(nextZoom);
-                    if (nextZoom === 1) setMapPan({ x: 0, y: 0 });
-                } else if (e.touches.length === 1 && mapTouchStateRef.current.isDragging && mapZoom > 1) {
-                    if (e.cancelable) e.preventDefault();
-                    const nextX = e.touches[0].clientX - mapTouchStateRef.current.startX;
-                    const nextY = e.touches[0].clientY - mapTouchStateRef.current.startY;
-                    setMapPan({ x: nextX, y: nextY });
-                }
-            };
-
-            const handleMapTouchEnd = () => {
-                mapTouchStateRef.current.isDragging = false;
-                mapTouchStateRef.current.initialPinchDist = null;
-            };
-
-            const handleMapMouseDown = (e) => {
-                if (mapZoom <= 1) return;
-                e.preventDefault();
-                mapTouchStateRef.current.isDragging = true;
-                mapTouchStateRef.current.startX = e.clientX - mapPan.x;
-                mapTouchStateRef.current.startY = e.clientY - mapPan.y;
-            };
-
-            const handleMapMouseMove = (e) => {
-                if (!mapTouchStateRef.current.isDragging || mapZoom <= 1) return;
-                e.preventDefault();
-                setMapPan({
-                    x: e.clientX - mapTouchStateRef.current.startX,
-                    y: e.clientY - mapTouchStateRef.current.startY
-                });
-            };
-
-            const handleMapMouseUp = () => {
-                mapTouchStateRef.current.isDragging = false;
-            };
-
-            const handleMapWheel = (e) => {
-                e.preventDefault();
-                const delta = e.deltaY < 0 ? 0.25 : -0.25;
-                setMapZoom(prev => {
-                    const next = Math.max(1, Math.min(4, +(prev + delta).toFixed(2)));
-                    if (next === 1) setMapPan({ x: 0, y: 0 });
-                    return next;
-                });
-            };
-
             const canViewBanner = (visibilitySetting) => {
                 if (!visibilitySetting || visibilitySetting === 'public') return true;
                 if (visibilitySetting === 'inspector' && (appMode === 'admin' || appMode === 'inspector')) return true;
@@ -5241,6 +5154,56 @@
                                                     </div>
                                                 ) : (
                                                     <span className="text-[10px] font-bold text-gray-400 bg-gray-100 px-2.5 py-1 rounded-lg shrink-0">ไม่มีลายเซ็น</span>
+                                                )}
+                                            </div>
+
+                                            {/* รายชื่อเพื่อนร่วมทีม */}
+                                            {team.coInspectors && team.coInspectors.length > 0 && (
+                                                <div className="bg-white p-2.5 rounded-xl border border-gray-100">
+                                                    <span className="text-[10px] font-bold text-gray-500 block mb-1.5">ผู้ตรวจร่วมในทีม ({team.coInspectors.length} คน):</span>
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        {team.coInspectors.map((coName, cIdx) => (
+                                                            <div key={cIdx} className="inline-flex items-center gap-1.5 pr-2.5 pl-1 py-0.5 rounded-full bg-blue-50/70 border border-blue-100 text-blue-700 text-[11px] font-bold">
+                                                                <img src={getInspectorAvatar(coName)} className="w-4 h-4 rounded-full object-cover" onError={(e) => { e.target.src = settings?.app_logo_url || HARDCODED_LOGO; }} />
+                                                                <span>{coName}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* สรุปห้องเรียนและเขตพื้นที่ที่ตรวจ */}
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                                                <div className="bg-blue-50/60 border border-blue-100 p-2.5 rounded-xl">
+                                                    <div className="font-bold text-blue-700 text-[11px] mb-1 flex items-center justify-between">
+                                                        <span><i className="ph ph-buildings mr-1"></i> หมวดห้องเรียน</span>
+                                                        <span className="bg-blue-600 text-white px-1.5 py-0.2 rounded-md text-[10px]">{team.roomList.length} ห้อง</span>
+                                                    </div>
+                                                    <p className="text-[11px] font-bold text-gray-700 leading-relaxed">
+                                                        {team.roomList.length > 0 ? team.roomList.join(', ') : '-'}
+                                                    </p>
+                                                </div>
+                                                <div className="bg-fuchsia-50/60 border border-fuchsia-100 p-2.5 rounded-xl">
+                                                    <div className="font-bold text-fuchsia-700 text-[11px] mb-1 flex items-center justify-between">
+                                                        <span><i className="ph ph-map-pin mr-1"></i> หมวดเขตพื้นที่</span>
+                                                        <span className="bg-fuchsia-600 text-white px-1.5 py-0.2 rounded-md text-[10px]">{team.zoneList.length} เขต</span>
+                                                    </div>
+                                                    <p className="text-[11px] font-bold text-gray-700 leading-relaxed">
+                                                        {team.zoneList.length > 0 ? team.zoneList.join(', ') : '-'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div className="pt-4 mt-2 border-t border-gray-100">
+                                    <button onClick={() => setShowDailyInspectorsModal(false)} className="w-full py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs transition-colors">ปิดหน้าต่าง</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Modal แผนผังห้องเรียน / เขตพื้นที่ (เลือกสายชั้น ม.1-ม.6 กดรายห้องได้ทันที + โชว์คำอธิบาย + ไม่หลุดขอบดำ) */}
                     {(showRoomMap || showZoneMap) && (() => {
                         const activeMapUrl = showRoomMap ? settings?.room_map_url : settings?.zone_map_url;
@@ -5509,10 +5472,10 @@
                                     )}
                                 </div>
 
-                                {/* กรอบแสดงรูปภาพแผนผังแนวนอนสัดส่วน 16:9 */}
+                                {/* กรอบแสดงรูปภาพแผนผัง (แนบสนิทกับขนาดรูปจริง 100% เพื่อให้พิกัดหมุดตรงกันทุกหน้าจอทั้ง iPad และมือถือ) */}
                                 <div 
                                     ref={mapContainerRef}
-                                    className="relative w-full aspect-[16/9] bg-slate-900 rounded-2xl overflow-hidden mt-3 border border-gray-200 shadow-inner flex items-center justify-center select-none touch-none shrink-0"
+                                    className="relative w-full bg-slate-900 rounded-2xl overflow-hidden mt-3 border border-gray-200 shadow-inner flex items-center justify-center select-none touch-none shrink-0"
                                     onTouchStart={handleMapTouchStart}
                                     onTouchMove={handleMapTouchMove}
                                     onTouchEnd={handleMapTouchEnd}
@@ -5540,12 +5503,12 @@
                                                 transition: mapTouchStateRef.current.isDragging || mapTouchStateRef.current.initialPinchDist ? 'none' : 'transform 0.25s cubic-bezier(0.22, 1, 0.36, 1)',
                                                 cursor: isAdminPinMode ? 'crosshair' : (mapZoom > 1 ? 'grab' : 'zoom-in')
                                             }}
-                                            className="relative w-full h-full flex items-center justify-center"
+                                            className="relative w-full leading-none"
                                         >
                                             <img 
                                                 src={activeMapUrl} 
                                                 draggable="false"
-                                                className="w-full h-full object-contain pointer-events-none select-none" 
+                                                className="w-full h-auto block pointer-events-none select-none" 
                                             />
 
                                             {/* แสดงหมุดทั้งหมดเวลาอยู่ในโหมดแอดมินตั้งค่าหมุด */}
@@ -5555,37 +5518,44 @@
                                                 return (
                                                     <div 
                                                         key={rId}
-                                                        style={{ left: `${pin.x}%`, top: `${pin.y}%` }}
-                                                        className="absolute -translate-x-1/2 -translate-y-1/2 z-10 pointer-events-none"
+                                                        style={{ 
+                                                            left: `${pin.x}%`, 
+                                                            top: `${pin.y}%`,
+                                                            transform: `translate(-50%, -50%) scale(${1 / Math.pow(mapZoom, 0.7)})`
+                                                        }}
+                                                        className="absolute z-10 pointer-events-none"
                                                     >
-                                                        <div className="px-1.5 py-0.5 rounded-full bg-gray-900/80 text-white text-[8px] font-bold border border-white shadow">
+                                                        <div className="px-1.5 py-0.5 rounded-full bg-gray-900/85 text-white text-[8px] font-bold border border-white shadow">
                                                             {(rObj.name || '').replace('ม.', '')}
                                                         </div>
                                                     </div>
                                                 );
                                             })}
 
-                                            {/* หมุดเรดาร์ AI กระพริบชี้จุดห้องที่ค้นหา พร้อมป้ายคำอธิบาย */}
+                                            {/* หมุดเรดาร์ AI กระพริบชี้จุดห้องที่ค้นหา (ยึดจุดกึ่งกลางวงกลมให้ตรงพิกัดเป๊ะ + ปรับขนาดอัตโนมัติไม่ให้ใหญ่ล้นจอมือถือ) */}
                                             {activePinData && activePinRoom && (
                                                 <div 
-                                                    style={{ left: `${activePinData.x}%`, top: `${activePinData.y}%` }}
-                                                    className="absolute -translate-x-1/2 -translate-y-full z-20 pointer-events-none flex flex-col items-center"
+                                                    style={{ 
+                                                        left: `${activePinData.x}%`, 
+                                                        top: `${activePinData.y}%`,
+                                                        transform: `translate(-50%, -50%) scale(${1 / Math.pow(mapZoom, 0.65)})`
+                                                    }}
+                                                    className="absolute z-20 pointer-events-none flex items-center justify-center"
                                                 >
-                                                    <div className="bg-[#C8102E] text-white px-2.5 py-0.5 rounded-full text-[10px] font-black shadow-lg border-2 border-white whitespace-nowrap mb-0.5 flex flex-col items-center">
+                                                    {/* ป้ายชื่อห้องลอยอยู่เหนือจุดหมุด โดยไม่ดึงให้จุดหมุดเลื่อน */}
+                                                    <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-[#C8102E]/95 backdrop-blur-sm text-white px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-black shadow-md border border-white whitespace-nowrap flex flex-col items-center leading-tight">
                                                         <span>{activePinRoom.name}</span>
-                                                        {activePinData.note && (
-                                                            <span className="text-[8px] font-bold text-amber-200 max-w-[140px] truncate">{activePinData.note}</span>
-                                                        )}
                                                     </div>
+                                                    {/* จุดพิกัดตรงกลางเป๊ะ */}
                                                     <div className="relative flex items-center justify-center">
-                                                        <span className="animate-ping absolute inline-flex h-6 w-6 rounded-full bg-red-400 opacity-75"></span>
-                                                        <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-[#C8102E] border-2 border-white shadow-md"></span>
+                                                        <span className="animate-ping absolute inline-flex h-4 w-4 sm:h-5 sm:w-5 rounded-full bg-red-400 opacity-80"></span>
+                                                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 sm:h-3 sm:w-3 bg-[#C8102E] border-[1.5px] border-white shadow-md"></span>
                                                     </div>
                                                 </div>
                                             )}
                                         </div>
                                     ) : (
-                                        <p className="text-center text-gray-400 text-xs font-bold px-4">ยังไม่ได้ตั้งค่ารูปแผนผังในหน้าแอดมิน</p>
+                                        <p className="text-center text-gray-400 text-xs font-bold px-4 py-12">ยังไม่ได้ตั้งค่ารูปแผนผังในหน้าแอดมิน</p>
                                     )}
 
                                     {isAdminPinMode && (
