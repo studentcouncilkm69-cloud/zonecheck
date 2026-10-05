@@ -476,6 +476,11 @@
             // Admin Settings Inputs
             const [bulkRooms, setBulkRooms] = useState('');
             const [bulkInspectors, setBulkInspectors] = useState('');
+            const [editingRoomId, setEditingRoomId] = useState(null);
+            const [editingRoomNameInput, setEditingRoomNameInput] = useState('');
+            const [editingInspectorId, setEditingInspectorId] = useState(null);
+            const [editingInspectorNameInput, setEditingInspectorNameInput] = useState('');
+            const [editingPresetId, setEditingPresetId] = useState(null);
             const [editingInspectorAvatar, setEditingInspectorAvatar] = useState(null);
             const [inspectorAvatarUrlInput, setInspectorAvatarUrlInput] = useState('');
             const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
@@ -563,16 +568,23 @@
                 }
             }, [currentRoute]);
 
-            useEffect(() => {
-                if (showRoomMap || showZoneMap) {
-                    setMapZoom(1);
-                    setMapPan({ x: 0, y: 0 });
-                    setMapSearchQuery('');
-                    setMapGradeFilter('1');
-                    setSelectedMapRoomId('');
-                    setIsAdminPinMode(false);
+            const handleOpenMapForSpecificRoom = (roomObj, type) => {
+                if (!roomObj) return;
+                setMapZoom(1);
+                setMapPan({ x: 0, y: 0 });
+                setMapSearchQuery('');
+                setIsAdminPinMode(false);
+                if (type === 'room') {
+                    setShowZoneMap(false);
+                    setShowRoomMap(true);
+                } else {
+                    setShowRoomMap(false);
+                    setShowZoneMap(true);
                 }
-            }, [showRoomMap, showZoneMap]);
+                setTimeout(() => {
+                    handleFocusRoomOnMap(roomObj, type);
+                }, 80);
+            };
 
             const currentMapType = showRoomMap ? 'room' : 'zone';
 
@@ -589,15 +601,16 @@
                 };
             };
 
-            const handleFocusRoomOnMap = (roomObj) => {
+            const handleFocusRoomOnMap = (roomObj, forcedType = null) => {
                 if (!roomObj) return;
+                const targetMapType = forcedType || currentMapType;
                 setSelectedMapRoomId(roomObj.id);
                 const matchGrade = (roomObj.name || '').match(/(\d+)/);
                 if (matchGrade && mapGradeFilter !== 'all') {
                     setMapGradeFilter(matchGrade[1]);
                 }
 
-                const existingPin = mapPinsData?.[currentMapType]?.[roomObj.id];
+                const existingPin = mapPinsData?.[targetMapType]?.[roomObj.id];
                 if (isAdminPinMode) {
                     setPinTargetRoomId(roomObj.id);
                     setPinNoteInput(existingPin?.note || '');
@@ -606,7 +619,7 @@
                 setIsAiSearchingMap(true);
                 setTimeout(() => {
                     setIsAiSearchingMap(false);
-                    const pinInfo = mapPinsData?.[currentMapType]?.[roomObj.id];
+                    const pinInfo = mapPinsData?.[targetMapType]?.[roomObj.id];
                     if (pinInfo && typeof pinInfo.x === 'number' && typeof pinInfo.y === 'number') {
                         const container = mapContainerRef.current;
                         const targetZoom = 1.85;
@@ -2205,18 +2218,30 @@
             const handleCreateSignaturePreset = async () => {
                 if (!newPresetName.trim()) return showToast('กรุณาตั้งชื่อเซตลายเซ็น', 'warning');
                 if (newPresetSignerIds.length === 0) return showToast('กรุณาติ๊กเลือกผู้ลงนามอย่างน้อย 1 คน', 'warning');
-                const newPreset = {
-                    id: generateId('pset'),
-                    name: newPresetName.trim(),
-                    signerIds: [...newPresetSignerIds]
-                };
-                const updatedPresets = [...signaturePresets, newPreset];
-                const nextDefault = signaturePresets.length === 0 ? newPreset.id : defaultSignaturePreset;
+                let updatedPresets = [...signaturePresets];
+                let nextDefault = defaultSignaturePreset;
+
+                if (editingPresetId) {
+                    updatedPresets = updatedPresets.map(p => p.id === editingPresetId ? {
+                        ...p,
+                        name: newPresetName.trim(),
+                        signerIds: [...newPresetSignerIds]
+                    } : p);
+                } else {
+                    const newPreset = {
+                        id: generateId('pset'),
+                        name: newPresetName.trim(),
+                        signerIds: [...newPresetSignerIds]
+                    };
+                    updatedPresets.push(newPreset);
+                    if (signaturePresets.length === 0) nextDefault = newPreset.id;
+                    if (activeSignatureMode === 'none' && signaturePresets.length === 0) {
+                        setActiveSignatureMode(newPreset.id);
+                    }
+                }
                 setNewPresetName('');
                 setNewPresetSignerIds([]);
-                if (activeSignatureMode === 'none' && signaturePresets.length === 0) {
-                    setActiveSignatureMode(newPreset.id);
-                }
+                setEditingPresetId(null);
                 await saveSignatureSettingsToCloud(signersList, updatedPresets, nextDefault);
             };
 
@@ -3043,18 +3068,55 @@
                 }); 
             };
 
+            const handleSaveEditedInspectorName = async (id) => {
+                const trimmed = editingInspectorNameInput.trim();
+                if (!trimmed) return showToast('กรุณาระบุชื่อผู้ตรวจ', 'warning');
+                const validInspectors = Array.isArray(inspectors) ? inspectors : [];
+                const targetOld = validInspectors.find(u => u.id === id);
+                const newInspecs = validInspectors.map(u => u.id === id ? { ...u, name: trimmed } : u);
+                setInspectors(newInspecs);
+                if (currentUser && (currentUser.id === id || (targetOld && currentUser.name === targetOld.name))) {
+                    setCurrentUser(prev => ({ ...prev, name: trimmed }));
+                }
+                setEditingInspectorId(null);
+                setEditingInspectorNameInput('');
+                try {
+                    await syncToGASAsync('updateInspectors', newInspecs);
+                    showToast('แก้ไขชื่อผู้ตรวจสำเร็จ', 'success');
+                } catch (e) {
+                    showToast('แก้ไขชื่อในเครื่องสำเร็จ (แต่ซิงค์ไม่สำเร็จ)', 'warning');
+                }
+            };
+
             const handleAddBulkRooms = async () => {
                 if(!bulkRooms.trim()) return;
                 const lines = bulkRooms.split('\n').map(l => l.trim()).filter(l => l);
                 const validRooms = Array.isArray(rooms) ? rooms : [];
                 const newRooms = [...validRooms];
                 lines.forEach(line => { if(!newRooms.find(r => r.name === line)) newRooms.push({ id: generateId('r'), name: line, hasZone: true }); });
-                setRooms(newRooms); 
+                const sorted = sortRoomsNaturally(newRooms);
+                setRooms(sorted); 
                 try {
-                    await syncToGASAsync('updateRooms', newRooms); 
+                    await syncToGASAsync('updateRooms', sorted); 
                     setBulkRooms(''); 
                     showToast('เพิ่มห้องเรียนสำเร็จ', 'success');
                 } catch(e) { showToast('เพิ่มห้องล้มเหลว', 'error'); }
+            };
+
+            const handleSaveEditedRoomName = async (id) => {
+                const trimmed = editingRoomNameInput.trim();
+                if (!trimmed) return showToast('กรุณาระบุชื่อห้องเรียน', 'warning');
+                const validRooms = Array.isArray(rooms) ? rooms : [];
+                const updated = sortRoomsNaturally(validRooms.map(r => r.id === id ? { ...r, name: trimmed } : r));
+                setRooms(updated);
+                setEditingRoomId(null);
+                setEditingRoomNameInput('');
+                try {
+                    await syncToGASAsync('updateRooms', updated);
+                    showToast('แก้ไขชื่อห้องเรียนสำเร็จ', 'success');
+                } catch (e) {
+                    showToast('แก้ไขชื่อห้องในเครื่องสำเร็จ (แต่ซิงค์ไม่สำเร็จ)', 'warning');
+                }
             };
 
             const handleDeleteRoom = (id) => { 
@@ -4324,10 +4386,10 @@
                         {(appMode === 'admin' || appMode === 'inspector') && currentRoute === 'inspect' && (
                              <div className="animate-in fade-in space-y-4 pb-12">
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-2">
-                                    <button onClick={() => setShowRoomMap(true)} className="bg-white border border-blue-200 text-blue-600 font-bold py-3.5 px-3 rounded-2xl flex items-center justify-center gap-2 shadow-sm hover:bg-blue-50 active:scale-95 transition-all text-xs sm:text-sm">
+                                    <button onClick={() => { setMapZoom(1); setMapPan({ x: 0, y: 0 }); setMapSearchQuery(''); setMapGradeFilter('1'); setSelectedMapRoomId(''); setIsAdminPinMode(false); setShowRoomMap(true); }} className="bg-white border border-blue-200 text-blue-600 font-bold py-3.5 px-3 rounded-2xl flex items-center justify-center gap-2 shadow-sm hover:bg-blue-50 active:scale-95 transition-all text-xs sm:text-sm">
                                         <i className="ph ph-buildings text-lg"></i> แผนผังห้องเรียน
                                     </button>
-                                    <button onClick={() => setShowZoneMap(true)} className="bg-white border border-[#C8102E]/20 text-[#C8102E] font-bold py-3.5 px-3 rounded-2xl flex items-center justify-center gap-2 shadow-sm hover:bg-red-50 active:scale-95 transition-all text-xs sm:text-sm">
+                                    <button onClick={() => { setMapZoom(1); setMapPan({ x: 0, y: 0 }); setMapSearchQuery(''); setMapGradeFilter('1'); setSelectedMapRoomId(''); setIsAdminPinMode(false); setShowZoneMap(true); }} className="bg-white border border-[#C8102E]/20 text-[#C8102E] font-bold py-3.5 px-3 rounded-2xl flex items-center justify-center gap-2 shadow-sm hover:bg-red-50 active:scale-95 transition-all text-xs sm:text-sm">
                                         <i className="ph ph-map-pin text-lg"></i> แผนผังเขตพื้นที่
                                     </button>
                                     <button onClick={() => { setPaperIncludeDate(false); setPaperIncludeInspector(false); setShowPaperSheetModal(true); }} className="bg-white border border-gray-300 text-gray-800 font-bold py-3.5 px-3 rounded-2xl flex items-center justify-center gap-2 shadow-sm hover:bg-gray-50 active:scale-95 transition-all text-xs sm:text-sm">
@@ -4456,6 +4518,10 @@
                                             <input type="text" value={zoneMapInput} onChange={e=>setZoneMapInput(e.target.value)} placeholder="URL รูปแผนผังเขตพื้นที่..." className="w-full p-2.5 rounded-lg border border-gray-200 text-xs font-medium outline-none focus:border-[#C8102E]" />
                                          </div>
                                          <div className="border border-gray-200 p-3 rounded-xl bg-white">
+                                            <label className="text-[10px] font-bold text-gray-500 mb-1 block uppercase">6. โลโก้ระบบ / โลโก้โรงเรียน (Logo URL)</label>
+                                            <input type="text" value={appLogoInput} onChange={e=>{setAppLogoInput(e.target.value); setSchoolLogoInput(e.target.value);}} placeholder="URL โลโก้โรงเรียน..." className="w-full p-2.5 rounded-lg border border-gray-200 text-xs font-medium outline-none focus:border-[#C8102E]" />
+                                         </div>
+                                         <div className="border border-gray-200 p-3 rounded-xl bg-white">
                                             <label className="text-[10px] font-bold text-gray-500 mb-1 block uppercase">7. ชื่อระบบที่แสดงด้านบน (App Title)</label>
                                             <input type="text" value={appTitleInput} onChange={e=>setAppTitleInput(e.target.value)} placeholder="เช่น ZoneCheck" className="w-full p-2.5 rounded-lg border border-gray-200 text-xs font-bold outline-none focus:border-[#C8102E]" />
                                          </div>
@@ -4510,14 +4576,32 @@
                                    </div>
                                    <div className="max-h-64 overflow-y-auto custom-scrollbar divide-y divide-gray-100 border border-gray-100 rounded-xl p-2">
                                       {rooms.map((r, idx) => (
-                                          <div key={r.id} className="py-2 px-2 flex items-center justify-between text-xs">
-                                             <span className="font-bold text-gray-700">{r.name}</span>
-                                             <div className="flex items-center gap-1.5">
-                                                <button onClick={()=>toggleRoomZone(r.id, r.name, r.hasZone)} className={`px-2 py-1 rounded-md font-bold text-[10px] ${r.hasZone !== false ? 'bg-fuchsia-50 text-fuchsia-700 border border-fuchsia-200' : 'bg-gray-100 text-gray-400'}`}>{r.hasZone !== false ? 'มีเขต' : 'ไม่มีเขต'}</button>
-                                                <button onClick={()=>moveRoomUp(idx)} className="p-1 text-gray-400 hover:text-gray-700"><i className="ph ph-caret-up"></i></button>
-                                                <button onClick={()=>moveRoomDown(idx)} className="p-1 text-gray-400 hover:text-gray-700"><i className="ph ph-caret-down"></i></button>
-                                                <button onClick={()=>handleDeleteRoom(r.id)} className="p-1 text-red-400 hover:text-red-600"><i className="ph ph-trash"></i></button>
-                                             </div>
+                                          <div key={r.id} className="py-2 px-2 flex items-center justify-between text-xs gap-2">
+                                             {editingRoomId === r.id ? (
+                                                 <div className="flex items-center gap-1.5 flex-1">
+                                                     <input 
+                                                         type="text" 
+                                                         value={editingRoomNameInput} 
+                                                         onChange={e => setEditingRoomNameInput(e.target.value)} 
+                                                         onKeyDown={e => { if (e.key === 'Enter') handleSaveEditedRoomName(r.id); }}
+                                                         className="flex-1 px-2.5 py-1 rounded-lg border border-blue-400 bg-white text-xs font-bold text-gray-800 outline-none"
+                                                         autoFocus
+                                                     />
+                                                     <button onClick={() => handleSaveEditedRoomName(r.id)} className="px-2.5 py-1 rounded-lg bg-emerald-600 text-white font-bold text-[10px] shrink-0">บันทึก</button>
+                                                     <button onClick={() => { setEditingRoomId(null); setEditingRoomNameInput(''); }} className="px-2 py-1 rounded-lg bg-gray-100 text-gray-600 font-bold text-[10px] shrink-0">ยกเลิก</button>
+                                                 </div>
+                                             ) : (
+                                                 <>
+                                                     <span className="font-bold text-gray-700 truncate">{r.name}</span>
+                                                     <div className="flex items-center gap-1 shrink-0">
+                                                        <button onClick={()=>toggleRoomZone(r.id, r.name, r.hasZone)} className={`px-2 py-1 rounded-md font-bold text-[10px] ${r.hasZone !== false ? 'bg-fuchsia-50 text-fuchsia-700 border border-fuchsia-200' : 'bg-gray-100 text-gray-400'}`}>{r.hasZone !== false ? 'มีเขต' : 'ไม่มีเขต'}</button>
+                                                        <button onClick={() => { setEditingRoomId(r.id); setEditingRoomNameInput(r.name || ''); }} className="px-2 py-1 rounded-md bg-blue-50 text-blue-600 hover:bg-blue-100 font-bold text-[10px]">แก้ไข</button>
+                                                        <button onClick={()=>moveRoomUp(idx)} className="p-1 text-gray-400 hover:text-gray-700"><i className="ph ph-caret-up"></i></button>
+                                                        <button onClick={()=>moveRoomDown(idx)} className="p-1 text-gray-400 hover:text-gray-700"><i className="ph ph-caret-down"></i></button>
+                                                        <button onClick={()=>handleDeleteRoom(r.id)} className="p-1 text-red-400 hover:text-red-600"><i className="ph ph-trash"></i></button>
+                                                     </div>
+                                                 </>
+                                             )}
                                           </div>
                                       ))}
                                    </div>
@@ -4532,23 +4616,46 @@
                                    <div className="max-h-72 overflow-y-auto custom-scrollbar divide-y divide-gray-100 border border-gray-100 rounded-xl p-2">
                                       {inspectors.map(u => (
                                           <div key={u.id} className="py-2 px-2 flex items-center justify-between text-xs gap-2">
-                                             <div className="flex items-center gap-2.5 min-w-0">
-                                                 <img 
-                                                     src={u.avatar_url || settings?.app_logo_url || HARDCODED_LOGO} 
-                                                     className="w-8 h-8 rounded-full object-cover border border-gray-200 shrink-0 bg-gray-50"
-                                                     onError={(e) => { e.target.src = settings?.app_logo_url || HARDCODED_LOGO; }}
-                                                 />
-                                                 <span className="font-bold text-gray-700 truncate">{u.name}</span>
-                                             </div>
-                                             <div className="flex items-center gap-1 shrink-0">
-                                                 <button 
-                                                     onClick={() => { setEditingInspectorAvatar(u); setInspectorAvatarUrlInput(u.avatar_url || ''); }} 
-                                                     className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 font-bold text-[10px] flex items-center gap-1"
-                                                 >
-                                                     <i className="ph ph-user-circle-gear text-sm"></i> รูปหน้า
-                                                 </button>
-                                                 <button onClick={()=>handleDeleteInspector(u.id)} className="p-1.5 text-red-400 hover:text-red-600"><i className="ph ph-trash"></i></button>
-                                             </div>
+                                             {editingInspectorId === u.id ? (
+                                                 <div className="flex items-center gap-1.5 flex-1">
+                                                     <input 
+                                                         type="text" 
+                                                         value={editingInspectorNameInput} 
+                                                         onChange={e => setEditingInspectorNameInput(e.target.value)} 
+                                                         onKeyDown={e => { if (e.key === 'Enter') handleSaveEditedInspectorName(u.id); }}
+                                                         className="flex-1 px-2.5 py-1 rounded-lg border border-emerald-400 bg-white text-xs font-bold text-gray-800 outline-none"
+                                                         autoFocus
+                                                     />
+                                                     <button onClick={() => handleSaveEditedInspectorName(u.id)} className="px-2.5 py-1 rounded-lg bg-emerald-600 text-white font-bold text-[10px] shrink-0">บันทึก</button>
+                                                     <button onClick={() => { setEditingInspectorId(null); setEditingInspectorNameInput(''); }} className="px-2 py-1 rounded-lg bg-gray-100 text-gray-600 font-bold text-[10px] shrink-0">ยกเลิก</button>
+                                                 </div>
+                                             ) : (
+                                                 <>
+                                                     <div className="flex items-center gap-2.5 min-w-0">
+                                                         <img 
+                                                             src={u.avatar_url || settings?.app_logo_url || HARDCODED_LOGO} 
+                                                             className="w-8 h-8 rounded-full object-cover border border-gray-200 shrink-0 bg-gray-50"
+                                                             onError={(e) => { e.target.src = settings?.app_logo_url || HARDCODED_LOGO; }}
+                                                         />
+                                                         <span className="font-bold text-gray-700 truncate">{u.name}</span>
+                                                     </div>
+                                                     <div className="flex items-center gap-1 shrink-0">
+                                                         <button 
+                                                             onClick={() => { setEditingInspectorId(u.id); setEditingInspectorNameInput(u.name || ''); }} 
+                                                             className="px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold text-[10px]"
+                                                         >
+                                                             แก้ไขชื่อ
+                                                         </button>
+                                                         <button 
+                                                             onClick={() => { setEditingInspectorAvatar(u); setInspectorAvatarUrlInput(u.avatar_url || ''); }} 
+                                                             className="px-2 py-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 font-bold text-[10px] flex items-center gap-1"
+                                                         >
+                                                             <i className="ph ph-user-circle-gear text-sm"></i> รูปหน้า
+                                                         </button>
+                                                         <button onClick={()=>handleDeleteInspector(u.id)} className="p-1.5 text-red-400 hover:text-red-600"><i className="ph ph-trash"></i></button>
+                                                     </div>
+                                                 </>
+                                             )}
                                           </div>
                                       ))}
                                    </div>
@@ -4653,9 +4760,14 @@
                                                 </div>
                                             </div>
 
-                                            <button onClick={handleCreateSignaturePreset} className="w-full py-2.5 bg-[#C8102E] hover:bg-red-800 text-white rounded-xl font-bold text-xs shadow-sm transition-colors">
-                                                + บันทึกเป็นเซตลายเซ็นใหม่
-                                            </button>
+                                            <div className="flex gap-2">
+                                                {editingPresetId && (
+                                                    <button onClick={() => { setEditingPresetId(null); setNewPresetName(''); setNewPresetSignerIds([]); }} className="px-4 py-2 rounded-xl bg-gray-200 text-gray-600 font-bold text-xs">ยกเลิกแก้ไข</button>
+                                                )}
+                                                <button onClick={handleCreateSignaturePreset} className="flex-1 py-2.5 bg-[#C8102E] hover:bg-red-800 text-white rounded-xl font-bold text-xs shadow-sm transition-colors">
+                                                    {editingPresetId ? 'บันทึกการแก้ไขเซตลายเซ็น' : '+ บันทึกเป็นเซตลายเซ็นใหม่'}
+                                                </button>
+                                            </div>
 
                                             <div className="max-h-40 overflow-y-auto custom-scrollbar divide-y divide-gray-100 bg-white rounded-xl border border-gray-200 p-2">
                                                 {signaturePresets.length === 0 ? (
@@ -4680,6 +4792,7 @@
                                                                 {!isDefault && (
                                                                     <button onClick={() => handleSetDefaultPreset(p.id)} className="px-2 py-1 rounded-lg bg-gray-100 hover:bg-emerald-50 text-gray-600 hover:text-emerald-600 font-bold text-[10px]">ตั้งเป็นค่าเริ่มต้น</button>
                                                                 )}
+                                                                <button onClick={() => { setEditingPresetId(p.id); setNewPresetName(p.name || ''); setNewPresetSignerIds(Array.isArray(p.signerIds) ? [...p.signerIds] : []); }} className="px-2 py-1 rounded-lg bg-blue-50 text-blue-600 font-bold text-[10px]">แก้ไข</button>
                                                                 <button onClick={() => handleDeleteSignaturePreset(p.id)} className="p-1.5 text-red-400 hover:text-red-600"><i className="ph ph-trash"></i></button>
                                                             </div>
                                                         </div>
@@ -5208,15 +5321,26 @@
                     {inspectModal.isOpen && inspectModal.room && (
                         <div className="fixed inset-0 z-[9995] bg-gray-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
                             <div className="bg-white rounded-[1.5rem] w-full max-w-md p-5 relative shadow-2xl animate-in zoom-in-95 flex flex-col max-h-[95vh]">
-                                <div className="flex justify-between items-center mb-4 shrink-0 border-b border-gray-100 pb-3">
-                                    <div>
+                                <div className="flex justify-between items-center mb-4 shrink-0 border-b border-gray-100 pb-3 gap-2">
+                                    <div className="min-w-0">
                                         <h2 className="text-lg font-black text-gray-800 flex items-center gap-2">
                                             {inspectModal.type === 'room' ? <i className="ph ph-buildings text-blue-500 text-xl"></i> : <i className="ph ph-map-pin text-fuchsia-500 text-xl"></i>} 
                                             ตรวจ{inspectModal.type === 'room' ? 'ห้องเรียน' : 'เขตพื้นที่'}
                                         </h2>
-                                        <p className="text-gray-500 font-bold text-xs mt-0.5">{inspectModal.room.name}</p>
+                                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                            <span className="text-gray-700 font-black text-xs bg-gray-100 px-2.5 py-1 rounded-lg">{inspectModal.room.name}</span>
+                                            <button 
+                                                type="button"
+                                                onClick={() => handleOpenMapForSpecificRoom(inspectModal.room, inspectModal.type)}
+                                                className={`px-2.5 py-1 rounded-lg font-bold text-xs flex items-center gap-1 shadow-sm active:scale-95 transition-all border ${inspectModal.type === 'room' ? 'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100' : 'bg-red-50 text-[#C8102E] border-red-200 hover:bg-red-100'}`}
+                                                title={inspectModal.type === 'room' ? 'ดูพิกัดห้องเรียนบนแผนผัง' : 'ดูพิกัดเขตพื้นที่บนแผนผัง'}
+                                            >
+                                                <i className={`ph ${inspectModal.type === 'room' ? 'ph-buildings' : 'ph-map-pin-line'} text-sm`}></i>
+                                                <span>{inspectModal.type === 'room' ? 'ดูพิกัดห้อง' : 'ดูพิกัดเขต'}</span>
+                                            </button>
+                                        </div>
                                     </div>
-                                    <button onClick={() => setInspectModal({ isOpen: false, room: null, type: 'room', date: inspectModal.date })} className="w-8 h-8 bg-gray-100 text-gray-500 rounded-full flex items-center justify-center hover:bg-gray-200 transition-colors"><i className="ph ph-x"></i></button>
+                                    <button onClick={() => setInspectModal({ isOpen: false, room: null, type: 'room', date: inspectModal.date })} className="w-8 h-8 bg-gray-100 text-gray-500 rounded-full flex items-center justify-center hover:bg-gray-200 transition-colors shrink-0"><i className="ph ph-x"></i></button>
                                 </div>
 
                                 <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 pb-4">
@@ -5504,7 +5628,7 @@
                         const pinnedCount = Object.keys(mapPinsData?.[currentMapType] || {}).length;
 
                         return (
-                        <div className="fixed inset-0 z-[9997] bg-gray-900/85 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4 animate-in fade-in" onClick={() => { setShowRoomMap(false); setShowZoneMap(false); }}>
+                        <div className="fixed inset-0 z-[9999] bg-gray-900/85 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4 animate-in fade-in" onClick={() => { setShowRoomMap(false); setShowZoneMap(false); }}>
                             <div className="bg-white rounded-[2rem] w-full max-w-3xl p-4 sm:p-5 shadow-2xl relative flex flex-col max-h-[94vh] overflow-y-auto custom-scrollbar border border-gray-100" onClick={e => e.stopPropagation()}>
                                 
                                 <div className="flex justify-between items-center gap-2 pb-3 border-b border-gray-100 shrink-0">
@@ -5620,7 +5744,7 @@
                                                         const hasPin = Boolean(mapPinsData?.[currentMapType]?.[r.id]);
                                                         return (
                                                             <option key={r.id} value={r.id}>
-                                                                {r.name} {hasPin ? '📍' : ''}
+                                                                {r.name} {hasPin ? '(ปักหมุดแล้ว)' : ''}
                                                             </option>
                                                         );
                                                     })}
@@ -5966,8 +6090,11 @@
                                         <div id="omr-sheet-export-box" className="omr-sheet-wrapper relative">
                                             <div className="flex justify-between items-center mb-1">
                                                 <div className="omr-corner-mark"></div>
-                                                <div className="text-[9px] font-bold text-gray-400 tracking-widest uppercase">
-                                                    ZONECHECK OMR SHEET • MODE: {paperSheetTypeFilter === 'both' ? 'ROOM+ZONE' : paperSheetTypeFilter === 'room' ? 'ROOM ONLY' : 'ZONE ONLY'} ({paperSheetFilteredRooms.length} ROOMS)
+                                                <div className="text-[9px] font-bold text-gray-500 tracking-wider uppercase flex items-center gap-2">
+                                                    <span>ZONECHECK OMR SHEET • MODE: {paperSheetTypeFilter === 'both' ? 'ROOM+ZONE' : paperSheetTypeFilter === 'room' ? 'ROOM ONLY' : 'ZONE ONLY'} ({paperSheetFilteredRooms.length} ROOMS)</span>
+                                                    <span style={{ color: '#b91c1c', fontWeight: '800', backgroundColor: '#fef2f2', border: '1px solid #fecaca', padding: '0px 6px', borderRadius: '4px' }}>
+                                                        ข้อควรระวัง: ห้ามขีดเขียน ทับ หรือพับตรงสี่เหลี่ยมสีดำทั้ง 4 มุมกระดาษ
+                                                    </span>
                                                 </div>
                                                 <div className="omr-corner-mark"></div>
                                             </div>
