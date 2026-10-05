@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     
-    <title>ZoneCheck V2.1 | สภานักเรียนโรงเรียนคำม่วง</title>
+    <title>ZoneCheck | สภานักเรียนโรงเรียนคำม่วง</title>
     
     <!-- Tailwind CSS & React -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -218,7 +218,8 @@
             admin_avatar_url: ADMIN_AVATAR_URL,
             admin_name: "นายภูธนากร หงษ์ทอง (พี่ภีม)",
             admin_role: "เลขานุการสภานักเรียนโรงเรียนคำม่วง",
-            admin_line_url: "https://line.me/ti/p/~470aijh"
+            admin_line_url: "https://line.me/ti/p/~470aijh",
+            app_title: "ZoneCheck"
         };
 
         const ROOM_CRITERIA = [
@@ -419,6 +420,7 @@
             const [adminNameInput, setAdminNameInput] = useState('นายภูธนากร หงษ์ทอง (พี่ภีม)');
             const [adminRoleInput, setAdminRoleInput] = useState('เลขานุการสภานักเรียนโรงเรียนคำม่วง');
             const [adminLineInput, setAdminLineInput] = useState('https://line.me/ti/p/~470aijh');
+            const [appTitleInput, setAppTitleInput] = useState('ZoneCheck');
             const [sysPasscode, setSysPasscode] = useState('');
             const [sysMasterPasscode, setSysMasterPasscode] = useState('');
 
@@ -443,6 +445,7 @@
                     setAdminNameInput(settings.admin_name || 'นายภูธนากร หงษ์ทอง (พี่ภีม)');
                     setAdminRoleInput(settings.admin_role || 'เลขานุการสภานักเรียนโรงเรียนคำม่วง');
                     setAdminLineInput(settings.admin_line_url || 'https://line.me/ti/p/~470aijh');
+                    setAppTitleInput((settings.app_title || 'ZoneCheck').replace(/\s*V\d+(\.\d+)?/i, '').trim() || 'ZoneCheck');
                     setSysPasscode(settings.passcode || '1234');
                     setSysMasterPasscode(settings.master_passcode || '9999');
 
@@ -619,6 +622,64 @@
                 return settings?.app_logo_url || HARDCODED_LOGO;
             };
 
+            const getSavedTodaySignatureForUser = (name) => {
+                if (!name) return '';
+                const cleanName = String(name).trim();
+                const todayStr = new Date().toISOString().split('T')[0];
+
+                // 1. ตรวจสอบจากความจำในเครื่องของวันนี้ก่อน
+                try {
+                    const rawMap = safeGetItem('zc26_daily_sig_map');
+                    if (rawMap) {
+                        const parsed = JSON.parse(rawMap);
+                        if (parsed && parsed.date === todayStr && parsed.sigs && parsed.sigs[cleanName]) {
+                            return parsed.sigs[cleanName];
+                        }
+                    }
+                } catch (e) {}
+
+                // 2. ตรวจสอบจากประวัติการตรวจของวันนี้ในฐานข้อมูล
+                const validInspections = Array.isArray(inspections) ? inspections : [];
+                for (let i = validInspections.length - 1; i >= 0; i--) {
+                    const insp = validInspections[i];
+                    if (insp && insp.date && String(insp.date).startsWith(todayStr) && insp.inspectorSignature) {
+                        const mainName = String(insp.mainInspector || String(insp.inspector || '').split(',')[0] || '').trim();
+                        if (mainName === cleanName) {
+                            return insp.inspectorSignature;
+                        }
+                    }
+                }
+                return '';
+            };
+
+            const saveTodaySignatureForUser = (name, sigDataUrl) => {
+                if (!name || !sigDataUrl) return;
+                const cleanName = String(name).trim();
+                const todayStr = new Date().toISOString().split('T')[0];
+                try {
+                    let sigs = {};
+                    const rawMap = safeGetItem('zc26_daily_sig_map');
+                    if (rawMap) {
+                        const parsed = JSON.parse(rawMap);
+                        if (parsed && parsed.date === todayStr && parsed.sigs) {
+                            sigs = parsed.sigs;
+                        }
+                    }
+                    sigs[cleanName] = sigDataUrl;
+                    safeSetItem('zc26_daily_sig_map', JSON.stringify({ date: todayStr, sigs }));
+                } catch (e) {}
+            };
+
+            const handleOpenSelfAvatarModal = () => {
+                if (!currentUser) return;
+                const cleanName = String(currentUser.name || '').trim();
+                const validInspectors = Array.isArray(inspectors) ? inspectors : [];
+                const found = validInspectors.find(u => String(u.name || '').trim() === cleanName);
+                const targetObj = found || { id: currentUser.id || generateId('u'), name: cleanName, avatar_url: currentUser.avatar_url || '' };
+                setEditingInspectorAvatar(targetObj);
+                setInspectorAvatarUrlInput(targetObj.avatar_url || '');
+            };
+
             const handleLoginSubmit = (e) => {
                 e.preventDefault(); 
                 const finalName = (selectedLoginName || loginInspector || '').trim();
@@ -653,9 +714,13 @@
                     return;
                 }
 
-                // สำหรับผู้ตรวจทั่วไป: สเต็ปที่ 1 ผ่านแล้ว -> ไปสเต็ปที่ 2 เพื่อเซ็นลายมือชื่อยืนยันตัวตนบนพื้นที่ขนาดใหญ่
+                // สำหรับผู้ตรวจทั่วไป: สเต็ปที่ 1 ผ่านแล้ว -> เช็คว่าวันนี้เคยเซ็นไว้หรือยัง ถ้ายังไม่เคยให้ไปสเต็ปที่ 2
                 if (loginStep === 1) {
                     setLoginError('');
+                    const existingSigToday = getSavedTodaySignatureForUser(finalName);
+                    if (existingSigToday) {
+                        setLoginSignatureDataUrl(existingSigToday);
+                    }
                     setLoginStep(2);
                     return;
                 }
@@ -665,6 +730,8 @@
                     setLoginError('กรุณาลงลายมือชื่อยืนยันตัวตนในกรอบด้านบนก่อนเข้าสู่ระบบ');
                     return;
                 }
+
+                saveTodaySignatureForUser(finalName, loginSignatureDataUrl);
                 
                 const validInspectors = Array.isArray(inspectors) ? inspectors : [];
                 let userObj = validInspectors.find(u => u.name === finalName);
@@ -907,8 +974,24 @@
                 const validInspections = Array.isArray(inspections) ? inspections : [];
                 const existInsp = validInspections.find(i => i.roomId === room.id && i.type === type && i.date && String(i.date).startsWith(targetDateStr));
                 
-                if(existInsp) { 
-                    showToast(`ห้องนี้มีผลตรวจของวันที่ ${formatDateObj(targetDateStr)} อยู่แล้วครับ`, 'warning'); 
+                if (existInsp) {
+                    const typeLabel = type === 'room' ? 'หมวดห้องเรียน' : 'หมวดเขตพื้นที่';
+                    const cleanRoom = (room.name || '').replace('ม.', '');
+                    showConfirm(
+                        `ห้อง ม.${cleanRoom} มีผลตรวจ [${typeLabel}] ของวันที่ ${formatDateObj(targetDateStr)} อยู่แล้ว\n\nต้องการลบผลตรวจเฉพาะ [${typeLabel}] เพื่อตรวจใหม่ใช่หรือไม่?`,
+                        async () => {
+                            const toDelete = validInspections.filter(i => i.roomId === room.id && i.type === type && i.date && String(i.date).startsWith(targetDateStr));
+                            setInspections(validInspections.filter(i => !(i.roomId === room.id && i.type === type && i.date && String(i.date).startsWith(targetDateStr))));
+                            try {
+                                for (const record of toDelete) {
+                                    await syncToGASAsync('deleteInspection', record.id);
+                                }
+                                showToast(`ลบผลตรวจ${typeLabel}ของห้อง ม.${cleanRoom} แล้ว`, 'success');
+                            } catch (e) {
+                                showToast('เกิดข้อผิดพลาดในการลบบน Server', 'error');
+                            }
+                        }
+                    );
                 } else {
                     setEvalComment('');
                     setInspectImage(null);
@@ -1221,14 +1304,15 @@
 
             const handleResetTodayInspection = (roomId, roomName) => {
                 const targetDateStr = filterDate || new Date().toISOString().split('T')[0];
-                showConfirm(`ต้องการลบผลตรวจของห้อง ${roomName.replace('ม.', '')} (ของวันที่ ${formatDateObj(targetDateStr)}) ทิ้งใช่หรือไม่?`, async () => {
+                const cleanRoom = (roomName || '').replace('ม.', '');
+                showConfirm(`ต้องการลบผลตรวจ [ทั้งหมด (ทั้งห้องเรียนและเขตพื้นที่)] ของห้อง ม.${cleanRoom}\nประจำวันที่ ${formatDateObj(targetDateStr)} ใช่หรือไม่?`, async () => {
                     const validInspections = Array.isArray(inspections) ? inspections : [];
                     const toDelete = validInspections.filter(i => i.roomId === roomId && i.date && String(i.date).startsWith(targetDateStr));
                     setInspections(validInspections.filter(i => !(i.roomId === roomId && i.date && String(i.date).startsWith(targetDateStr))));
                     
                     try {
                         for (const record of toDelete) { await syncToGASAsync('deleteInspection', record.id); }
-                        showToast(`ลบผลการประเมินแล้ว`, 'success');
+                        showToast(`ลบผลตรวจทั้งหมดของห้อง ม.${cleanRoom} แล้ว`, 'success');
                     } catch(e) {
                         showToast(`เกิดข้อผิดพลาดในการลบประวัติบน Server`, 'error');
                     }
@@ -1651,6 +1735,7 @@
 
             const handleSaveMegaphoneAndLogo = async () => {
                 const updates = [
+                    { key: 'app_title', val: appTitleInput.trim() || 'ZoneCheck' },
                     { key: 'app_logo_url', val: appLogoInput },
                     { key: 'logo_url', val: logoInput },
                     { key: 'school_logo_url', val: schoolLogoInput },
@@ -2352,7 +2437,13 @@
                 const cleanUrl = inspectorAvatarUrlInput.trim();
                 const cleanName = String(editingInspectorAvatar.name || '').trim();
                 const validInspectors = Array.isArray(inspectors) ? inspectors : [];
-                const newInspecs = validInspectors.map(u => u.id === editingInspectorAvatar.id ? { ...u, avatar_url: cleanUrl } : u);
+                const exists = validInspectors.some(u => u.id === editingInspectorAvatar.id || String(u.name || '').trim() === cleanName);
+                let newInspecs = [];
+                if (exists) {
+                    newInspecs = validInspectors.map(u => (u.id === editingInspectorAvatar.id || String(u.name || '').trim() === cleanName) ? { ...u, avatar_url: cleanUrl } : u);
+                } else {
+                    newInspecs = [...validInspectors, { id: editingInspectorAvatar.id || generateId('u'), name: cleanName, avatar_url: cleanUrl }];
+                }
                 setInspectors(newInspecs);
 
                 if (currentUser && String(currentUser.name || '').trim() === cleanName) {
@@ -2361,7 +2452,7 @@
                 setEditingInspectorAvatar(null);
                 try {
                     await syncToGASAsync('updateInspectors', newInspecs);
-                    showToast('บันทึกลิงก์รูปโปรไฟล์ลงคอลัมน์ C สำเร็จ!', 'success');
+                    showToast('บันทึกรูปโปรไฟล์สำเร็จ!', 'success');
                 } catch (e) {
                     showToast('บันทึกรูปโปรไฟล์ลงเครื่องสำเร็จ', 'success');
                 }
@@ -3083,7 +3174,7 @@
                                 <img src={settings?.app_logo_url || HARDCODED_LOGO} className="w-full h-full object-cover" crossOrigin="anonymous"/>
                             </div>
                             <div className="overflow-hidden min-w-0">
-                                <h1 className="font-bold text-gray-800 text-[15px] leading-tight truncate">ZoneCheck V2.1</h1>
+                                <h1 className="font-bold text-gray-800 text-[15px] leading-tight truncate">{(settings?.app_title || 'ZoneCheck').replace(/\s*V\d+(\.\d+)?/i, '').trim() || 'ZoneCheck'}</h1>
                                 <p className="text-[10px] text-gray-500 leading-tight truncate tracking-wider">{HARDCODED_NAME}</p>
                             </div>
                         </div>
@@ -3118,7 +3209,7 @@
                                     <img src={settings?.app_logo_url || HARDCODED_LOGO} className="w-full h-full object-cover" crossOrigin="anonymous"/>
                                 </div>
                                 <div className="flex flex-col flex-1 min-w-0 justify-center">
-                                    <span className="font-black text-[15px] text-gray-800 tracking-tight leading-tight truncate">ZoneCheck V2.1</span>
+                                    <span className="font-black text-[15px] text-gray-800 tracking-tight leading-tight truncate">{(settings?.app_title || 'ZoneCheck').replace(/\s*V\d+(\.\d+)?/i, '').trim() || 'ZoneCheck'}</span>
                                     <span className="text-[9px] text-gray-400 font-bold leading-none truncate mt-0.5 tracking-wider">{HARDCODED_NAME}</span>
                                 </div>
                             </div>
@@ -3141,18 +3232,25 @@
                     {/* การแสดงผลหน้าต่างๆ */}
                     <main className="flex-1 flex flex-col overflow-y-auto relative pb-[100px] lg:pb-12 custom-scrollbar p-4 md:p-6 lg:p-8 max-w-5xl mx-auto w-full">
                         
-                        {/* แถบการ์ดโปรไฟล์ทักทายผู้ตรวจ */}
+                        {}
+                        {/* แถบการ์ดโปรไฟล์ทักทายผู้ตรวจ (กดที่รูปหน้าตัวเองเพื่อเปลี่ยนรูปโปรไฟล์ได้) */}
                         {appMode !== 'guest' && currentUser && (
                             <div className="bg-white px-4 py-3.5 rounded-[1.75rem] shadow-sm border border-gray-100 mb-5 flex items-center justify-between gap-3 animate-in fade-in">
                                 <div className="flex items-center gap-3.5 min-w-0">
-                                    <div className="relative flex-shrink-0">
+                                    <div 
+                                        onClick={handleOpenSelfAvatarModal}
+                                        title="แตะเพื่อเปลี่ยนรูปโปรไฟล์"
+                                        className="relative flex-shrink-0 cursor-pointer group active:scale-95 transition-transform"
+                                    >
                                         <img 
                                             src={currentUser.avatar_url || getInspectorAvatar(currentUser.name)} 
                                             alt={currentUser.name}
-                                            className="w-12 h-12 rounded-full object-cover border-2 border-[#C8102E] shadow-sm bg-gray-50"
+                                            className="w-12 h-12 rounded-full object-cover border-2 border-[#C8102E] shadow-sm bg-gray-50 group-hover:brightness-90 transition-all"
                                             onError={(e) => { e.target.src = settings?.app_logo_url || HARDCODED_LOGO; }}
                                         />
-                                        <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-500 border-2 border-white rounded-full"></span>
+                                        <span className="absolute bottom-0 right-0 w-4 h-4 bg-[#C8102E] text-white border-2 border-white rounded-full flex items-center justify-center shadow-sm">
+                                            <i className="ph ph-camera text-[9px]"></i>
+                                        </span>
                                     </div>
                                     <div className="min-w-0">
                                         <div className="flex items-center gap-1.5 flex-wrap">
@@ -3791,6 +3889,10 @@
                                             <label className="text-[10px] font-bold text-gray-500 mb-1 block uppercase">6. โลโก้ระบบ / โลโก้โรงเรียน (Logo URL)</label>
                                             <input type="text" value={appLogoInput} onChange={e=>{setAppLogoInput(e.target.value); setSchoolLogoInput(e.target.value);}} placeholder="URL โลโก้โรงเรียน..." className="w-full p-2.5 rounded-lg border border-gray-200 text-xs font-medium outline-none focus:border-[#C8102E]" />
                                          </div>
+                                         <div className="col-span-full border border-gray-200 p-3 rounded-xl bg-white">
+                                            <label className="text-[10px] font-bold text-gray-500 mb-1 block uppercase">7. ชื่อระบบที่แสดงด้านบน (App Title)</label>
+                                            <input type="text" value={appTitleInput} onChange={e=>setAppTitleInput(e.target.value)} placeholder="เช่น ZoneCheck" className="w-full p-2.5 rounded-lg border border-gray-200 text-xs font-bold outline-none focus:border-[#C8102E]" />
+                                         </div>
                                          <div className="col-span-full border border-gray-200 p-3.5 rounded-xl bg-white space-y-3">
                                             <div className="flex items-center justify-between">
                                                 <label className="text-xs font-bold text-gray-700 flex items-center gap-1.5"><i className="ph ph-identification-card text-[#C8102E] text-base"></i> ตั้งค่ารูปโปรไฟล์แอดมินและนามบัตรศูนย์ช่วยเหลือ</label>
@@ -4288,7 +4390,7 @@
                                                 </button>
                                             </div>
 
-                                            {/* แผ่นรองเซ็นขนาดใหญ่พิเศษ กว้างและสูง เซ็นถนัดมือ */}
+                                            {/* แผ่นรองเซ็นขนาดใหญ่พิเศษ หรือแสดงลายเซ็นที่เคยเซ็นไว้แล้วในวันนี้ */}
                                             <div className="relative bg-white border-2 border-dashed border-gray-300 rounded-2xl overflow-hidden h-48 sm:h-52 touch-none shadow-inner">
                                                 <canvas
                                                     ref={loginSigCanvasRef}
@@ -4303,6 +4405,13 @@
                                                     onTouchEnd={endDrawingLoginSig}
                                                     className="w-full h-full cursor-crosshair block relative z-10"
                                                 />
+                                                {loginSignatureDataUrl && !isDrawingSigRef.current && (
+                                                    <img 
+                                                        src={loginSignatureDataUrl} 
+                                                        alt="Saved Signature" 
+                                                        className="absolute inset-0 w-full h-full object-contain pointer-events-none z-0 p-2"
+                                                    />
+                                                )}
                                                 <div className="absolute bottom-9 left-8 right-8 border-b border-gray-200 pointer-events-none"></div>
                                                 {!loginSignatureDataUrl && (
                                                     <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center text-gray-300 gap-1">
@@ -4311,7 +4420,9 @@
                                                     </div>
                                                 )}
                                             </div>
-                                            <p className="text-[10px] text-[#C8102E] font-bold text-center">* จำเป็นต้องลงลายมือชื่อเพื่อยืนยันตัวตนก่อนเข้าสู่ระบบทุกครั้ง</p>
+                                            <p className="text-[10px] text-[#C8102E] font-bold text-center">
+                                                {loginSignatureDataUrl ? 'มีลายมือชื่อของวันนี้แล้ว สามารถกดยืนยันเข้าสู่ระบบได้ทันที (หรือกดล้างเขียนใหม่)' : '* จำเป็นต้องลงลายมือชื่อเพื่อยืนยันตัวตนก่อนเข้าสู่ระบบทุกครั้ง'}
+                                            </p>
                                         </div>
 
                                         {loginError && (
@@ -5105,7 +5216,7 @@
                                     </div>
                                     <div>
                                         <h3 className="font-black text-gray-800 text-base leading-tight">ศูนย์ช่วยเหลือและติดต่อผู้ดูแลระบบ</h3>
-                                        <p className="text-[10px] font-bold text-gray-400">ZoneCheck V2.1 • สภานักเรียนโรงเรียนคำม่วง</p>
+                                        <p className="text-[10px] font-bold text-gray-400">{(settings?.app_title || 'ZoneCheck').replace(/\s*V\d+(\.\d+)?/i, '').trim() || 'ZoneCheck'} • สภานักเรียนโรงเรียนคำม่วง</p>
                                     </div>
                                 </div>
 
