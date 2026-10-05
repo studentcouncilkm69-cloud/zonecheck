@@ -5562,25 +5562,35 @@
                         );
                     })()}
 
-                    {}
-                    {/* Modal พิมพ์แบบประเมินภาคสนาม (กระดาษคำตอบ OMR แนวนอน A4) */}
+                    {/* Modal พิมพ์แบบประเมินภาคสนาม (กระดาษคำตอบ OMR แบบดั้งเดิม) */}
                     {showPaperSheetModal && (
                         <div className="fixed inset-0 z-[9998] bg-gray-900/85 backdrop-blur-sm flex flex-col items-center justify-center p-2 sm:p-4 animate-in fade-in overflow-hidden">
-                            <div className="bg-white rounded-[2rem] w-full max-w-6xl p-4 sm:p-5 shadow-2xl flex flex-col max-h-[95vh] border border-gray-100">
-                                <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-gray-100 shrink-0">
-                                    <div className="flex items-center gap-2.5">
-                                        <div className="w-9 h-9 rounded-xl bg-red-50 text-[#C8102E] flex items-center justify-center">
-                                            <i className="ph ph-printer text-lg font-bold"></i>
-                                        </div>
-                                        <div>
-                                            <h3 className="font-black text-gray-800 text-sm sm:text-base">พิมพ์แบบประเมินภาคสนาม (กระดาษคำตอบ OMR)</h3>
-                                            <p className="text-[10px] font-bold text-gray-400">ขนาด A4 แนวนอน • รองรับการสแกนคะแนนด้วยระบบอ่านกระดาษคำตอบ</p>
-                                        </div>
+                            <div className="bg-white rounded-[2rem] w-full max-w-6xl p-4 sm:p-6 shadow-2xl flex flex-col max-h-[95vh]">
+                                <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 pb-4 border-b border-gray-100 shrink-0">
+                                    <div>
+                                        <h2 className="text-base sm:text-lg font-black text-gray-800 flex items-center gap-2">
+                                            <i className="ph ph-file-text text-[#C8102E] text-xl"></i> แบบประเมินความสะอาดภาคสนาม (รูปแบบกระดาษคำตอบ OMR)
+                                        </h2>
+                                        <p className="text-[11px] text-gray-500 font-medium mt-0.5">จัดหน้าอัตโนมัติลงใน A4 แนวนอน 1 แผ่นพอดี • รองรับการถ่ายรูปสแกนเข้าสู่ระบบ</p>
                                     </div>
+                                    <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-end">
+                                        <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-xl">
+                                            <label className="flex items-center gap-1.5 text-xs font-bold text-gray-700 cursor-pointer select-none">
+                                                <input type="checkbox" checked={paperIncludeDate} onChange={e => setPaperIncludeDate(e.target.checked)} className="w-3.5 h-3.5 accent-[#C8102E] rounded cursor-pointer" />
+                                                <span>ใส่วันที่</span>
+                                            </label>
+                                            {paperIncludeDate && (
+                                                <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} className="bg-white border border-gray-200 rounded-lg px-2 py-1 text-[11px] font-bold text-gray-700 outline-none" />
+                                            )}
+                                        </div>
 
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <select value={paperSheetGradeFilter} onChange={e => setPaperSheetGradeFilter(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-gray-700 outline-none">
-                                            <option value="all">ทุกสายชั้น (รวมแผ่นเดียว)</option>
+                                        <label className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 px-3 py-2 rounded-xl text-xs font-bold text-gray-700 cursor-pointer select-none">
+                                            <input type="checkbox" checked={paperIncludeInspector} onChange={e => setPaperIncludeInspector(e.target.checked)} className="w-3.5 h-3.5 accent-[#C8102E] rounded cursor-pointer" />
+                                            <span>ใส่ชื่อผู้ตรวจ</span>
+                                        </label>
+
+                                        <select value={paperSheetGradeFilter} onChange={e => setPaperSheetGradeFilter(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-700 outline-none">
+                                            <option value="all">รวมทุกระดับชั้น ({rooms.length} ห้อง)</option>
                                             <option value="1">เฉพาะ ม.1</option>
                                             <option value="2">เฉพาะ ม.2</option>
                                             <option value="3">เฉพาะ ม.3</option>
@@ -5588,111 +5598,128 @@
                                             <option value="5">เฉพาะ ม.5</option>
                                             <option value="6">เฉพาะ ม.6</option>
                                         </select>
-                                        <label className="flex items-center gap-1.5 text-xs font-bold text-gray-600 bg-gray-50 px-2.5 py-1.5 rounded-xl border border-gray-200 cursor-pointer">
-                                            <input type="checkbox" checked={paperIncludeDate} onChange={e => setPaperIncludeDate(e.target.checked)} className="accent-[#C8102E]" /> พิมพ์วันที่ลงใบตรวจ
-                                        </label>
-                                        <label className="flex items-center gap-1.5 text-xs font-bold text-gray-600 bg-gray-50 px-2.5 py-1.5 rounded-xl border border-gray-200 cursor-pointer">
-                                            <input type="checkbox" checked={paperIncludeInspector} onChange={e => setPaperIncludeInspector(e.target.checked)} className="accent-[#C8102E]" /> พิมพ์ชื่อผู้ตรวจ
-                                        </label>
-                                        <button onClick={() => handleExportPaperSheet('png')} className="px-3 py-1.5 rounded-xl bg-blue-50 text-blue-600 border border-blue-200 font-bold text-xs flex items-center gap-1 hover:bg-blue-100">
-                                            <i className="ph ph-image"></i> รูปภาพ
+                                        <button onClick={() => handleExportPaperSheet('print')} className="bg-gray-900 hover:bg-black text-white px-3.5 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-sm">
+                                            <i className="ph ph-printer text-sm"></i> สั่งพิมพ์ (Print)
                                         </button>
-                                        <button onClick={() => handleExportPaperSheet('pdf')} className="px-3 py-1.5 rounded-xl bg-[#C8102E] text-white font-bold text-xs flex items-center gap-1 shadow-sm hover:bg-red-800">
-                                            <i className="ph ph-file-pdf"></i> ดาวน์โหลด PDF
+                                        <button onClick={() => handleExportPaperSheet('png')} className="bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 px-3 py-2 rounded-xl font-bold text-xs flex items-center gap-1">
+                                            <i className="ph ph-image text-sm"></i> รูปภาพ
                                         </button>
-                                        <button onClick={() => handleExportPaperSheet('print')} className="px-3 py-1.5 rounded-xl bg-gray-900 text-white font-bold text-xs flex items-center gap-1 shadow-sm hover:bg-black hidden sm:flex">
-                                            <i className="ph ph-printer"></i> สั่งพิมพ์
+                                        <button onClick={() => handleExportPaperSheet('pdf')} className="bg-[#C8102E] hover:bg-red-800 text-white px-3.5 py-2 rounded-xl font-bold text-xs flex items-center gap-1 shadow-sm">
+                                            <i className="ph ph-file-pdf text-sm"></i> ดาวน์โหลด PDF
                                         </button>
-                                        <button onClick={() => setShowPaperSheetModal(false)} className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center hover:bg-gray-200">
+                                        <button onClick={() => setShowPaperSheetModal(false)} className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 flex items-center justify-center">
                                             <i className="ph ph-x"></i>
                                         </button>
                                     </div>
                                 </div>
 
-                                <div className="flex-1 overflow-auto custom-scrollbar bg-gray-100 rounded-2xl p-3 mt-3 flex justify-center items-start">
-                                    <div id="omr-print-area">
-                                        <div id="omr-sheet-export-box" className="omr-sheet-wrapper shadow-md">
-                                            <div className="flex justify-between items-start">
+                                <div className="flex-1 overflow-auto custom-scrollbar bg-gray-200/70 rounded-2xl p-3 sm:p-6 mt-3 flex justify-center items-start">
+                                    <div id="omr-print-area" className="shadow-xl bg-white">
+                                        <div id="omr-sheet-export-box" className="omr-sheet-wrapper relative">
+                                            {/* จุดมาร์ค 4 มุมสำหรับอ้างอิงสแกนกระดาษคำตอบ */}
+                                            <div className="flex justify-between items-center mb-1">
                                                 <div className="omr-corner-mark"></div>
-                                                <div className="flex-1 px-4 flex items-center justify-between border-b border-gray-800 pb-1.5">
-                                                    <div className="flex items-center gap-2.5">
-                                                        <img src={settings?.school_logo_url || HARDCODED_LOGO} style={{width: '36px', height: '36px', objectFit: 'contain'}} crossOrigin="anonymous" />
-                                                        <div>
-                                                            <div style={{fontSize: '14px', fontWeight: 'bold', lineHeight: 1.1}}>แบบบันทึกการตรวจประเมินความสะอาดและความเป็นระเบียบเรียบร้อย (OMR Sheet)</div>
-                                                            <div style={{fontSize: '10px', color: '#374151', fontWeight: 600}}>สภานักเรียนโรงเรียนคำม่วง • คำชี้แจง: ระบายทึบลงในวงกลม (●) เฉพาะหัวข้อที่ผ่านเกณฑ์ หรือระดับคะแนนเขตพื้นที่</div>
-                                                        </div>
-                                                    </div>
-                                                    <div style={{fontSize: '10.5px', fontWeight: 'bold', textAlign: 'right', lineHeight: 1.35}}>
-                                                        <div>วันที่ตรวจ: {paperIncludeDate ? formatDateObj(filterDate) : '............./............./.................'}</div>
-                                                        <div>คณะผู้ตรวจ: {paperIncludeInspector ? getActiveInspectorTeamString() : '........................................................'}</div>
-                                                    </div>
-                                                </div>
+                                                <div className="text-[9px] font-bold text-gray-400 tracking-widest uppercase">ZONECHECK OMR ANSWER SHEET • DO NOT FOLD</div>
                                                 <div className="omr-corner-mark"></div>
                                             </div>
 
-                                            <div className="grid grid-cols-2 gap-3 my-1.5 flex-1 items-start">
+                                            {/* หัวกระดาษราชการ/สภานักเรียน (กระชับสำหรับ A4 แผ่นเดียว) */}
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1.5px solid #111827', paddingBottom: '6px', marginBottom: '6px' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                    <img src={settings?.school_logo_url || HARDCODED_LOGO} style={{ width: '38px', height: '38px', objectFit: 'contain' }} crossOrigin="anonymous" />
+                                                    <div>
+                                                        <div style={{ fontSize: '15px', fontWeight: 'bold', color: '#111827', lineHeight: '1.15' }}>
+                                                            แบบบันทึกการตรวจความสะอาดและความเป็นระเบียบเรียบร้อย (ใบตรวจภาคสนาม)
+                                                        </div>
+                                                        <div style={{ fontSize: '10.5px', fontWeight: '600', color: '#4b5563', marginTop: '1px' }}>
+                                                            สภานักเรียนโรงเรียนคำม่วง อำเภอคำม่วง จังหวัดกาฬสินธุ์
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div style={{ textAlign: 'right', fontSize: '10.5px', lineHeight: '1.45', fontWeight: '600', color: '#111827' }}>
+                                                    <div>ประจำวันที่: {paperIncludeDate ? <b style={{ borderBottom: '1px dotted #111827', padding: '0 8px' }}>{formatDateObj(filterDate)}</b> : '................. / ................................. / .................'}</div>
+                                                    <div>คณะกรรมการผู้ตรวจ: {paperIncludeInspector ? <b style={{ borderBottom: '1px dotted #111827', padding: '0 6px' }}>{getActiveInspectorTeamString()}</b> : '...............................................................................'}</div>
+                                                </div>
+                                            </div>
+
+                                            {/* คำชี้แจงวิธีฝนกระดาษคำตอบ */}
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f9fafb', border: '1px solid #d1d5db', borderRadius: '4px', padding: '3px 8px', marginBottom: '6px', fontSize: '9.5px', color: '#1f2937' }}>
+                                                <div>
+                                                    <b>วิธีทำเครื่องหมาย:</b> ใช้ปากกาสีเข้มหรือดินสอ <b>ระบายทึบ ●</b> หรือ <b>กากบาท ✕</b> ทับวงกลม (หากห้องเรียนสะอาดครบทั้ง 5 ข้อ ไม่ต้องระบายใดๆ ระบบจะให้เต็ม +10 อัตโนมัติ / ระบายเฉพาะข้อที่ <b>ผ่านเกณฑ์ (+2)</b> หรือกรณีพิเศษ)
+                                                </div>
+                                                <div style={{ fontWeight: 'bold', whiteSpace: 'nowrap', marginLeft: '8px' }}>
+                                                    ตัวอย่างที่ถูกต้อง: <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '999px', backgroundColor: '#111827', verticalAlign: 'middle', margin: '0 3px' }}></span> ปกติ
+                                                </div>
+                                            </div>
+
+                                            {/* ตารางแบ่ง 2 คอลัมน์ซ้าย-ขวา เพื่อบรรจุครบทุกห้องใน 1 หน้า A4 แนวนอน */}
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', flex: 1, alignItems: 'start' }}>
                                                 {[paperSheetSplitColumns.left, paperSheetSplitColumns.right].map((colItems, colIdx) => (
                                                     <table key={colIdx} className="omr-table">
                                                         <thead>
                                                             <tr>
-                                                                <th rowSpan="2" style={{width: '5.5%'}}>ที่</th>
-                                                                <th rowSpan="2" style={{width: '13.5%'}}>ห้อง</th>
-                                                                <th colSpan="7" style={{width: '42%'}}>หมวดห้องเรียน (ข้อละ 2 คะแนน)</th>
-                                                                <th colSpan="6" style={{width: '39%'}}>หมวดเขตพื้นที่ (เลือก 1 ข้อ)</th>
+                                                                <th rowSpan="2" style={{ width: '5%' }}>ที่</th>
+                                                                <th rowSpan="2" style={{ width: '14%' }}>ห้อง</th>
+                                                                <th colSpan="7" style={{ width: '43%', backgroundColor: '#eff6ff', color: '#1e3a8a' }}>หมวดห้องเรียน (ข้อละ +2)</th>
+                                                                <th colSpan="6" style={{ width: '38%', backgroundColor: '#fdf4ff', color: '#701a75' }}>หมวดเขตพื้นที่ (เลือก 1 ข้อ)</th>
                                                             </tr>
                                                             <tr>
-                                                                <th>โต๊ะ</th>
-                                                                <th>ขยะ</th>
-                                                                <th>ไฟ</th>
-                                                                <th>พื้น</th>
-                                                                <th>บอร์ด</th>
-                                                                <th>ไม่ทำ</th>
-                                                                <th>ข้าม</th>
-                                                                <th>10</th>
-                                                                <th>8</th>
-                                                                <th>5</th>
-                                                                <th>2</th>
-                                                                <th>-5</th>
-                                                                <th>ข้าม</th>
+                                                                <th style={{ width: '6%' }}>โต๊ะ</th>
+                                                                <th style={{ width: '6%' }}>ขยะ</th>
+                                                                <th style={{ width: '6%' }}>ไฟ</th>
+                                                                <th style={{ width: '6%' }}>พื้น</th>
+                                                                <th style={{ width: '6.5%' }}>บอร์ด</th>
+                                                                <th style={{ width: '6.5%', color: '#b91c1c' }}>ไม่ทำ</th>
+                                                                <th style={{ width: '6%' }}>ข้าม</th>
+                                                                <th style={{ width: '6.3%' }}>ดีเยี่ยม</th>
+                                                                <th style={{ width: '6%' }}>ดี</th>
+                                                                <th style={{ width: '6.3%' }}>พอใช้</th>
+                                                                <th style={{ width: '6.9%' }}>ปรับปรุง</th>
+                                                                <th style={{ width: '6.5%', color: '#b91c1c' }}>ไม่ทำ</th>
+                                                                <th style={{ width: '6%' }}>ข้าม</th>
                                                             </tr>
                                                         </thead>
                                                         <tbody>
-                                                            {colItems.map(({ room, num }) => (
-                                                                <tr key={room.id}>
-                                                                    <td style={{fontWeight: 'bold'}}>{num}</td>
-                                                                    <td style={{fontWeight: 'bold', textAlign: 'left', paddingLeft: '4px'}}>{(room.name || '').replace('ม.', '')}</td>
-                                                                    <td><span className="omr-bubble">1</span></td>
-                                                                    <td><span className="omr-bubble">2</span></td>
-                                                                    <td><span className="omr-bubble">3</span></td>
-                                                                    <td><span className="omr-bubble">4</span></td>
-                                                                    <td><span className="omr-bubble">5</span></td>
-                                                                    <td><span className="omr-bubble">-5</span></td>
-                                                                    <td><span className="omr-bubble">ข</span></td>
-                                                                    {room.hasZone !== false ? (
-                                                                        <>
-                                                                            <td><span className="omr-bubble">A</span></td>
-                                                                            <td><span className="omr-bubble">B</span></td>
-                                                                            <td><span className="omr-bubble">C</span></td>
-                                                                            <td><span className="omr-bubble">D</span></td>
-                                                                            <td><span className="omr-bubble">F</span></td>
-                                                                            <td><span className="omr-bubble">ข</span></td>
-                                                                        </>
-                                                                    ) : (
-                                                                        <td colSpan="6" style={{fontSize: '8px', color: '#9ca3af'}}>ไม่มีเขตพื้นที่</td>
-                                                                    )}
-                                                                </tr>
-                                                            ))}
+                                                            {colItems.map(({ room, num }) => {
+                                                                const hasZone = room.hasZone !== false;
+                                                                return (
+                                                                    <tr key={room.id}>
+                                                                        <td style={{ fontWeight: 'bold', fontSize: '8.5px' }}>{num}</td>
+                                                                        <td style={{ fontWeight: 'bold', textAlign: 'left', paddingLeft: '4px', fontSize: '9.5px', whiteSpace: 'nowrap' }}>{room.name}</td>
+                                                                        <td><span className="omr-bubble">1</span></td>
+                                                                        <td><span className="omr-bubble">2</span></td>
+                                                                        <td><span className="omr-bubble">3</span></td>
+                                                                        <td><span className="omr-bubble">4</span></td>
+                                                                        <td><span className="omr-bubble">5</span></td>
+                                                                        <td><span className="omr-bubble" style={{ borderColor: '#dc2626', color: '#dc2626' }}>-5</span></td>
+                                                                        <td><span className="omr-bubble">ข</span></td>
+                                                                        {hasZone ? (
+                                                                            <>
+                                                                                <td><span className="omr-bubble">10</span></td>
+                                                                                <td><span className="omr-bubble">8</span></td>
+                                                                                <td><span className="omr-bubble">5</span></td>
+                                                                                <td><span className="omr-bubble">2</span></td>
+                                                                                <td><span className="omr-bubble" style={{ borderColor: '#dc2626', color: '#dc2626' }}>-5</span></td>
+                                                                                <td><span className="omr-bubble">ข</span></td>
+                                                                            </>
+                                                                        ) : (
+                                                                            <td colSpan="6" style={{ color: '#9ca3af', fontSize: '8.5px', backgroundColor: '#f3f4f6' }}>ไม่มีเขตพื้นที่รับผิดชอบ</td>
+                                                                        )}
+                                                                    </tr>
+                                                                );
+                                                            })}
                                                         </tbody>
                                                     </table>
                                                 ))}
                                             </div>
 
-                                            <div className="flex justify-between items-end pt-1 border-t border-gray-400">
+                                            {/* ช่องลงลายมือชื่อและจุดมาร์คล่าง */}
+                                            <div style={{ marginTop: '6px', paddingTop: '4px', borderTop: '1px dashed #9ca3af', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', fontSize: '10px', color: '#111827' }}>
                                                 <div className="omr-corner-mark"></div>
-                                                <div className="flex-1 px-6 flex justify-around items-center" style={{fontSize: '10px', fontWeight: 'bold'}}>
-                                                    <div>ลงชื่อ ....................................................... ผู้ตรวจ 1</div>
-                                                    <div>ลงชื่อ ....................................................... ผู้ตรวจ 2</div>
-                                                    <div>ลงชื่อ ....................................................... ผู้รับรองผล</div>
+                                                <div><b>หมายเหตุเพิ่มเติม:</b> .......................................................................................................................................</div>
+                                                <div style={{ display: 'flex', gap: '28px', fontWeight: '600' }}>
+                                                    <div>ลงชื่อ ...................................................... ผู้ตรวจ</div>
+                                                    <div>ลงชื่อ ...................................................... ผู้รับรองผล</div>
                                                 </div>
                                                 <div className="omr-corner-mark"></div>
                                             </div>
@@ -5703,120 +5730,216 @@
                         </div>
                     )}
 
-                    {}
-                    {/* Modal สแกนกระดาษคำตอบ OMR ด้วยกล้อง / รูปภาพ */}
+                    {/* Modal สแกนกระดาษคำตอบ OMR ด้วยกล้อง/รูปภาพ (แบบดั้งเดิม) */}
                     {omrScannerModal.isOpen && (
-                        <div className="fixed inset-0 z-[9998] bg-gray-900/85 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4 animate-in fade-in">
-                            <div className="bg-white rounded-[2rem] w-full max-w-4xl p-4 sm:p-6 shadow-2xl flex flex-col max-h-[94vh] border border-gray-100">
-                                <div className="flex justify-between items-center gap-2 pb-3 border-b border-gray-100 shrink-0">
+                        <div className="fixed inset-0 z-[9998] bg-gray-900/85 backdrop-blur-sm flex flex-col items-center justify-center p-2 sm:p-4 animate-in fade-in overflow-hidden">
+                            <div className="bg-white rounded-[2rem] w-full max-w-5xl p-4 sm:p-6 shadow-2xl flex flex-col max-h-[95vh]">
+                                <div className="flex justify-between items-center pb-3 border-b border-gray-100 shrink-0">
                                     <div className="flex items-center gap-2.5">
                                         <div className="w-10 h-10 rounded-xl bg-gray-900 text-amber-300 flex items-center justify-center">
                                             <i className="ph ph-scan text-xl"></i>
                                         </div>
                                         <div>
-                                            <h3 className="font-black text-gray-800 text-sm sm:text-base">สแกนแบบประเมินภาคสนาม (OMR Scanner)</h3>
-                                            <p className="text-[10px] font-bold text-gray-400">ประจำวันที่ {formatDateObj(filterDate)} • ถ่ายรูปใบตรวจเพื่อแปลงเป็นคะแนนเข้าสู่ระบบอัตโนมัติ</p>
+                                            <h2 className="text-base sm:text-lg font-black text-gray-800">สแกนแบบประเมินกระดาษคำตอบ (OMR Scanner)</h2>
+                                            <p className="text-[11px] text-gray-500 font-bold">ประจำวันที่ {formatDateObj(filterDate)} • ถ่ายรูปใบตรวจและตรวจสอบผลก่อนบันทึกจริง</p>
                                         </div>
                                     </div>
-                                    <button onClick={() => setOmrScannerModal(prev => ({ ...prev, isOpen: false }))} className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center hover:bg-gray-200">
+                                    <button onClick={() => setOmrScannerModal(prev => ({ ...prev, isOpen: false }))} className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 flex items-center justify-center">
                                         <i className="ph ph-x"></i>
                                     </button>
                                 </div>
 
-                                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-4 py-3 pr-1">
-                                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-3">
-                                        <div className="text-xs font-medium text-gray-600 space-y-0.5">
-                                            <p className="font-black text-gray-800">1. อัปโหลดหรือถ่ายภาพกระดาษคำตอบแนวนอนให้เห็นจุดมาร์คสีดำทั้ง 4 มุม</p>
-                                            <p className="text-[11px] text-gray-500">ระบบจะตรวจจับวงกลมที่ระบายและสรุปคะแนนด้านล่าง (สามารถแตะปรับแก้คะแนนรายห้องก่อนบันทึกได้)</p>
+                                <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 py-3 space-y-4">
+                                    <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+                                        <div className="flex items-center gap-3">
+                                            {omrScannerModal.annotatedPreview || omrScannerModal.imagePreview ? (
+                                                <img src={omrScannerModal.annotatedPreview || omrScannerModal.imagePreview} className="w-28 h-20 object-cover rounded-xl border border-gray-300 shadow-sm bg-white" />
+                                            ) : (
+                                                <div className="w-24 h-16 rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center text-gray-400 bg-white">
+                                                    <i className="ph ph-camera text-2xl"></i>
+                                                </div>
+                                            )}
+                                            <div>
+                                                <p className="text-xs sm:text-sm font-black text-gray-800">
+                                                    {omrScannerModal.imagePreview ? 'สแกนรูปภาพใบตรวจสำเร็จ! (กรอบสีเขียว/ชมพูคือจุดที่ตรวจพบ)' : 'ขั้นตอนที่ 1: ถ่ายรูปใบตรวจให้เห็นมุมกระดาษทั้ง 4 มุม'}
+                                                </p>
+                                                <p className="text-[11px] text-gray-500 mt-0.5">
+                                                    ระบบค้นหาจุดมาร์ค 4 มุมอัตโนมัติ • สามารถเลื่อนแถบความไวแสงหรือกดแก้ตัวเลขด้านล่างได้ทันที
+                                                </p>
+                                            </div>
                                         </div>
-                                        <label className="px-4 py-2.5 rounded-xl bg-[#C8102E] hover:bg-red-800 text-white font-bold text-xs flex items-center gap-2 cursor-pointer shrink-0 shadow-sm">
-                                            <i className="ph ph-camera text-base"></i> เลือกรูป / ถ่ายรูปใบตรวจ
+
+                                        <label className="w-full sm:w-auto px-4 py-3 bg-[#C8102E] hover:bg-red-800 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-md shrink-0 transition-all active:scale-95">
+                                            <i className="ph ph-camera text-base"></i>
+                                            <span>{omrScannerModal.imagePreview ? 'ถ่ายรูปใหม่ / เปลี่ยนรูป' : 'ถ่ายรูป / เลือกรูปใบตรวจ'}</span>
                                             <input type="file" accept="image/*" ref={omrFileInputRef} onChange={handleOmrImageUpload} className="hidden" />
                                         </label>
                                     </div>
 
-                                    {omrScannerModal.annotatedPreview && (
-                                        <div className="space-y-2 bg-slate-900 p-3 rounded-2xl border border-gray-800">
-                                            <div className="flex flex-wrap items-center justify-between gap-2 text-white text-xs">
-                                                <span className="font-bold flex items-center gap-1.5"><i className="ph ph-check-circle text-emerald-400"></i> ภาพผลลัพธ์การตรวจจับช่องวงกลม</span>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-[11px] text-gray-300">ความไวแสง (Sensitivity): {omrScannerModal.sensitivity}%</span>
-                                                    <input
-                                                        type="range"
-                                                        min="15"
-                                                        max="85"
-                                                        value={omrScannerModal.sensitivity}
-                                                        onChange={e => {
-                                                            const val = Number(e.target.value);
-                                                            setOmrScannerModal(prev => ({ ...prev, sensitivity: val }));
-                                                            if (omrRawImageRef.current) processOmrImageWithSensitivity(omrRawImageRef.current, val);
-                                                        }}
-                                                        className="w-28 accent-[#C8102E]"
-                                                    />
-                                                </div>
+                                    {omrScannerModal.imagePreview && (
+                                        <div className="bg-amber-50/70 border border-amber-200 rounded-2xl p-3 flex flex-col sm:flex-row items-center justify-between gap-3">
+                                            <div className="flex items-center gap-2 text-xs font-bold text-amber-900">
+                                                <i className="ph ph-sliders-horizontal text-base text-amber-600"></i>
+                                                <span>ปรับความไวในการตรวจจับรอยฝน (Sensitivity): <b>{omrScannerModal.sensitivity}%</b></span>
                                             </div>
-                                            <img src={omrScannerModal.annotatedPreview} className="w-full max-h-60 object-contain rounded-xl bg-black mx-auto" />
+                                            <div className="flex items-center gap-2 w-full sm:w-64">
+                                                <span className="text-[10px] font-bold text-gray-500">เข้มมาก</span>
+                                                <input 
+                                                    type="range" 
+                                                    min="15" 
+                                                    max="85" 
+                                                    value={omrScannerModal.sensitivity} 
+                                                    onChange={(e) => {
+                                                        const val = Number(e.target.value);
+                                                        setOmrScannerModal(prev => ({ ...prev, sensitivity: val }));
+                                                        if (omrRawImageRef.current) {
+                                                            processOmrImageWithSensitivity(omrRawImageRef.current, val);
+                                                        }
+                                                    }}
+                                                    className="flex-1 accent-[#C8102E] cursor-pointer"
+                                                />
+                                                <span className="text-[10px] font-bold text-gray-500">จางๆ</span>
+                                            </div>
                                         </div>
                                     )}
 
-                                    <div className="space-y-2">
-                                        <div className="flex items-center justify-between">
-                                            <h4 className="text-xs font-black text-gray-700">2. ตรวจสอบและแก้ไขคะแนนก่อนบันทึก ({omrScannerModal.results.length} ห้อง)</h4>
-                                            <div className="flex gap-1.5">
-                                                <button onClick={() => setOmrScannerModal(prev => ({ ...prev, results: prev.results.map(r => ({ ...r, includeRoom: true, includeZone: r.room.hasZone !== false })) }))} className="px-2.5 py-1 rounded-lg bg-gray-100 text-gray-700 text-[10px] font-bold">เลือกทั้งหมด</button>
-                                                <button onClick={() => setOmrScannerModal(prev => ({ ...prev, results: prev.results.map(r => ({ ...r, includeRoom: false, includeZone: false })) }))} className="px-2.5 py-1 rounded-lg bg-gray-100 text-gray-500 text-[10px] font-bold">ยกเลิกทั้งหมด</button>
+                                    {omrScannerModal.isScanning ? (
+                                        <div className="py-12 text-center space-y-3">
+                                            <div className="w-12 h-12 border-4 border-t-[#C8102E] border-gray-200 rounded-full animate-spin mx-auto"></div>
+                                            <p className="text-sm font-bold text-gray-700">กำลังประมวลผลตารางกระดาษคำตอบ OMR...</p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            <div className="flex flex-wrap justify-between items-center gap-2 px-1">
+                                                <span className="text-xs font-black text-gray-700">ขั้นตอนที่ 2: ตรวจสอบและปรับแก้ผลคะแนนรายห้อง ({omrScannerModal.results.length} ห้อง)</span>
+                                                <div className="flex items-center gap-2 text-[11px] font-bold">
+                                                    <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-700">สีเขียว = ได้คะแนน</span>
+                                                    <span className="px-2 py-0.5 rounded bg-gray-200 text-gray-600">สีเทา = โดนหัก/ไม่เลือก</span>
+                                                </div>
+                                            </div>
+
+                                            <div className="border border-gray-200 rounded-2xl overflow-hidden bg-white">
+                                                <div className="overflow-x-auto custom-scrollbar max-h-[52vh]">
+                                                    <table className="w-full text-xs text-center border-collapse">
+                                                        <thead className="bg-gray-800 text-white sticky top-0 z-10">
+                                                            <tr>
+                                                                <th className="py-2.5 px-2 border-r border-gray-700">ที่</th>
+                                                                <th className="py-2.5 px-3 border-r border-gray-700 text-left">ห้อง</th>
+                                                                <th className="py-2.5 px-2 border-r border-gray-700 bg-blue-900">หมวดห้องเรียน (แตะเพื่อสลับคะแนน)</th>
+                                                                <th className="py-2.5 px-2 border-r border-gray-700 bg-blue-950">รวมห้อง</th>
+                                                                <th className="py-2.5 px-2 border-r border-gray-700 bg-fuchsia-900">หมวดเขตพื้นที่ (แตะเพื่อเลือก)</th>
+                                                                <th className="py-2.5 px-2 bg-fuchsia-950">รวมเขต</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-gray-200">
+                                                            {omrScannerModal.results.map((item) => {
+                                                                const rs = item.roomScores;
+                                                                const roomTotal = rs.skip ? 'ข้าม' : (rs.noDuty ? -5 : (rs.c1 + rs.c2 + rs.c3 + rs.c4 + rs.c5));
+                                                                const hasZone = item.room.hasZone !== false;
+                                                                const zoneTotal = !hasZone ? 'ไม่มี' : (item.zoneSkip ? 'ข้าม' : item.zoneScore);
+
+                                                                return (
+                                                                    <tr key={item.room.id} className="hover:bg-gray-50">
+                                                                        <td className="py-2 px-2 font-bold text-gray-500 border-r border-gray-100">{item.index}</td>
+                                                                        <td className="py-2 px-3 font-black text-gray-800 text-left border-r border-gray-100 whitespace-nowrap">{item.room.name}</td>
+                                                                        <td className="py-2 px-2 border-r border-gray-100">
+                                                                            <div className="flex items-center justify-center gap-1 flex-wrap">
+                                                                                {[
+                                                                                    { k: 'c1', l: 'โต๊ะ' },
+                                                                                    { k: 'c2', l: 'ขยะ' },
+                                                                                    { k: 'c3', l: 'ไฟ' },
+                                                                                    { k: 'c4', l: 'พื้น' },
+                                                                                    { k: 'c5', l: 'บอร์ด' }
+                                                                                ].map(crit => {
+                                                                                    const active = !rs.noDuty && !rs.skip && rs[crit.k] > 0;
+                                                                                    return (
+                                                                                        <button
+                                                                                            key={crit.k}
+                                                                                            type="button"
+                                                                                            onClick={() => toggleOmrResultCriterion(item.room.id, crit.k)}
+                                                                                            className={`px-2 py-1 rounded-lg font-bold text-[10px] transition-all ${active ? 'bg-emerald-500 text-white shadow-sm' : 'bg-gray-100 text-gray-400'}`}
+                                                                                        >
+                                                                                            {crit.l}
+                                                                                        </button>
+                                                                                    );
+                                                                                })}
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => toggleOmrResultCriterion(item.room.id, 'noDuty')}
+                                                                                    className={`px-2 py-1 rounded-lg font-bold text-[10px] transition-all ${rs.noDuty ? 'bg-red-600 text-white shadow-sm' : 'bg-gray-100 text-gray-400'}`}
+                                                                                >
+                                                                                    ไม่ทำ (-5)
+                                                                                </button>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => toggleOmrResultCriterion(item.room.id, 'skip')}
+                                                                                    className={`px-2 py-1 rounded-lg font-bold text-[10px] transition-all ${rs.skip ? 'bg-gray-700 text-white shadow-sm' : 'bg-gray-100 text-gray-400'}`}
+                                                                                >
+                                                                                    ข้าม
+                                                                                </button>
+                                                                            </div>
+                                                                        </td>
+                                                                        <td className="py-2 px-2 font-black border-r border-gray-100">
+                                                                            <span className={`px-2 py-0.5 rounded-md ${roomTotal === 'ข้าม' ? 'bg-gray-100 text-gray-500' : roomTotal < 0 ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-700'}`}>
+                                                                                {typeof roomTotal === 'number' && roomTotal > 0 ? `+${roomTotal}` : roomTotal}
+                                                                            </span>
+                                                                        </td>
+                                                                        <td className="py-2 px-2 border-r border-gray-100">
+                                                                            {hasZone ? (
+                                                                                <div className="flex items-center justify-center gap-1 flex-wrap">
+                                                                                    {[
+                                                                                        { v: 10, l: '10' },
+                                                                                        { v: 8, l: '8' },
+                                                                                        { v: 5, l: '5' },
+                                                                                        { v: 2, l: '2' },
+                                                                                        { v: -5, l: '-5' }
+                                                                                    ].map(zb => {
+                                                                                        const active = !item.zoneSkip && item.zoneScore === zb.v;
+                                                                                        return (
+                                                                                            <button
+                                                                                                key={zb.v}
+                                                                                                type="button"
+                                                                                                onClick={() => setOmrResultZone(item.room.id, zb.v)}
+                                                                                                className={`w-7 py-1 rounded-lg font-bold text-[10px] transition-all ${active ? (zb.v < 0 ? 'bg-red-600 text-white' : 'bg-fuchsia-600 text-white') : 'bg-gray-100 text-gray-400'}`}
+                                                                                            >
+                                                                                                {zb.l}
+                                                                                            </button>
+                                                                                        );
+                                                                                    })}
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={() => setOmrResultZone(item.room.id, 'skip')}
+                                                                                        className={`px-2 py-1 rounded-lg font-bold text-[10px] transition-all ${item.zoneSkip ? 'bg-gray-700 text-white' : 'bg-gray-100 text-gray-400'}`}
+                                                                                    >
+                                                                                        ข้าม
+                                                                                    </button>
+                                                                                </div>
+                                                                            ) : (
+                                                                                <span className="text-[10px] text-gray-400">ไม่มีเขตพื้นที่</span>
+                                                                            )}
+                                                                        </td>
+                                                                        <td className="py-2 px-2 font-black">
+                                                                            <span className={`px-2 py-0.5 rounded-md ${zoneTotal === 'ไม่มี' || zoneTotal === 'ข้าม' ? 'bg-gray-100 text-gray-500' : zoneTotal < 0 ? 'bg-red-50 text-red-600' : 'bg-fuchsia-50 text-fuchsia-700'}`}>
+                                                                                {typeof zoneTotal === 'number' && zoneTotal > 0 ? `+${zoneTotal}` : zoneTotal}
+                                                                            </span>
+                                                                        </td>
+                                                                    </tr>
+                                                                );
+                                                            })}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
                                             </div>
                                         </div>
-
-                                        <div className="border border-gray-200 rounded-2xl overflow-hidden divide-y divide-gray-100 bg-white">
-                                            {omrScannerModal.results.map(item => {
-                                                const rSum = item.roomScores.skip ? 'ข้าม' : (item.roomScores.noDuty ? -5 : (item.roomScores.c1 + item.roomScores.c2 + item.roomScores.c3 + item.roomScores.c4 + item.roomScores.c5));
-                                                return (
-                                                    <div key={item.room.id} className="p-2.5 flex flex-col md:flex-row md:items-center justify-between gap-2 text-xs hover:bg-gray-50/70">
-                                                        <div className="flex items-center gap-2 min-w-[120px]">
-                                                            <span className="w-6 h-6 rounded-full bg-gray-100 text-gray-600 font-bold text-[10px] flex items-center justify-center">{item.index}</span>
-                                                            <span className="font-black text-gray-800 text-sm">{item.room.name}</span>
-                                                        </div>
-
-                                                        <div className="flex flex-wrap items-center gap-1.5">
-                                                            <label className="flex items-center gap-1 mr-1 font-bold text-blue-700 cursor-pointer">
-                                                                <input type="checkbox" checked={item.includeRoom} onChange={e => setOmrScannerModal(prev => ({ ...prev, results: prev.results.map(x => x.room.id === item.room.id ? { ...x, includeRoom: e.target.checked } : x) }))} className="accent-blue-600" />
-                                                                ห้อง ({rSum})
-                                                            </label>
-                                                            {['c1','c2','c3','c4','c5'].map((cKey, cIdx) => (
-                                                                <button key={cKey} type="button" onClick={() => toggleOmrResultCriterion(item.room.id, cKey)} className={`px-2 py-1 rounded-lg font-bold text-[10px] border ${!item.roomScores.noDuty && !item.roomScores.skip && item.roomScores[cKey] === 2 ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-gray-50 text-gray-400 border-gray-200'}`}>
-                                                                    {ROOM_CRITERIA[cIdx].name}
-                                                                </button>
-                                                            ))}
-                                                            <button type="button" onClick={() => toggleOmrResultCriterion(item.room.id, 'noDuty')} className={`px-2 py-1 rounded-lg font-bold text-[10px] border ${item.roomScores.noDuty ? 'bg-red-600 text-white border-red-600' : 'bg-gray-50 text-gray-400 border-gray-200'}`}>-5</button>
-                                                            <button type="button" onClick={() => toggleOmrResultCriterion(item.room.id, 'skip')} className={`px-2 py-1 rounded-lg font-bold text-[10px] border ${item.roomScores.skip ? 'bg-gray-600 text-white border-gray-600' : 'bg-gray-50 text-gray-400 border-gray-200'}`}>ข้าม</button>
-                                                        </div>
-
-                                                        {item.room.hasZone !== false && (
-                                                            <div className="flex flex-wrap items-center gap-1">
-                                                                <label className="flex items-center gap-1 mr-1 font-bold text-fuchsia-700 cursor-pointer">
-                                                                    <input type="checkbox" checked={item.includeZone} onChange={e => setOmrScannerModal(prev => ({ ...prev, results: prev.results.map(x => x.room.id === item.room.id ? { ...x, includeZone: e.target.checked } : x) }))} className="accent-fuchsia-600" />
-                                                                    เขต:
-                                                                </label>
-                                                                {[10, 8, 5, 2, -5].map(zVal => (
-                                                                    <button key={zVal} type="button" onClick={() => setOmrResultZone(item.room.id, zVal)} className={`w-6 h-6 rounded-lg font-bold text-[10px] border ${!item.zoneSkip && item.zoneScore === zVal ? 'bg-fuchsia-600 text-white border-fuchsia-600' : 'bg-gray-50 text-gray-400 border-gray-200'}`}>
-                                                                        {zVal}
-                                                                    </button>
-                                                                ))}
-                                                                <button type="button" onClick={() => setOmrResultZone(item.room.id, 'skip')} className={`px-2 h-6 rounded-lg font-bold text-[10px] border ${item.zoneSkip ? 'bg-gray-600 text-white border-gray-600' : 'bg-gray-50 text-gray-400 border-gray-200'}`}>ข้าม</button>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    </div>
+                                    )}
                                 </div>
 
-                                <div className="pt-3 border-t border-gray-100 flex justify-end gap-2 shrink-0">
-                                    <button onClick={() => setOmrScannerModal(prev => ({ ...prev, isOpen: false }))} className="px-5 py-3 rounded-xl bg-gray-100 text-gray-600 font-bold text-xs hover:bg-gray-200">ยกเลิก</button>
-                                    <button onClick={handleSaveOmrScannedResults} className="px-6 py-3 rounded-xl bg-[#C8102E] text-white font-black text-xs shadow-lg shadow-red-500/20 hover:bg-red-800">
-                                        ยืนยันบันทึกผลจากการสแกน
+                                <div className="pt-3 border-t border-gray-100 flex justify-between items-center gap-3 shrink-0">
+                                    <button onClick={() => setOmrScannerModal(prev => ({ ...prev, isOpen: false }))} className="px-5 py-3 rounded-xl bg-gray-100 text-gray-600 font-bold text-xs hover:bg-gray-200">
+                                        ยกเลิก
+                                    </button>
+                                    <button onClick={handleSaveOmrScannedResults} className="flex-1 sm:flex-none px-8 py-3.5 rounded-xl bg-[#C8102E] hover:bg-red-800 text-white font-black text-xs sm:text-sm shadow-lg shadow-red-500/25 flex items-center justify-center gap-2 active:scale-95 transition-all">
+                                        <i className="ph ph-check-circle text-base ph-fill"></i> ยืนยันและบันทึกผลสแกนทั้งหมดลงระบบ
                                     </button>
                                 </div>
                             </div>
