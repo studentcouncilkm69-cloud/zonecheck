@@ -1973,10 +1973,10 @@
                     index: idx + 1,
                     selectedForSave: false,
                     hasDetectedMark: false,
-                    includeRoom: typeFilter === 'both' || typeFilter === 'room',
-                    includeZone: (typeFilter === 'both' || typeFilter === 'zone') && r.hasZone !== false,
+                    includeRoom: false,
+                    includeZone: false,
                     roomScores: { full: false, c1: 2, c2: 2, c3: 2, c4: 2, c5: 2, noDuty: false, skip: false },
-                    zoneScore: 10,
+                    zoneScore: null,
                     zoneSkip: false
                 }));
             };
@@ -2650,7 +2650,7 @@
                         }
 
                         const zoneValues = [10, 8, 5, 2, -5, null];
-                        let zScore = 10;
+                        let zScore = null;
                         let zSkip = false;
                         let anyZoneMarked = false;
                         if (zoneBubbles.length > 0 && r.hasZone !== false) {
@@ -2843,7 +2843,13 @@
                     ...prev,
                     results: prev.results.map(item => {
                         if (item.room.id !== roomId) return item;
-                        if (val === 'skip') return { ...item, zoneSkip: !item.zoneSkip, hasDetectedMark: true, selectedForSave: true, includeZone: true };
+                        if (val === 'skip') {
+                            const nextSkip = !item.zoneSkip;
+                            return { ...item, zoneSkip: nextSkip, zoneScore: null, hasDetectedMark: true, selectedForSave: true, includeZone: nextSkip };
+                        }
+                        if (!item.zoneSkip && item.zoneScore === val && item.includeZone) {
+                            return { ...item, zoneSkip: false, zoneScore: null, includeZone: false };
+                        }
                         return { ...item, zoneSkip: false, zoneScore: val, hasDetectedMark: true, selectedForSave: true, includeZone: true };
                     })
                 }));
@@ -2900,7 +2906,7 @@
                             photoUrl: ''
                         });
                     }
-                    if (item.includeZone && item.room.hasZone !== false) {
+                    if (item.includeZone && item.room.hasZone !== false && (item.zoneSkip || item.zoneScore !== null)) {
                         let totalScore = item.zoneScore;
                         let breakdown = {};
                         if (item.zoneSkip) {
@@ -6347,9 +6353,9 @@
                                                         <tbody className="divide-y divide-gray-200">
                                                             {omrScannerModal.results.map((item) => {
                                                                 const rs = item.roomScores;
-                                                                const roomTotal = rs.skip ? 'ข้าม' : (rs.noDuty ? -5 : (rs.c1 + rs.c2 + rs.c3 + rs.c4 + rs.c5));
+                                                                const roomTotal = !item.includeRoom ? 'ยังไม่ตรวจ' : (rs.skip ? 'ข้าม' : (rs.noDuty ? -5 : (rs.c1 + rs.c2 + rs.c3 + rs.c4 + rs.c5)));
                                                                 const hasZone = item.room.hasZone !== false;
-                                                                const zoneTotal = !hasZone ? 'ไม่มี' : (item.zoneSkip ? 'ข้าม' : item.zoneScore);
+                                                                const zoneTotal = !hasZone ? 'ไม่มี' : (!item.includeZone ? 'ยังไม่ตรวจ' : (item.zoneSkip ? 'ข้าม' : item.zoneScore));
                                                                 const isEffectiveActive = item.selectedForSave && (!omrScannerModal.onlySaveMarked || item.hasDetectedMark);
 
                                                                 return (
@@ -6366,7 +6372,7 @@
                                                                                         <button
                                                                                             type="button"
                                                                                             onClick={() => toggleOmrResultCriterion(item.room.id, 'full')}
-                                                                                            className={`px-2 py-1 rounded-lg font-bold text-[10px] transition-all ${!rs.noDuty && !rs.skip && rs.c1===2 && rs.c2===2 && rs.c3===2 && rs.c4===2 && rs.c5===2 ? 'bg-emerald-600 text-white shadow-sm' : 'bg-gray-100 text-gray-400'}`}
+                                                                                            className={`px-2 py-1 rounded-lg font-bold text-[10px] transition-all ${item.includeRoom && !rs.noDuty && !rs.skip && rs.c1===2 && rs.c2===2 && rs.c3===2 && rs.c4===2 && rs.c5===2 ? 'bg-emerald-600 text-white shadow-sm' : 'bg-gray-100 text-gray-400'}`}
                                                                                         >
                                                                                             เต็ม 10
                                                                                         </button>
@@ -6377,13 +6383,14 @@
                                                                                             { k: 'c4', l: 'พื้น' },
                                                                                             { k: 'c5', l: 'บอร์ด' }
                                                                                         ].map(crit => {
-                                                                                            const active = !rs.noDuty && !rs.skip && rs[crit.k] > 0;
+                                                                                            const active = item.includeRoom && !rs.noDuty && !rs.skip && rs[crit.k] > 0;
+                                                                                            const isDeducted = item.includeRoom && !rs.noDuty && !rs.skip && rs[crit.k] === 0;
                                                                                             return (
                                                                                                 <button
                                                                                                     key={crit.k}
                                                                                                     type="button"
                                                                                                     onClick={() => toggleOmrResultCriterion(item.room.id, crit.k)}
-                                                                                                    className={`px-2 py-1 rounded-lg font-bold text-[10px] transition-all ${active ? 'bg-emerald-500 text-white shadow-sm' : 'bg-rose-100 text-rose-600'}`}
+                                                                                                    className={`px-2 py-1 rounded-lg font-bold text-[10px] transition-all ${active ? 'bg-emerald-500 text-white shadow-sm' : isDeducted ? 'bg-rose-100 text-rose-600 border border-rose-300' : 'bg-gray-100 text-gray-400'}`}
                                                                                                 >
                                                                                                     {crit.l}
                                                                                                 </button>
@@ -6392,21 +6399,21 @@
                                                                                         <button
                                                                                             type="button"
                                                                                             onClick={() => toggleOmrResultCriterion(item.room.id, 'noDuty')}
-                                                                                            className={`px-2 py-1 rounded-lg font-bold text-[10px] transition-all ${rs.noDuty ? 'bg-red-600 text-white shadow-sm' : 'bg-gray-100 text-gray-400'}`}
+                                                                                            className={`px-2 py-1 rounded-lg font-bold text-[10px] transition-all ${item.includeRoom && rs.noDuty ? 'bg-red-600 text-white shadow-sm' : 'bg-gray-100 text-gray-400'}`}
                                                                                         >
                                                                                             ไม่ทำ (-5)
                                                                                         </button>
                                                                                         <button
                                                                                             type="button"
                                                                                             onClick={() => toggleOmrResultCriterion(item.room.id, 'skip')}
-                                                                                            className={`px-2 py-1 rounded-lg font-bold text-[10px] transition-all ${rs.skip ? 'bg-gray-700 text-white shadow-sm' : 'bg-gray-100 text-gray-400'}`}
+                                                                                            className={`px-2 py-1 rounded-lg font-bold text-[10px] transition-all ${item.includeRoom && rs.skip ? 'bg-gray-700 text-white shadow-sm' : 'bg-gray-100 text-gray-400'}`}
                                                                                         >
                                                                                             ข้าม
                                                                                         </button>
                                                                                     </div>
                                                                                 </td>
                                                                                 <td className="py-2 px-2 font-black border-r border-gray-100">
-                                                                                    <span className={`px-2 py-0.5 rounded-md ${roomTotal === 'ข้าม' ? 'bg-gray-100 text-gray-500' : roomTotal < 0 ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-700'}`}>
+                                                                                    <span className={`px-2 py-0.5 rounded-md ${roomTotal === 'ยังไม่ตรวจ' || roomTotal === 'ข้าม' ? 'bg-gray-100 text-gray-400 text-[10px]' : roomTotal < 0 ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-700'}`}>
                                                                                         {typeof roomTotal === 'number' && roomTotal > 0 ? `+${roomTotal}` : roomTotal}
                                                                                     </span>
                                                                                 </td>
@@ -6424,13 +6431,13 @@
                                                                                                 { v: 2, l: '2' },
                                                                                                 { v: -5, l: '-5' }
                                                                                             ].map(zb => {
-                                                                                                const active = !item.zoneSkip && item.zoneScore === zb.v;
+                                                                                                const active = item.includeZone && !item.zoneSkip && item.zoneScore === zb.v;
                                                                                                 return (
                                                                                                     <button
                                                                                                         key={zb.v}
                                                                                                         type="button"
                                                                                                         onClick={() => setOmrResultZone(item.room.id, zb.v)}
-                                                                                                        className={`w-7 py-1 rounded-lg font-bold text-[10px] transition-all ${active ? (zb.v < 0 ? 'bg-red-600 text-white' : 'bg-fuchsia-600 text-white') : 'bg-gray-100 text-gray-400'}`}
+                                                                                                        className={`w-7 py-1 rounded-lg font-bold text-[10px] transition-all ${active ? (zb.v < 0 ? 'bg-red-600 text-white shadow-sm' : 'bg-fuchsia-600 text-white shadow-sm') : 'bg-gray-100 text-gray-400'}`}
                                                                                                     >
                                                                                                         {zb.l}
                                                                                                     </button>
@@ -6439,7 +6446,7 @@
                                                                                             <button
                                                                                                 type="button"
                                                                                                 onClick={() => setOmrResultZone(item.room.id, 'skip')}
-                                                                                                className={`px-2 py-1 rounded-lg font-bold text-[10px] transition-all ${item.zoneSkip ? 'bg-gray-700 text-white' : 'bg-gray-100 text-gray-400'}`}
+                                                                                                className={`px-2 py-1 rounded-lg font-bold text-[10px] transition-all ${item.includeZone && item.zoneSkip ? 'bg-gray-700 text-white shadow-sm' : 'bg-gray-100 text-gray-400'}`}
                                                                                             >
                                                                                                 ข้าม
                                                                                             </button>
@@ -6449,7 +6456,7 @@
                                                                                     )}
                                                                                 </td>
                                                                                 <td className="py-2 px-2 font-black">
-                                                                                    <span className={`px-2 py-0.5 rounded-md ${zoneTotal === 'ไม่มี' || zoneTotal === 'ข้าม' ? 'bg-gray-100 text-gray-500' : zoneTotal < 0 ? 'bg-red-50 text-red-600' : 'bg-fuchsia-50 text-fuchsia-700'}`}>
+                                                                                    <span className={`px-2 py-0.5 rounded-md ${zoneTotal === 'ไม่มี' || zoneTotal === 'ยังไม่ตรวจ' || zoneTotal === 'ข้าม' ? 'bg-gray-100 text-gray-400 text-[10px]' : zoneTotal < 0 ? 'bg-red-50 text-red-600' : 'bg-fuchsia-50 text-fuchsia-700'}`}>
                                                                                         {typeof zoneTotal === 'number' && zoneTotal > 0 ? `+${zoneTotal}` : zoneTotal}
                                                                                     </span>
                                                                                 </td>
