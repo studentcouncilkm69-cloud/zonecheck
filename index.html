@@ -375,6 +375,16 @@
             const [showAnnouncement, setShowAnnouncement] = useState(false);
             const [showZoneMap, setShowZoneMap] = useState(false); 
             const [showRoomMap, setShowRoomMap] = useState(false); 
+            const [mapZoom, setMapZoom] = useState(1);
+            const [mapPan, setMapPan] = useState({ x: 0, y: 0 });
+            const mapTouchStateRef = useRef({
+                isDragging: false,
+                startX: 0,
+                startY: 0,
+                initialPinchDist: null,
+                initialZoom: 1,
+                lastTap: 0
+            });
             const [showMainBannerPopup, setShowMainBannerPopup] = useState(false);
             const [hideBannerFor7Days, setHideBannerFor7Days] = useState(false);
             const [printData, setPrintData] = useState({ isPreparing: false, format: null, mode: null, title: '', subtitle: '', dateText: '', data: [] });
@@ -476,6 +486,112 @@
                     setExcelMode('single');
                 }
             }, [currentRoute]);
+
+            useEffect(() => {
+                if (showRoomMap || showZoneMap) {
+                    setMapZoom(1);
+                    setMapPan({ x: 0, y: 0 });
+                }
+            }, [showRoomMap, showZoneMap]);
+
+            const handleMapZoomIn = () => {
+                setMapZoom(prev => Math.min(4, +(prev + 0.5).toFixed(2)));
+            };
+
+            const handleMapZoomOut = () => {
+                setMapZoom(prev => {
+                    const next = Math.max(1, +(prev - 0.5).toFixed(2));
+                    if (next === 1) setMapPan({ x: 0, y: 0 });
+                    return next;
+                });
+            };
+
+            const handleMapReset = () => {
+                setMapZoom(1);
+                setMapPan({ x: 0, y: 0 });
+            };
+
+            const handleMapTouchStart = (e) => {
+                if (e.touches.length === 2) {
+                    const dx = e.touches[0].clientX - e.touches[1].clientX;
+                    const dy = e.touches[0].clientY - e.touches[1].clientY;
+                    mapTouchStateRef.current.initialPinchDist = Math.hypot(dx, dy);
+                    mapTouchStateRef.current.initialZoom = mapZoom;
+                    mapTouchStateRef.current.isDragging = false;
+                } else if (e.touches.length === 1) {
+                    const now = Date.now();
+                    if (now - mapTouchStateRef.current.lastTap < 300) {
+                        if (mapZoom > 1) {
+                            setMapZoom(1);
+                            setMapPan({ x: 0, y: 0 });
+                        } else {
+                            setMapZoom(2.2);
+                        }
+                        mapTouchStateRef.current.lastTap = 0;
+                        return;
+                    }
+                    mapTouchStateRef.current.lastTap = now;
+                    if (mapZoom > 1) {
+                        mapTouchStateRef.current.isDragging = true;
+                        mapTouchStateRef.current.startX = e.touches[0].clientX - mapPan.x;
+                        mapTouchStateRef.current.startY = e.touches[0].clientY - mapPan.y;
+                    }
+                }
+            };
+
+            const handleMapTouchMove = (e) => {
+                if (e.touches.length === 2 && mapTouchStateRef.current.initialPinchDist) {
+                    if (e.cancelable) e.preventDefault();
+                    const dx = e.touches[0].clientX - e.touches[1].clientX;
+                    const dy = e.touches[0].clientY - e.touches[1].clientY;
+                    const dist = Math.hypot(dx, dy);
+                    const scaleFactor = dist / mapTouchStateRef.current.initialPinchDist;
+                    const nextZoom = Math.max(1, Math.min(4, +(mapTouchStateRef.current.initialZoom * scaleFactor).toFixed(2)));
+                    setMapZoom(nextZoom);
+                    if (nextZoom === 1) setMapPan({ x: 0, y: 0 });
+                } else if (e.touches.length === 1 && mapTouchStateRef.current.isDragging && mapZoom > 1) {
+                    if (e.cancelable) e.preventDefault();
+                    const nextX = e.touches[0].clientX - mapTouchStateRef.current.startX;
+                    const nextY = e.touches[0].clientY - mapTouchStateRef.current.startY;
+                    setMapPan({ x: nextX, y: nextY });
+                }
+            };
+
+            const handleMapTouchEnd = () => {
+                mapTouchStateRef.current.isDragging = false;
+                mapTouchStateRef.current.initialPinchDist = null;
+            };
+
+            const handleMapMouseDown = (e) => {
+                if (mapZoom <= 1) return;
+                e.preventDefault();
+                mapTouchStateRef.current.isDragging = true;
+                mapTouchStateRef.current.startX = e.clientX - mapPan.x;
+                mapTouchStateRef.current.startY = e.clientY - mapPan.y;
+            };
+
+            const handleMapMouseMove = (e) => {
+                if (!mapTouchStateRef.current.isDragging || mapZoom <= 1) return;
+                e.preventDefault();
+                setMapPan({
+                    x: e.clientX - mapTouchStateRef.current.startX,
+                    y: e.clientY - mapTouchStateRef.current.startY
+                });
+            };
+
+            const handleMapMouseUp = () => {
+                mapTouchStateRef.current.isDragging = false;
+            };
+
+            const handleMapWheel = (e) => {
+                e.preventDefault();
+                const delta = e.deltaY < 0 ? 0.25 : -0.25;
+                setMapZoom(prev => {
+                    const next = Math.max(1, Math.min(4, +(prev + delta).toFixed(2)));
+                    if (next === 1) setMapPan({ x: 0, y: 0 });
+                    return next;
+                });
+            };
 
             const canViewBanner = (visibilitySetting) => {
                 if (!visibilitySetting || visibilitySetting === 'public') return true;
@@ -5155,19 +5271,73 @@
                         </div>
                     )}
 
-                    {/* Modal แผนผังห้องเรียน / เขตพื้นที่ */}
+                    {/* Modal แผนผังห้องเรียน / เขตพื้นที่ (รองรับการซูมนิ้วถ่าง Pinch-to-Zoom, แตะ 2 ครั้ง และปุ่มซูมในแอป LINE) */}
                     {(showRoomMap || showZoneMap) && (
-                        <div className="fixed inset-0 z-[9997] bg-gray-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in" onClick={() => { setShowRoomMap(false); setShowZoneMap(false); }}>
-                            <div className="bg-white rounded-[2rem] w-full max-w-3xl p-5 shadow-2xl relative" onClick={e => e.stopPropagation()}>
-                                <div className="flex justify-between items-center mb-3 pb-2 border-b border-gray-100">
-                                    <h3 className="font-black text-gray-800 text-base">{showRoomMap ? 'แผนผังห้องเรียน' : 'แผนผังเขตพื้นที่'}</h3>
-                                    <button onClick={() => { setShowRoomMap(false); setShowZoneMap(false); }} className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center hover:bg-gray-200"><i className="ph ph-x"></i></button>
+                        <div className="fixed inset-0 z-[9997] bg-gray-900/85 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 animate-in fade-in" onClick={() => { setShowRoomMap(false); setShowZoneMap(false); }}>
+                            <div className="bg-white rounded-[2rem] w-full max-w-4xl p-4 sm:p-5 shadow-2xl relative flex flex-col max-h-[92vh]" onClick={e => e.stopPropagation()}>
+                                <div className="flex flex-wrap justify-between items-center gap-2 mb-3 pb-2.5 border-b border-gray-100 shrink-0">
+                                    <div>
+                                        <h3 className="font-black text-gray-800 text-sm sm:text-base flex items-center gap-2">
+                                            <i className={`ph ${showRoomMap ? 'ph-buildings text-blue-600' : 'ph-map-pin text-[#C8102E]'} text-lg`}></i>
+                                            {showRoomMap ? 'แผนผังห้องเรียน' : 'แผนผังเขตพื้นที่'}
+                                        </h3>
+                                        <p className="text-[10px] font-bold text-gray-400">ใช้ 2 นิ้วถ่างเพื่อซูม, แตะ 2 ครั้งที่รูป หรือกดปุ่ม + / - ด้านบนได้เลย</p>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                        {(showRoomMap ? settings?.room_map_url : settings?.zone_map_url) && (
+                                            <div className="flex items-center bg-gray-100 rounded-xl p-1 gap-1 border border-gray-200">
+                                                <button onClick={handleMapZoomOut} disabled={mapZoom <= 1} className="w-7 h-7 rounded-lg bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-40 flex items-center justify-center font-bold shadow-sm transition-all" title="ซูมออก">
+                                                    <i className="ph ph-minus text-xs font-bold"></i>
+                                                </button>
+                                                <button onClick={handleMapReset} className="px-2 h-7 rounded-lg bg-white text-[#C8102E] font-black text-[11px] shadow-sm hover:bg-red-50 transition-all" title="รีเซ็ตขนาด">
+                                                    {Math.round(mapZoom * 100)}%
+                                                </button>
+                                                <button onClick={handleMapZoomIn} disabled={mapZoom >= 4} className="w-7 h-7 rounded-lg bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-40 flex items-center justify-center font-bold shadow-sm transition-all" title="ซูมเข้า">
+                                                    <i className="ph ph-plus text-xs font-bold"></i>
+                                                </button>
+                                            </div>
+                                        )}
+                                        <button onClick={() => { setShowRoomMap(false); setShowZoneMap(false); }} className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center hover:bg-gray-200 ml-1"><i className="ph ph-x"></i></button>
+                                    </div>
                                 </div>
-                                <div className="max-h-[75vh] overflow-auto flex items-center justify-center bg-gray-50 rounded-xl p-2">
+
+                                <div 
+                                    className="relative flex-1 min-h-[55vh] max-h-[75vh] overflow-hidden flex items-center justify-center bg-gray-900/5 rounded-2xl border border-gray-200 select-none touch-none"
+                                    onTouchStart={handleMapTouchStart}
+                                    onTouchMove={handleMapTouchMove}
+                                    onTouchEnd={handleMapTouchEnd}
+                                    onMouseDown={handleMapMouseDown}
+                                    onMouseMove={handleMapMouseMove}
+                                    onMouseUp={handleMapMouseUp}
+                                    onMouseLeave={handleMapMouseUp}
+                                    onWheel={handleMapWheel}
+                                    onDoubleClick={() => {
+                                        if (mapZoom > 1) handleMapReset();
+                                        else setMapZoom(2.2);
+                                    }}
+                                >
                                     {(showRoomMap ? settings?.room_map_url : settings?.zone_map_url) ? (
-                                        <img src={showRoomMap ? settings.room_map_url : settings.zone_map_url} className="max-w-full max-h-[70vh] object-contain rounded-lg" />
+                                        <img 
+                                            src={showRoomMap ? settings.room_map_url : settings.zone_map_url} 
+                                            draggable="false"
+                                            style={{
+                                                transform: `translate3d(${mapPan.x}px, ${mapPan.y}px, 0) scale(${mapZoom})`,
+                                                transition: mapTouchStateRef.current.isDragging || mapTouchStateRef.current.initialPinchDist ? 'none' : 'transform 0.18s ease-out',
+                                                cursor: mapZoom > 1 ? 'grab' : 'zoom-in'
+                                            }}
+                                            className="max-w-full max-h-[70vh] object-contain rounded-lg pointer-events-none select-none" 
+                                        />
                                     ) : (
                                         <p className="text-center text-gray-400 py-16 text-sm font-bold">ยังไม่ได้ตั้งค่ารูปแผนผังในหน้าแอดมิน</p>
+                                    )}
+
+                                    {mapZoom > 1 && (
+                                        <button 
+                                            onClick={handleMapReset}
+                                            className="absolute bottom-3 right-3 px-3 py-1.5 rounded-full bg-gray-900/80 backdrop-blur-md text-white text-[11px] font-bold shadow-lg flex items-center gap-1.5 hover:bg-black transition-all"
+                                        >
+                                            <i className="ph ph-arrows-in-simple"></i> รีเซ็ตขนาด (100%)
+                                        </button>
                                     )}
                                 </div>
                             </div>
