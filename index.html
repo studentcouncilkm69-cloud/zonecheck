@@ -2401,8 +2401,13 @@
                         const px = Math.max(0, Math.min(W - 1, Math.round(x)));
                         const py = Math.max(0, Math.min(H - 1, Math.round(y)));
                         const idx = (py * W + px) * 4;
-                        const lum = 0.299 * imgData[idx] + 0.587 * imgData[idx + 1] + 0.114 * imgData[idx + 2];
-                        return 255 - lum;
+                        const r = imgData[idx];
+                        const g = imgData[idx + 1];
+                        const b = imgData[idx + 2];
+                        const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+                        // ตรวจจับทั้งความมืด (ดินสอ/ปากกาดำ) และความสดของสีหมึก (ปากกาน้ำเงิน/แดง)
+                        const colorSpread = Math.max(r, g, b) - Math.min(r, g, b);
+                        return Math.min(255, (255 - lum) + (colorSpread * 0.65));
                     };
 
                     const findFiducialCornerMark = (startX, endX, startY, endY, defaultX, defaultY) => {
@@ -2552,10 +2557,10 @@
                         colRelativeCenters = [0.3125, 0.4375, 0.5625, 0.6875, 0.8125, 0.9375];
                     }
 
-                    const markThreshold = Math.max(26, 62 - (sensValue * 0.5));
-                    // พิกัดแนวตั้งของแถวแรกและระยะห่างแต่ละแถวเมื่อเทียบกับระยะห่างจุดมาร์คบน-ล่าง
-                    const tableTopV = 0.1755;
-                    const rowStepV = 0.02055;
+                    const markThreshold = Math.max(22, 54 - (sensValue * 0.48));
+                    // ขยับพิกัดเริ่มต้นขึ้น 1 แถวเต็ม เพื่อให้แถวที่ 1 (ม.1/1) ทาบตรงวงกลมแถวบนสุดเป๊ะ และแถวที่ 24 จบพอดีขอบตารางล่าง
+                    const tableTopV = 0.1552;
+                    const rowStepV = 0.02052;
 
                     const scannedResults = targetRooms.map((r, i) => {
                         const isRightCol = i >= half;
