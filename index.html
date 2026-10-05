@@ -270,6 +270,33 @@
             return isFirst ? 'text-base md:text-xl' : 'text-sm md:text-lg';
         };
 
+        const compareRoomNames = (a, b) => {
+            const nameA = String(a?.name || a || '').trim();
+            const nameB = String(b?.name || b || '').trim();
+            const parseRoom = (str) => {
+                const m = str.match(/(\d+)\s*\/\s*([0-9]+|[A-Za-zก-ฮ]+)/);
+                if (!m) return { grade: 999, subNum: 999, subText: str };
+                const grade = parseInt(m[1], 10);
+                const rawSub = m[2];
+                const isNum = /^\d+$/.test(rawSub);
+                return {
+                    grade,
+                    subNum: isNum ? parseInt(rawSub, 10) : 999,
+                    subText: isNum ? '' : rawSub.toLowerCase()
+                };
+            };
+            const pa = parseRoom(nameA);
+            const pb = parseRoom(nameB);
+            if (pa.grade !== pb.grade) return pa.grade - pb.grade;
+            if (pa.subNum !== pb.subNum) return pa.subNum - pb.subNum;
+            return pa.subText.localeCompare(pb.subText, 'th');
+        };
+
+        const sortRoomsNaturally = (roomList) => {
+            if (!Array.isArray(roomList)) return [];
+            return [...roomList].sort(compareRoomNames);
+        };
+
         function ZoneCheckApp() {
             const [appMode, setAppMode] = useState(() => getValidSessionState()?.mode || 'guest'); 
             const [currentRoute, setCurrentRoute] = useState(() => getValidSessionState()?.route || 'dashboard'); 
@@ -303,7 +330,7 @@
                 return safeParse(data, fallback);
             };
 
-            const [rooms, setRooms] = useState(() => loadDataSafe('zc26_rooms', []));
+            const [rooms, setRooms] = useState(() => sortRoomsNaturally(loadDataSafe('zc26_rooms', [])));
             const [inspectors, setInspectors] = useState(() => loadDataSafe('zc26_inspectors', []));
             const [inspections, setInspections] = useState(() => loadDataSafe('zc26_inspections', []));
             const [settings, setSettings] = useState(() => loadDataSafe('zc26_settings', initialSettings));
@@ -1081,7 +1108,7 @@
                             avatar_url: u.avatar_url ? String(u.avatar_url).trim() : ''
                         }));
 
-                        setRooms(Array.isArray(json.rooms) ? json.rooms : []);
+                        setRooms(sortRoomsNaturally(Array.isArray(json.rooms) ? json.rooms : []));
                         setInspectors(loadedInspectors);
                         setInspections(Array.isArray(json.inspections) ? json.inspections : []);
                         setSettings(incomingSettings);
