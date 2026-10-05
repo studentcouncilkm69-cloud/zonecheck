@@ -5138,7 +5138,22 @@
                                                                 <span key={zName} className="px-2 py-0.5 bg-white border border-fuchsia-100 text-gray-700 rounded-md text-[11px] font-bold">{zName}</span>
                                                             ))}
                                                         </div>
-                    {/* Modal แผนผังห้องเรียน / เขตพื้นที่ (แนวตั้ง 16:9 + โหมด AI ค้นหาพิกัดและตั้งค่าปักหมุด) */}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div className="pt-3 mt-3 border-t border-gray-100">
+                                    <button onClick={() => setShowDailyInspectorsModal(false)} className="w-full py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs transition-colors">ปิดหน้าต่าง</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {}
+                    {/* Modal แผนผังห้องเรียน / เขตพื้นที่ (ช่องค้นหา AI ด้านบน + แผนผังแนวนอน 16:9 ด้านล่าง) */}
                     {(showRoomMap || showZoneMap) && (() => {
                         const activeMapUrl = showRoomMap ? settings?.room_map_url : settings?.zone_map_url;
                         const validRooms = Array.isArray(rooms) ? rooms : [];
@@ -5154,7 +5169,7 @@
 
                         return (
                         <div className="fixed inset-0 z-[9997] bg-gray-900/85 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4 animate-in fade-in" onClick={() => { setShowRoomMap(false); setShowZoneMap(false); }}>
-                            <div className="bg-white rounded-[2.25rem] w-full max-w-lg p-4 sm:p-5 shadow-2xl relative flex flex-col max-h-[94vh] overflow-hidden border border-gray-100" onClick={e => e.stopPropagation()}>
+                            <div className="bg-white rounded-[2rem] w-full max-w-3xl p-4 sm:p-5 shadow-2xl relative flex flex-col max-h-[94vh] overflow-y-auto custom-scrollbar border border-gray-100" onClick={e => e.stopPropagation()}>
                                 
                                 {/* ส่วนหัวหน้าต่างแผนผัง */}
                                 <div className="flex justify-between items-center gap-2 pb-3 border-b border-gray-100 shrink-0">
@@ -5168,10 +5183,10 @@
                                                     {showRoomMap ? 'แผนผังห้องเรียน' : 'แผนผังเขตพื้นที่'}
                                                 </h3>
                                                 <span className="px-2 py-0.5 rounded-full bg-gradient-to-r from-[#C8102E] to-rose-500 text-white text-[9px] font-black tracking-wide flex items-center gap-1 shrink-0">
-                                                    <i className="ph ph-sparkle ph-fill"></i> AI LOCATOR
+                                                    <i className="ph ph-sparkle ph-fill"></i> AI MODE
                                                 </span>
                                             </div>
-                                            <p className="text-[10px] font-bold text-gray-400 truncate">ค้นหาตำแหน่งห้อง หรือใช้ 2 นิ้วถ่างซูมดูแผนผัง</p>
+                                            <p className="text-[10px] font-bold text-gray-400 truncate">พิมพ์ค้นหาห้องด้านบน หรือใช้ 2 นิ้วถ่างซูมดูแผนผัง</p>
                                         </div>
                                     </div>
 
@@ -5193,100 +5208,10 @@
                                     </div>
                                 </div>
 
-                                {/* กรอบแสดงรูปภาพแผนผังสัดส่วน 16:9 ด้านบน */}
-                                <div 
-                                    className="relative w-full aspect-[16/9] bg-slate-900 rounded-2xl overflow-hidden my-3 border border-gray-200 shadow-inner flex items-center justify-center select-none touch-none shrink-0"
-                                    onTouchStart={handleMapTouchStart}
-                                    onTouchMove={handleMapTouchMove}
-                                    onTouchEnd={handleMapTouchEnd}
-                                    onMouseDown={handleMapMouseDown}
-                                    onMouseMove={handleMapMouseMove}
-                                    onMouseUp={handleMapMouseUp}
-                                    onMouseLeave={handleMapMouseUp}
-                                    onWheel={handleMapWheel}
-                                    onDoubleClick={() => {
-                                        if (isAdminPinMode) return;
-                                        if (mapZoom > 1) handleMapReset();
-                                        else setMapZoom(2.2);
-                                    }}
-                                >
-                                    {activeMapUrl ? (
-                                        <div
-                                            ref={mapImgWrapperRef}
-                                            onClick={handleMapPinClick}
-                                            style={{
-                                                transform: `translate3d(${mapPan.x}px, ${mapPan.y}px, 0) scale(${mapZoom})`,
-                                                transition: mapTouchStateRef.current.isDragging || mapTouchStateRef.current.initialPinchDist ? 'none' : 'transform 0.25s cubic-bezier(0.22, 1, 0.36, 1)',
-                                                cursor: isAdminPinMode ? 'crosshair' : (mapZoom > 1 ? 'grab' : 'zoom-in')
-                                            }}
-                                            className="relative w-full h-full flex items-center justify-center"
-                                        >
-                                            <img 
-                                                src={activeMapUrl} 
-                                                draggable="false"
-                                                className="w-full h-full object-contain pointer-events-none select-none" 
-                                            />
-
-                                            {/* แสดงหมุดทั้งหมดแบบจางๆ เวลาอยู่ในโหมดแอดมินตั้งค่าหมุด */}
-                                            {isAdminPinMode && appMode === 'admin' && Object.entries(mapPinsData?.[currentMapType] || {}).map(([rId, pin]) => {
-                                                const rObj = validRooms.find(rm => rm.id === rId);
-                                                if (!rObj || rId === selectedMapRoomId) return null;
-                                                return (
-                                                    <div 
-                                                        key={rId}
-                                                        style={{ left: `${pin.x}%`, top: `${pin.y}%` }}
-                                                        className="absolute -translate-x-1/2 -translate-y-1/2 z-10 pointer-events-none"
-                                                    >
-                                                        <div className="px-1.5 py-0.5 rounded-full bg-gray-900/80 text-white text-[8px] font-bold border border-white shadow">
-                                                            {(rObj.name || '').replace('ม.', '')}
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-
-                                            {/* หมุดเรดาร์ AI กระพริบชี้จุดห้องที่ค้นหา */}
-                                            {activePinData && activePinRoom && (
-                                                <div 
-                                                    style={{ left: `${activePinData.x}%`, top: `${activePinData.y}%` }}
-                                                    className="absolute -translate-x-1/2 -translate-y-full z-20 pointer-events-none flex flex-col items-center"
-                                                >
-                                                    <div className="bg-[#C8102E] text-white px-2.5 py-0.5 rounded-full text-[10px] font-black shadow-lg border-2 border-white whitespace-nowrap mb-0.5 animate-bounce">
-                                                        {activePinRoom.name}
-                                                    </div>
-                                                    <div className="relative flex items-center justify-center">
-                                                        <span className="animate-ping absolute inline-flex h-6 w-6 rounded-full bg-red-400 opacity-75"></span>
-                                                        <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-[#C8102E] border-2 border-white shadow-md"></span>
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    ) : (
-                                        <p className="text-center text-gray-400 text-xs font-bold px-4">ยังไม่ได้ตั้งค่ารูปแผนผังในหน้าแอดมิน</p>
-                                    )}
-
-                                    {isAdminPinMode && (
-                                        <div className="absolute top-2 left-2 right-2 bg-amber-500/95 backdrop-blur-sm text-white px-3 py-1.5 rounded-xl text-[11px] font-bold flex items-center justify-between shadow-md pointer-events-none">
-                                            <span><i className="ph ph-crosshair mr-1"></i> โหมดตั้งค่าพิกัด: เลือกห้องด้านล่างแล้วแตะจุดบนแผนผัง</span>
-                                            <span className="bg-black/20 px-2 py-0.5 rounded-md text-[10px]">ปักแล้ว {pinnedCount} ห้อง</span>
-                                        </div>
-                                    )}
-
-                                    {mapZoom > 1 && (
-                                        <button 
-                                            onClick={handleMapReset}
-                                            className="absolute bottom-2 right-2 px-2.5 py-1 rounded-full bg-gray-900/80 backdrop-blur-md text-white text-[10px] font-bold shadow-lg flex items-center gap-1 hover:bg-black"
-                                        >
-                                            <i className="ph ph-arrows-in-simple"></i> รีเซ็ต 100%
-                                        </button>
-                                    )}
-                                </div>
-
-                                {/* ส่วนล่าง: ระบบผู้ช่วย AI ค้นหาพิกัดห้อง + โหมดตั้งค่าสำหรับแอดมิน */}
-                                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 pr-0.5">
-                                    
-                                    {/* ช่องค้นหาอัจฉริยะ */}
-                                    <div className="bg-gradient-to-br from-red-50/70 via-white to-rose-50/40 p-3.5 rounded-2xl border border-red-100 shadow-sm space-y-2.5">
-                                        <div className="flex items-center justify-between">
+                                {/* ส่วนบน: ช่องค้นหาโหมด AI + ปุ่มเลือกห้อง + คำตอบตำแหน่ง */}
+                                <div className="mt-3 space-y-2.5 shrink-0">
+                                    <div className="bg-gradient-to-br from-red-50/70 via-white to-rose-50/40 p-3 rounded-2xl border border-red-100 shadow-sm space-y-2">
+                                        <div className="flex items-center justify-between gap-2">
                                             <span className="text-xs font-black text-gray-800 flex items-center gap-1.5">
                                                 <i className="ph ph-sparkle ph-fill text-[#C8102E]"></i> ค้นหาตำแหน่ง{showRoomMap ? 'ห้องเรียน' : 'เขตพื้นที่'}ด้วย AI
                                             </span>
@@ -5314,6 +5239,11 @@
                                                 type="text" 
                                                 value={mapSearchQuery}
                                                 onChange={e => setMapSearchQuery(e.target.value)}
+                                                onKeyDown={e => {
+                                                    if (e.key === 'Enter' && matchedMapRooms.length > 0) {
+                                                        handleFocusRoomOnMap(matchedMapRooms[0]);
+                                                    }
+                                                }}
                                                 placeholder="พิมพ์ถาม เช่น 5/5 อยู่ไหน หรือพิมพ์เลขห้อง..."
                                                 className="w-full pl-10 pr-20 py-2.5 rounded-xl border border-red-200 bg-white text-xs font-bold text-gray-800 outline-none focus:border-[#C8102E]"
                                             />
@@ -5333,7 +5263,7 @@
                                             </button>
                                         </div>
 
-                                        {/* ปุ่มเลือกห้องด่วน */}
+                                        {/* แถบปุ่มกดเลือกห้องด่วน */}
                                         <div className="flex overflow-x-auto gap-1.5 pb-1 custom-scrollbar">
                                             {matchedMapRooms.map(r => {
                                                 const hasPin = Boolean(mapPinsData?.[currentMapType]?.[r.id]);
@@ -5359,12 +5289,12 @@
 
                                         {/* กล่องคำตอบจาก AI Locator */}
                                         {isAiSearchingMap ? (
-                                            <div className="bg-white/90 border border-red-100 rounded-xl p-3 flex items-center gap-2.5 text-xs font-bold text-[#C8102E]">
+                                            <div className="bg-white/90 border border-red-100 rounded-xl p-2.5 flex items-center gap-2 text-xs font-bold text-[#C8102E]">
                                                 <i className="ph ph-spinner animate-spin text-base"></i>
                                                 <span>AI กำลังสแกนหาตำแหน่งบนแผนผัง...</span>
                                             </div>
                                         ) : activePinRoom ? (
-                                            <div className="bg-white border border-red-100 rounded-xl p-3 flex items-start gap-2.5 shadow-sm">
+                                            <div className="bg-white border border-red-100 rounded-xl p-2.5 flex items-start gap-2.5 shadow-sm">
                                                 <div className="w-7 h-7 rounded-lg bg-red-50 text-[#C8102E] flex items-center justify-center shrink-0 mt-0.5">
                                                     <i className="ph ph-navigation-arrow ph-fill text-sm"></i>
                                                 </div>
@@ -5374,11 +5304,11 @@
                                                     </div>
                                                     {activePinData ? (
                                                         <p className="text-[11px] font-bold text-emerald-600 mt-0.5">
-                                                            {activePinData.note ? `📍 ${activePinData.note}` : '📍 ชี้จุดหมุดสีแดงกระพริบบนแผนผังเรียบร้อยแล้ว (ซูมดูบริเวณหมุดได้เลย)'}
+                                                            {activePinData.note ? `📍 ${activePinData.note}` : '📍 ชี้จุดหมุดสีแดงกระพริบบนแผนผังด้านล่างเรียบร้อยแล้ว'}
                                                         </p>
                                                     ) : (
                                                         <p className="text-[11px] font-medium text-amber-600 mt-0.5">
-                                                            ยังไม่ได้ปักหมุดพิกัดของห้องนี้บนแผนผัง {appMode === 'admin' ? '(กดปุ่ม "ตั้งค่าพิกัด AI" ด้านบนเพื่อจิ้มจุดบนรูปได้เลย)' : ''}
+                                                            ยังไม่ได้ปักหมุดพิกัดของห้องนี้บนแผนผัง {appMode === 'admin' ? '(กดปุ่ม "ตั้งค่าพิกัด AI" เพื่อจิ้มจุดบนรูปได้เลย)' : ''}
                                                         </p>
                                                     )}
                                                 </div>
@@ -5388,10 +5318,10 @@
 
                                     {/* แผงตั้งค่าปักหมุดสำหรับแอดมิน */}
                                     {isAdminPinMode && appMode === 'admin' && (
-                                        <div className="bg-amber-50/90 border border-amber-200 rounded-2xl p-3.5 space-y-2.5 animate-in fade-in">
+                                        <div className="bg-amber-50/90 border border-amber-200 rounded-2xl p-3 space-y-2 animate-in fade-in">
                                             <div className="flex items-center justify-between">
                                                 <span className="text-xs font-black text-amber-900 flex items-center gap-1.5">
-                                                    <i className="ph ph-Sliders text-sm"></i> ตั้งค่าพิกัดและคำอธิบายสถานที่ (เฉพาะแอดมิน)
+                                                    <i className="ph ph-sliders text-sm"></i> ตั้งค่าพิกัดและคำอธิบายสถานที่ (แอดมิน)
                                                 </span>
                                                 {pinTargetRoomId && mapPinsData?.[currentMapType]?.[pinTargetRoomId] && (
                                                     <button onClick={() => handleRemoveRoomPin(pinTargetRoomId)} className="text-[10px] font-bold text-red-600 hover:underline flex items-center gap-1">
@@ -5432,9 +5362,97 @@
                                                 </div>
                                             </div>
                                             <p className="text-[10px] font-bold text-amber-700 leading-relaxed">
-                                                💡 <b>วิธีตั้งค่า:</b> เลือกห้องและพิมพ์คำอธิบาย จากนั้น <b>"ใช้นิ้วหรือเมาส์แตะลงบนรูปแผนผังด้านบน"</b> ตรงตำแหน่งของห้องนั้น ระบบจะบันทึกหมุดสีแดงและซูมไปหาอัตโนมัติเวลาคนค้นหา!
+                                                💡 <b>วิธีตั้งค่า:</b> เลือกห้องและพิมพ์คำอธิบาย จากนั้น <b>"แตะลงบนรูปแผนผังด้านล่าง"</b> ตรงตำแหน่งของห้องนั้นได้เลย!
                                             </p>
                                         </div>
+                                    )}
+                                </div>
+
+                                {/* กรอบแสดงรูปภาพแผนผังแนวนอนสัดส่วน 16:9 */}
+                                <div 
+                                    className="relative w-full aspect-[16/9] bg-slate-900 rounded-2xl overflow-hidden mt-3 border border-gray-200 shadow-inner flex items-center justify-center select-none touch-none shrink-0"
+                                    onTouchStart={handleMapTouchStart}
+                                    onTouchMove={handleMapTouchMove}
+                                    onTouchEnd={handleMapTouchEnd}
+                                    onMouseDown={handleMapMouseDown}
+                                    onMouseMove={handleMapMouseMove}
+                                    onMouseUp={handleMapMouseUp}
+                                    onMouseLeave={handleMapMouseUp}
+                                    onWheel={handleMapWheel}
+                                    onDoubleClick={() => {
+                                        if (isAdminPinMode) return;
+                                        if (mapZoom > 1) handleMapReset();
+                                        else setMapZoom(2.2);
+                                    }}
+                                >
+                                    {activeMapUrl ? (
+                                        <div
+                                            ref={mapImgWrapperRef}
+                                            onClick={handleMapPinClick}
+                                            style={{
+                                                transform: `translate3d(${mapPan.x}px, ${mapPan.y}px, 0) scale(${mapZoom})`,
+                                                transition: mapTouchStateRef.current.isDragging || mapTouchStateRef.current.initialPinchDist ? 'none' : 'transform 0.25s cubic-bezier(0.22, 1, 0.36, 1)',
+                                                cursor: isAdminPinMode ? 'crosshair' : (mapZoom > 1 ? 'grab' : 'zoom-in')
+                                            }}
+                                            className="relative w-full h-full flex items-center justify-center"
+                                        >
+                                            <img 
+                                                src={activeMapUrl} 
+                                                draggable="false"
+                                                className="w-full h-full object-contain pointer-events-none select-none" 
+                                            />
+
+                                            {/* แสดงหมุดทั้งหมดเวลาอยู่ในโหมดแอดมินตั้งค่าหมุด */}
+                                            {isAdminPinMode && appMode === 'admin' && Object.entries(mapPinsData?.[currentMapType] || {}).map(([rId, pin]) => {
+                                                const rObj = validRooms.find(rm => rm.id === rId);
+                                                if (!rObj || rId === selectedMapRoomId) return null;
+                                                return (
+                                                    <div 
+                                                        key={rId}
+                                                        style={{ left: `${pin.x}%`, top: `${pin.y}%` }}
+                                                        className="absolute -translate-x-1/2 -translate-y-1/2 z-10 pointer-events-none"
+                                                    >
+                                                        <div className="px-1.5 py-0.5 rounded-full bg-gray-900/80 text-white text-[8px] font-bold border border-white shadow">
+                                                            {(rObj.name || '').replace('ม.', '')}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+
+                                            {/* หมุดเรดาร์ AI กระพริบชี้จุดห้องที่ค้นหา */}
+                                            {activePinData && activePinRoom && (
+                                                <div 
+                                                    style={{ left: `${activePinData.x}%`, top: `${activePinData.y}%` }}
+                                                    className="absolute -translate-x-1/2 -translate-y-full z-20 pointer-events-none flex flex-col items-center"
+                                                >
+                                                    <div className="bg-[#C8102E] text-white px-2.5 py-0.5 rounded-full text-[10px] font-black shadow-lg border-2 border-white whitespace-nowrap mb-0.5 animate-bounce">
+                                                        {activePinRoom.name}
+                                                    </div>
+                                                    <div className="relative flex items-center justify-center">
+                                                        <span className="animate-ping absolute inline-flex h-6 w-6 rounded-full bg-red-400 opacity-75"></span>
+                                                        <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-[#C8102E] border-2 border-white shadow-md"></span>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <p className="text-center text-gray-400 text-xs font-bold px-4">ยังไม่ได้ตั้งค่ารูปแผนผังในหน้าแอดมิน</p>
+                                    )}
+
+                                    {isAdminPinMode && (
+                                        <div className="absolute top-2 left-2 right-2 bg-amber-500/95 backdrop-blur-sm text-white px-3 py-1.5 rounded-xl text-[11px] font-bold flex items-center justify-between shadow-md pointer-events-none">
+                                            <span><i className="ph ph-crosshair mr-1"></i> โหมดตั้งค่าพิกัด: แตะจุดบนแผนผังเพื่อปักหมุด</span>
+                                            <span className="bg-black/20 px-2 py-0.5 rounded-md text-[10px]">ปักแล้ว {pinnedCount} ห้อง</span>
+                                        </div>
+                                    )}
+
+                                    {mapZoom > 1 && (
+                                        <button 
+                                            onClick={handleMapReset}
+                                            className="absolute bottom-2 right-2 px-2.5 py-1 rounded-full bg-gray-900/80 backdrop-blur-md text-white text-[10px] font-bold shadow-lg flex items-center gap-1 hover:bg-black"
+                                        >
+                                            <i className="ph ph-arrows-in-simple"></i> รีเซ็ต 100%
+                                        </button>
                                     )}
                                 </div>
                             </div>
