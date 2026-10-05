@@ -2461,7 +2461,7 @@
                         const topX = tl.x + u * (tr.x - tl.x);
                         const topY = tl.y + u * (tr.y - tl.y);
                         const botX = bl.x + u * (br.x - bl.x);
-                        const botY = bl.y + u * (br.y - tl.y);
+                        const botY = bl.y + u * (br.y - bl.y);
                         return {
                             x: topX + v * (botX - topX),
                             y: topY + v * (botY - topY)
@@ -2554,8 +2554,8 @@
 
                     const markThreshold = Math.max(26, 62 - (sensValue * 0.5));
                     // พิกัดแนวตั้งของแถวแรกและระยะห่างแต่ละแถวเมื่อเทียบกับระยะห่างจุดมาร์คบน-ล่าง
-                    const tableTopV = 0.179;
-                    const rowStepV = 0.0221;
+                    const tableTopV = 0.1755;
+                    const rowStepV = 0.02055;
 
                     const scannedResults = targetRooms.map((r, i) => {
                         const isRightCol = i >= half;
@@ -2594,18 +2594,18 @@
                                 } else if (markedRoom[5]) {
                                     noDuty = true;
                                 } else {
-                                    c1 = markedRoom[0] ? 2 : 0;
-                                    c2 = markedRoom[1] ? 2 : 0;
-                                    c3 = markedRoom[2] ? 2 : 0;
-                                    c4 = markedRoom[3] ? 2 : 0;
-                                    c5 = markedRoom[4] ? 2 : 0;
+                                    c1 = markedRoom[0] ? 0 : 2;
+                                    c2 = markedRoom[1] ? 0 : 2;
+                                    c3 = markedRoom[2] ? 0 : 2;
+                                    c4 = markedRoom[3] ? 0 : 2;
+                                    c5 = markedRoom[4] ? 0 : 2;
                                 }
                             }
                             roomBubbles.forEach((b, bIdx) => {
                                 const isHit = markedRoom[bIdx];
                                 ctx.beginPath();
                                 ctx.arc(b.x, b.y, 6, 0, Math.PI * 2);
-                                ctx.strokeStyle = isHit ? (bIdx === 5 ? '#ef4444' : '#10b981') : 'rgba(59, 130, 246, 0.35)';
+                                ctx.strokeStyle = isHit ? (bIdx === 6 ? '#6b7280' : '#ef4444') : 'rgba(59, 130, 246, 0.35)';
                                 ctx.lineWidth = isHit ? 2 : 1;
                                 ctx.stroke();
                             });
@@ -5884,7 +5884,7 @@
                                             {/* คำชี้แจงวิธีฝนกระดาษคำตอบ */}
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f9fafb', border: '1px solid #d1d5db', borderRadius: '4px', padding: '3px 8px', marginBottom: '5px', fontSize: '9.5px', color: '#1f2937' }}>
                                                 <div>
-                                                    <b>วิธีทำเครื่องหมาย:</b> ใช้ปากกาหรือดินสอ <b>ระบายทึบ ●</b> หรือ <b>กากบาท ✕</b> ทับวงกลม (หากห้องเรียนสะอาดครบทั้ง 5 ข้อ ไม่ต้องระบายใดๆ ระบบจะให้เต็ม +10 อัตโนมัติ / ระบายเฉพาะข้อที่ <b>ผ่านเกณฑ์ (+2)</b> หรือกรณีพิเศษ)
+                                                    <b>วิธีทำเครื่องหมาย:</b> ใช้ปากกาหรือดินสอ <b>ระบายทึบ ●</b> หรือ <b>กากบาท ✕</b> ทับวงกลม (<b>หมวดห้องเรียน:</b> สะอาดครบไม่ต้องระบาย ได้เต็ม +10 / <b>ระบายเฉพาะข้อที่ไม่ผ่านเพื่อหักข้อละ -2</b> • <b>หมวดเขตพื้นที่:</b> เลือกเกณฑ์ที่ได้ 1 ข้อ)
                                                 </div>
                                                 <div style={{ fontWeight: 'bold', whiteSpace: 'nowrap', marginLeft: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                     <span>ตัวอย่างที่ถูกต้อง:</span>
@@ -5909,7 +5909,7 @@
                                                                 <th rowSpan="2" style={{ width: '7%' }}>ที่</th>
                                                                 <th rowSpan="2" style={{ width: '18%' }}>ห้อง</th>
                                                                 {(paperSheetTypeFilter === 'both' || paperSheetTypeFilter === 'room') && (
-                                                                    <th colSpan="7" style={{ width: paperSheetTypeFilter === 'both' ? '40%' : '75%', backgroundColor: '#eff6ff', color: '#1e3a8a' }}>หมวดห้องเรียน (ข้อละ +2)</th>
+                                                                    <th colSpan="7" style={{ width: paperSheetTypeFilter === 'both' ? '40%' : '75%', backgroundColor: '#eff6ff', color: '#1e3a8a' }}>หมวดห้องเรียน (ระบายข้อที่ไม่ผ่าน -2)</th>
                                                                 )}
                                                                 {(paperSheetTypeFilter === 'both' || paperSheetTypeFilter === 'zone') && (
                                                                     <th colSpan="6" style={{ width: paperSheetTypeFilter === 'both' ? '35%' : '75%', backgroundColor: '#fdf4ff', color: '#701a75' }}>หมวดเขตพื้นที่ (เลือก 1 ข้อ)</th>
@@ -5948,11 +5948,11 @@
                                                                         <td style={{ fontWeight: 'bold', textAlign: 'left', paddingLeft: '4px', fontSize: '9.5px', whiteSpace: 'nowrap' }}>{room.name}</td>
                                                                         {(paperSheetTypeFilter === 'both' || paperSheetTypeFilter === 'room') && (
                                                                             <>
-                                                                                <td><span className="omr-bubble">2</span></td>
-                                                                                <td><span className="omr-bubble">2</span></td>
-                                                                                <td><span className="omr-bubble">2</span></td>
-                                                                                <td><span className="omr-bubble">2</span></td>
-                                                                                <td><span className="omr-bubble">2</span></td>
+                                                                                <td><span className="omr-bubble">-2</span></td>
+                                                                                <td><span className="omr-bubble">-2</span></td>
+                                                                                <td><span className="omr-bubble">-2</span></td>
+                                                                                <td><span className="omr-bubble">-2</span></td>
+                                                                                <td><span className="omr-bubble">-2</span></td>
                                                                                 <td><span className="omr-bubble">-5</span></td>
                                                                                 <td><span className="omr-bubble">-</span></td>
                                                                             </>
