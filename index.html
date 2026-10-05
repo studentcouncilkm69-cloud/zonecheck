@@ -2755,6 +2755,7 @@
             const getImageRelativeCoords = (e, imgEl) => {
                 if (!imgEl) return null;
                 const rect = imgEl.getBoundingClientRect();
+                if (!rect.width || !rect.height) return null;
                 const clientX = e.touches && e.touches.length > 0 ? e.touches[0].clientX : e.clientX;
                 const clientY = e.touches && e.touches.length > 0 ? e.touches[0].clientY : e.clientY;
                 const x = Math.max(8, Math.min(1114, ((clientX - rect.left) / rect.width) * 1122));
@@ -2762,12 +2763,18 @@
                 return { x, y };
             };
 
-            const handleStartDragOmrCorner = (e, imgEl) => {
+            const handleStartDragOmrCorner = (e, imgEl, forcedCornerKey = null) => {
                 if (!omrCorners || !imgEl) return;
+                if (forcedCornerKey) {
+                    if (e.cancelable) e.preventDefault();
+                    e.stopPropagation();
+                    setDraggingOmrCorner(forcedCornerKey);
+                    return;
+                }
                 const pt = getImageRelativeCoords(e, imgEl);
                 if (!pt) return;
                 let nearestKey = null;
-                let minDist = 48;
+                let minDist = 80;
                 ['tl', 'tr', 'bl', 'br'].forEach(key => {
                     const c = omrCorners[key];
                     if (c) {
@@ -5168,8 +5175,8 @@
                                         
                                         <div onClick={handleToggleBatchSkip} className={`flex items-center justify-between p-3.5 rounded-xl border-2 transition-all cursor-pointer select-none mb-3 ${batchModal.isSkipped ? 'border-gray-400 bg-gray-100 shadow-sm' : 'border-gray-100 bg-white hover:bg-gray-50'}`}>
                                             <div className="flex flex-col">
-                                                <span className={`font-bold text-sm ${batchModal.isSkipped ? 'text-gray-700' : 'text-gray-500'}`}>ข้ามการตรวจ (ไม่มีคะแนน)</span>
-                                                <span className="text-[9px] text-gray-400">กรอกหมายเหตุด้านล่างเพื่อระบุสาเหตุ</span>
+                                                <span className={`font-bold text-sm ${batchModal.isSkipped ? 'text-gray-700' : 'text-gray-500'}`}>ข้ามการตรวจ</span>
+                                                <span className="text-[9px] text-gray-400">ระบุเหตุผลที่ไม่สามารถตรวจได้</span>
                                             </div>
                                             <div className={`w-6 h-6 rounded-full flex items-center justify-center transition-colors border-2 ${batchModal.isSkipped ? 'bg-gray-500 border-gray-500 text-white' : 'bg-transparent border-gray-300 text-transparent'}`}><i className="ph ph-check-circle text-sm ph-fill"></i></div>
                                         </div>
@@ -5205,8 +5212,8 @@
                                     </div>
 
                                     <div>
-                                        <label className="text-xs font-bold text-gray-700 mb-1.5 block">หมายเหตุรวม (ถ้ามี)</label>
-                                        <input type="text" value={batchModal.comment} onChange={e => setBatchModal(prev => ({ ...prev, comment: e.target.value }))} placeholder={batchModal.isSkipped ? "กรุณาระบุสาเหตุที่ข้ามการตรวจ (เช่น วันหยุด/กิจกรรม)..." : "ข้อเสนอแนะหรือหมายเหตุเพิ่มเติม..."} className={`w-full p-3 rounded-xl border text-xs font-medium outline-none transition-colors ${batchModal.isSkipped && !batchModal.comment.trim() ? 'border-red-400 bg-red-50/30 focus:border-red-500' : 'border-gray-200 bg-gray-50 focus:border-[#C8102E]'}`} />
+                                        <label className="text-xs font-bold text-gray-700 mb-1.5 block">หมายเหตุรวม {batchModal.isSkipped ? <span className="text-red-500">*จำเป็นต้องระบุ</span> : '(ถ้ามี)'}</label>
+                                        <input type="text" value={batchModal.comment} onChange={e => setBatchModal(prev => ({ ...prev, comment: e.target.value }))} placeholder={batchModal.isSkipped ? "ระบุเหตุผลที่ไม่สามารถตรวจได้ (เช่น ห้องล็อก)..." : "ข้อเสนอแนะหรือหมายเหตุเพิ่มเติม..."} className={`w-full p-3 rounded-xl border text-xs font-medium outline-none transition-colors ${batchModal.isSkipped && !batchModal.comment.trim() ? 'border-red-400 bg-red-50/30 focus:border-red-500' : 'border-gray-200 bg-gray-50 focus:border-[#C8102E]'}`} />
                                     </div>
 
                                     <div className="bg-amber-50 border border-amber-200 p-3 rounded-2xl flex items-center justify-between">
@@ -5346,8 +5353,8 @@
                                 <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 pb-4">
                                     <div onClick={handleToggleSkip} className={`flex items-center justify-between p-3.5 rounded-xl border-2 transition-all cursor-pointer select-none mb-4 ${isSkipped ? 'border-gray-400 bg-gray-100 shadow-sm' : 'border-gray-100 bg-white hover:bg-gray-50'}`}>
                                         <div className="flex flex-col">
-                                            <span className={`font-bold text-sm ${isSkipped ? 'text-gray-700' : 'text-gray-500'}`}>ข้ามการตรวจ (ไม่มีคะแนน)</span>
-                                            <span className="text-[9px] text-gray-400">กรอกหมายเหตุด้านล่างเพื่อระบุสาเหตุ</span>
+                                            <span className={`font-bold text-sm ${isSkipped ? 'text-gray-700' : 'text-gray-500'}`}>ข้ามการตรวจ</span>
+                                            <span className="text-[9px] text-gray-400">ระบุเหตุผลที่ไม่สามารถตรวจได้</span>
                                         </div>
                                         <div className={`w-6 h-6 rounded-full flex items-center justify-center transition-colors border-2 ${isSkipped ? 'bg-gray-500 border-gray-500 text-white' : 'bg-transparent border-gray-300 text-transparent'}`}><i className="ph ph-check-circle text-sm ph-fill"></i></div>
                                     </div>
@@ -5397,7 +5404,7 @@
 
                                     <div>
                                         <label className="text-xs font-bold text-gray-700 mb-1.5 block">หมายเหตุ {isSkipped && <span className="text-red-500">*จำเป็นต้องระบุ</span>}</label>
-                                        <textarea rows="2" value={evalComment} onChange={e => setEvalComment(e.target.value)} placeholder="ระบุข้อเสนอแนะ หรือสาเหตุ..." className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-xs font-medium outline-none focus:border-[#C8102E]"></textarea>
+                                        <textarea rows="2" value={evalComment} onChange={e => setEvalComment(e.target.value)} placeholder={isSkipped ? "ระบุเหตุผลที่ไม่สามารถตรวจได้ (เช่น ห้องล็อก)..." : "ระบุข้อเสนอแนะ หรือสาเหตุ..."} className={`w-full p-3 rounded-xl border text-xs font-medium outline-none transition-colors ${isSkipped && !evalComment.trim() ? 'border-red-400 bg-red-50/30 focus:border-red-500' : 'border-gray-200 bg-gray-50 focus:border-[#C8102E]'}`}></textarea>
                                     </div>
                                 </div>
 
@@ -6245,20 +6252,25 @@
                             <div className="bg-white rounded-[2rem] w-full max-w-5xl p-4 sm:p-6 shadow-2xl flex flex-col max-h-[95vh]">
                                 <div className="flex justify-between items-center pb-3 border-b border-gray-100 shrink-0">
                                     <div className="flex items-center gap-2.5">
-                                        <div className="w-10 h-10 rounded-xl bg-gray-900 text-amber-300 flex items-center justify-center">
+                                        <div className="w-10 h-10 rounded-xl bg-gray-900 text-amber-300 flex items-center justify-center shrink-0">
                                             <i className="ph ph-scan text-xl"></i>
                                         </div>
                                         <div>
                                             <h2 className="text-base sm:text-lg font-black text-gray-800">สแกนแบบประเมินความสะอาดเรียบร้อย</h2>
-                                            <p className="text-[11px] text-gray-500 font-bold">ประจำวันที่ {formatDateObj(filterDate)} • หากมุมกระดาษเอียง สามารถใช้นิ้วแตะลากจุดมุมสีเขียว TL, TR, BL, BR บนรูปได้เอง</p>
+                                            <p className="text-[11px] text-gray-500 font-bold">ประจำวันที่ {formatDateObj(filterDate)} • แตะลากปุ่มมุมสีเขียว TL, TR, BL, BR ให้ตรงสี่เหลี่ยมสีดำทั้ง 4 มุมกระดาษ</p>
                                         </div>
                                     </div>
-                                    <button onClick={() => setOmrScannerModal(prev => ({ ...prev, isOpen: false }))} className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 flex items-center justify-center">
+                                    <button onClick={() => setOmrScannerModal(prev => ({ ...prev, isOpen: false }))} className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 flex items-center justify-center shrink-0">
                                         <i className="ph ph-x"></i>
                                     </button>
                                 </div>
 
                                 <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 py-3 space-y-3">
+                                    <div className="bg-blue-50 border border-blue-200 rounded-2xl px-3.5 py-2.5 flex items-center gap-2.5 text-xs font-bold text-blue-800">
+                                        <i className="ph ph-device-tablet-camera text-lg text-blue-600 shrink-0"></i>
+                                        <span>คำแนะนำ: แนะนำให้ใช้แท็บเล็ต (iPad) หรือตะแคงหน้าจอแนวนอนในการสแกนและตรวจกระดาษคำตอบ เพื่อให้เห็นตารางครบทั้งแผ่นและลากปรับมุมได้แม่นยำที่สุด</span>
+                                    </div>
+
                                     <div className="bg-red-50/50 border border-red-100 rounded-2xl p-3.5 space-y-2.5">
                                         <div className="flex flex-wrap items-center justify-between gap-2">
                                             <span className="text-xs font-black text-gray-800 flex items-center gap-1.5">
@@ -6405,18 +6417,39 @@
                                                 onTouchStart={e => handleStartDragOmrCorner(e, omrPreviewImgRef.current)}
                                                 onTouchMove={e => handleMoveDragOmrCorner(e, omrPreviewImgRef.current)}
                                                 onTouchEnd={handleEndDragOmrCorner}
-                                                className="relative w-full bg-gray-900 rounded-xl overflow-hidden border-2 border-gray-300 select-none touch-none shadow-md"
+                                                className="relative w-full bg-gray-900 rounded-xl overflow-hidden border-2 border-gray-300 select-none touch-none shadow-md flex items-center justify-center p-1"
                                             >
-                                                <img 
-                                                    ref={omrPreviewImgRef}
-                                                    src={omrScannerModal.annotatedPreview || omrScannerModal.imagePreview} 
-                                                    draggable="false"
-                                                    className="w-full max-h-[360px] object-contain mx-auto block cursor-crosshair" 
-                                                />
+                                                <div className="relative w-full aspect-[1122/793] max-h-[380px] mx-auto">
+                                                    <img 
+                                                        ref={omrPreviewImgRef}
+                                                        src={omrScannerModal.annotatedPreview || omrScannerModal.imagePreview} 
+                                                        draggable="false"
+                                                        className="w-full h-full object-fill block rounded-lg" 
+                                                    />
+                                                    {omrCorners && ['tl', 'tr', 'bl', 'br'].map(key => {
+                                                        const pt = omrCorners[key];
+                                                        if (!pt) return null;
+                                                        return (
+                                                            <div
+                                                                key={key}
+                                                                onMouseDown={e => handleStartDragOmrCorner(e, omrPreviewImgRef.current, key)}
+                                                                onTouchStart={e => handleStartDragOmrCorner(e, omrPreviewImgRef.current, key)}
+                                                                style={{
+                                                                    left: `${(pt.x / 1122) * 100}%`,
+                                                                    top: `${(pt.y / 793) * 100}%`,
+                                                                    transform: 'translate(-50%, -50%)'
+                                                                }}
+                                                                className={`absolute w-8 h-8 rounded-full border-2 border-white shadow-lg flex items-center justify-center text-[9px] font-black text-white cursor-grab active:cursor-grabbing z-20 ${draggingOmrCorner === key ? 'bg-amber-500 scale-125 ring-4 ring-amber-300/60' : 'bg-emerald-600/90 hover:bg-emerald-500'}`}
+                                                            >
+                                                                {key.toUpperCase()}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
                                                 <button 
                                                     type="button"
                                                     onClick={() => setOmrZoomPreviewUrl(omrScannerModal.annotatedPreview || omrScannerModal.imagePreview)}
-                                                    className="absolute bottom-2.5 right-2.5 bg-gray-900/90 hover:bg-black backdrop-blur-sm text-white px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-lg"
+                                                    className="absolute bottom-2.5 right-2.5 bg-gray-900/90 hover:bg-black backdrop-blur-sm text-white px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-lg z-30"
                                                 >
                                                     <i className="ph ph-magnifying-glass-plus text-sm text-amber-300"></i> ขยายเต็มจอเพื่อลากมุมชัดๆ
                                                 </button>
@@ -6628,23 +6661,23 @@
                     )}
 
                     {omrZoomPreviewUrl && (
-                        <div className="fixed inset-0 z-[99999] bg-black/95 backdrop-blur-md flex flex-col items-center justify-center p-2 sm:p-6 animate-in fade-in" onClick={() => setOmrZoomPreviewUrl(null)}>
-                            <div className="w-full max-w-6xl flex justify-between items-center text-white mb-3 px-2" onClick={e => e.stopPropagation()}>
+                        <div className="fixed inset-0 z-[99999] bg-black/95 backdrop-blur-md flex flex-col items-center justify-between p-2 sm:p-4 animate-in fade-in" onClick={() => setOmrZoomPreviewUrl(null)}>
+                            <div className="w-full max-w-6xl flex flex-wrap justify-between items-center gap-2 text-white mb-2 px-2 shrink-0" onClick={e => e.stopPropagation()}>
                                 <div className="flex items-center gap-2">
                                     <i className="ph ph-scan text-amber-400 text-xl"></i>
-                                    <span className="font-bold text-xs sm:text-sm">ภาพขยาย: แตะลากจุดมุมสีเขียว (TL, TR, BL, BR) เพื่อปรับตำแหน่งสแกนได้โดยตรง</span>
+                                    <span className="font-bold text-xs sm:text-sm">แตะค้างที่ปุ่มกลมสีเขียว (TL, TR, BL, BR) แล้วลากไปวางทับสี่เหลี่ยมสีดำทั้ง 4 มุมกระดาษ</span>
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <button onClick={handleResetOmrAutoCorners} className="px-3 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs font-bold flex items-center gap-1">
                                         <i className="ph ph-arrows-clockwise"></i> รีเซ็ตมุมอัตโนมัติ
                                     </button>
                                     <button onClick={() => setOmrZoomPreviewUrl(null)} className="px-4 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1">
-                                        <i className="ph ph-x"></i> ปิดหน้าต่างขยาย
+                                        <i className="ph ph-check-circle"></i> เสร็จสิ้น / ปิดหน้าต่างขยาย
                                     </button>
                                 </div>
                             </div>
                             <div 
-                                className="flex-1 w-full overflow-auto flex items-center justify-center p-2 select-none touch-none" 
+                                className="flex-1 w-full flex items-center justify-center overflow-hidden p-1 sm:p-3 select-none touch-none" 
                                 onClick={e => e.stopPropagation()}
                                 onMouseDown={e => handleStartDragOmrCorner(e, omrZoomImgRef.current)}
                                 onMouseMove={e => handleMoveDragOmrCorner(e, omrZoomImgRef.current)}
@@ -6654,7 +6687,33 @@
                                 onTouchMove={e => handleMoveDragOmrCorner(e, omrZoomImgRef.current)}
                                 onTouchEnd={handleEndDragOmrCorner}
                             >
-                                <img ref={omrZoomImgRef} src={omrZoomPreviewUrl} draggable="false" className="max-w-none w-[1122px] h-auto rounded-lg shadow-2xl border border-white/20 bg-white cursor-crosshair" />
+                                <div className="relative w-full max-w-[1122px] max-h-full aspect-[1122/793] bg-white rounded-lg shadow-2xl border border-white/20">
+                                    <img 
+                                        ref={omrZoomImgRef} 
+                                        src={omrScannerModal.annotatedPreview || omrZoomPreviewUrl} 
+                                        draggable="false" 
+                                        className="w-full h-full object-fill block rounded-lg" 
+                                    />
+                                    {omrCorners && ['tl', 'tr', 'bl', 'br'].map(key => {
+                                        const pt = omrCorners[key];
+                                        if (!pt) return null;
+                                        return (
+                                            <div
+                                                key={key}
+                                                onMouseDown={e => handleStartDragOmrCorner(e, omrZoomImgRef.current, key)}
+                                                onTouchStart={e => handleStartDragOmrCorner(e, omrZoomImgRef.current, key)}
+                                                style={{
+                                                    left: `${(pt.x / 1122) * 100}%`,
+                                                    top: `${(pt.y / 793) * 100}%`,
+                                                    transform: 'translate(-50%, -50%)'
+                                                }}
+                                                className={`absolute w-10 h-10 sm:w-11 sm:h-11 rounded-full border-2 border-white shadow-xl flex items-center justify-center text-xs font-black text-white cursor-grab active:cursor-grabbing z-30 ${draggingOmrCorner === key ? 'bg-amber-500 scale-125 ring-4 ring-amber-300/70' : 'bg-emerald-600/90 hover:bg-emerald-500'}`}
+                                            >
+                                                {key.toUpperCase()}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
                             </div>
                         </div>
                     )}
