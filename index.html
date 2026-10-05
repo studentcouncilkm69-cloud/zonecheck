@@ -94,6 +94,7 @@
             overflow: hidden;
         }
         .omr-table { width: 100%; border-collapse: collapse; font-size: 9px; border: 1.5px solid #111827; table-layout: fixed; }
+        .omr-table th { background-color: #f3f4f6 !important; color: #111827 !important; padding: 2px 1px; border: 1px solid #9ca3af; font-weight: bold; text-align: center; font-size: 8.5px; line-height: 1.1; }
         .omr-table td { padding: 0.5px 0.5px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; color: #111827; height: 15.5px; }
         .omr-table tr:nth-child(even) td { background-color: #f8fafc !important; }
         .omr-bubble {
@@ -1872,10 +1873,41 @@
             const inspectProgress = useMemo(() => {
                 const targetDateStr = filterDate || new Date().toISOString().split('T')[0];
                 const validRooms = Array.isArray(rooms) ? rooms : [];
+                const validInspections = Array.isArray(inspections) ? inspections : [];
+                const roomTotal = validRooms.length;
+                const zoneTotal = validRooms.filter(r => r.hasZone !== false).length;
+                const roomDoneSet = new Set();
+                const zoneDoneSet = new Set();
+                validInspections.forEach(i => {
+                    if (i && i.date && String(i.date).startsWith(targetDateStr)) {
+                        if (i.type === 'room') roomDoneSet.add(i.roomId);
+                        if (i.type === 'zone') zoneDoneSet.add(i.roomId);
+                    }
+                });
+                const roomDone = validRooms.filter(r => roomDoneSet.has(r.id)).length;
+                const zoneDone = validRooms.filter(r => r.hasZone !== false && zoneDoneSet.has(r.id)).length;
+                const roomPct = roomTotal > 0 ? Math.min(100, Math.round((roomDone / roomTotal) * 100)) : 0;
+                const zonePct = zoneTotal > 0 ? Math.min(100, Math.round((zoneDone / zoneTotal) * 100)) : 0;
+                return { dateStr: targetDateStr, roomTotal, zoneTotal, roomDone, zoneDone, roomPct, zonePct };
+            }, [rooms, inspections, filterDate]);
+
+            const groupedRoomsForInspect = useMemo(() => {
+                const validRooms = Array.isArray(rooms) ? rooms : [];
+                const filtered = validRooms.filter(r => (r.name || '').toLowerCase().includes((inspectSearchRoom || '').toLowerCase()));
+                const groups = {};
+                filtered.forEach(r => {
+                    const match = (r.name || '').match(/(\d+)/);
+                    const gradeKey = match ? `มัธยมศึกษาปีที่ ${match[1]}` : 'อื่นๆ';
+                    if (!groups[gradeKey]) groups[gradeKey] = [];
+                    groups[gradeKey].push(r);
+                });
+                return Object.keys(groups).map(k => ({ grade: k, rooms: groups[k] }));
+            }, [rooms, inspectSearchRoom]);
+
             const paperSheetFilteredRooms = useMemo(() => {
                 const validRooms = Array.isArray(rooms) ? rooms : [];
                 return validRooms.filter(r => {
-                    if (paperSheetTypeFilter === 'zone' && r.hasZone === false) return false;
+                    if (paperSheetTypeFilter === 'zone' && r.hasZone !== false === false) return false;
                     if (paperSheetGradeFilter === 'custom') {
                         return paperCustomRoomIds.includes(r.id);
                     }
@@ -2741,52 +2773,9 @@
                 if (recordsToSave.length === 0) {
                     return showToast('ไม่มีรายการที่เลือกสำหรับบันทึก (ห้องที่ไม่ได้เลือกจะถูกข้ามไว้ให้คนอื่นมาตรวจต่อ)', 'warning');
                 }
-                        recordsToSave.push({
-                            id: generateId('insp'),
-                            roomId: item.room.id,
-                            type: 'room',
-                            date: finalDateISO,
-                            inspector: inspectorTeam,
-                            mainInspector: currentUser?.name || '',
-                            inspectorSignature: currentUser?.dailySignature || loginSignatureDataUrl || '',
-                            scores: breakdown,
-                            totalScore,
-                            comment: item.roomScores.skip ? 'สแกนจากใบตรวจภาคสนาม' : '',
-                            photoUrl: ''
-                        });
-                    }
-                    if (item.includeZone && item.room.hasZone !== false) {
-                        let totalScore = item.zoneScore;
-                        let breakdown = {};
-                        if (item.zoneSkip) {
-                            totalScore = null;
-                            breakdown = { status: 'ข้ามการตรวจ' };
-                        } else {
-                            const sText = item.zoneScore === 10 ? 'ดีเยี่ยม' : item.zoneScore === 8 ? 'ดี' : item.zoneScore === 5 ? 'พอใช้' : item.zoneScore === 2 ? 'ปรับปรุง' : 'ไม่ปฏิบัติหน้าที่';
-                            breakdown = { status: sText };
-                        }
-                        recordsToSave.push({
-                            id: generateId('insp'),
-                            roomId: item.room.id,
-                            type: 'zone',
-                            date: finalDateISO,
-                            inspector: inspectorTeam,
-                            mainInspector: currentUser?.name || '',
-                            inspectorSignature: currentUser?.dailySignature || loginSignatureDataUrl || '',
-                            scores: breakdown,
-                            totalScore,
-                            comment: item.zoneSkip ? 'สแกนจากใบตรวจภาคสนาม' : '',
-                            photoUrl: ''
-                        });
-                    }
-                });
-
-                if (recordsToSave.length === 0) {
-                    return showToast('ไม่มีรายการที่เลือกสำหรับบันทึก', 'warning');
-                }
 
                 showConfirm(
-                    `ยืนยันการบันทึกผลจากการสแกนกระดาษคำตอบ?\nจำนวนทั้งหมด: ${recordsToSave.length} รายการ\nประจำวันที่: ${formatDateObj(targetDateStr)}`,
+                    `ยืนยันการบันทึกผลจากการสแกนแบบประเมิน?\nจำนวนทั้งหมด: ${recordsToSave.length} รายการ\nประจำวันที่: ${formatDateObj(targetDateStr)}`,
                     async () => {
                         const estSeconds = Math.max(4, Math.min(18, Math.ceil(recordsToSave.length * 0.12)));
                         setSavingTotalTime(estSeconds);
