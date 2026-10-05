@@ -405,6 +405,8 @@
             const [paperSheetTypeFilter, setPaperSheetTypeFilter] = useState('both'); // 'both' | 'room' | 'zone'
             const [paperCustomRoomIds, setPaperCustomRoomIds] = useState([]);
             const [showPaperRoomPicker, setShowPaperRoomPicker] = useState(false);
+            const [pickerActiveGrade, setPickerActiveGrade] = useState('1');
+            const [omrZoomPreviewUrl, setOmrZoomPreviewUrl] = useState(null);
             const [paperIncludeDate, setPaperIncludeDate] = useState(false);
             const [paperIncludeInspector, setPaperIncludeInspector] = useState(false);
 
@@ -2451,11 +2453,15 @@
                     const bl = findFiducialCornerMark(15, Math.floor(W * 0.18), Math.floor(H * 0.75), H - 10, 43, H - 27);
                     const br = findFiducialCornerMark(Math.floor(W * 0.82), W - 15, Math.floor(H * 0.75), H - 10, W - 43, H - 27);
 
+                    // หากรูปที่ถ่ายมามุมบนโดนตัดแต่เจอมุมล่าง ให้คำนวณมุมบนจากสัดส่วนมาตรฐานเพื่อไม่ให้ตารางยืดเพี้ยน
+                    if (!tl.found && bl.found) { tl.x = bl.x; tl.y = Math.max(18, bl.y - 742); }
+                    if (!tr.found && br.found) { tr.x = br.x; tr.y = Math.max(18, br.y - 742); }
+
                     const mapUV = (u, v) => {
                         const topX = tl.x + u * (tr.x - tl.x);
                         const topY = tl.y + u * (tr.y - tl.y);
                         const botX = bl.x + u * (br.x - bl.x);
-                        const botY = bl.y + u * (br.y - bl.y);
+                        const botY = bl.y + u * (br.y - tl.y);
                         return {
                             x: topX + v * (botX - topX),
                             y: topY + v * (botY - topY)
@@ -2488,10 +2494,36 @@
                         return (avgNetDarkness * 0.45) + (inkCoveragePct * 0.85);
                     };
 
-                    ctx.lineWidth = 2.5;
-                    [tl, tr, bl, br].forEach(pt => {
+                    // วาดเส้นกรอบเชื่อมจุดมาร์คทั้ง 4 มุมและเป้าเล็งให้เห็นชัดเจนบนภาพสแกน
+                    ctx.save();
+                    ctx.strokeStyle = 'rgba(16, 185, 129, 0.45)';
+                    ctx.lineWidth = 1.5;
+                    ctx.setLineDash([6, 4]);
+                    ctx.beginPath();
+                    ctx.moveTo(tl.x, tl.y);
+                    ctx.lineTo(tr.x, tr.y);
+                    ctx.lineTo(br.x, br.y);
+                    ctx.lineTo(bl.x, bl.y);
+                    ctx.closePath();
+                    ctx.stroke();
+                    ctx.restore();
+
+                    [
+                        { pt: tl, label: 'TL' },
+                        { pt: tr, label: 'TR' },
+                        { pt: bl, label: 'BL' },
+                        { pt: br, label: 'BR' }
+                    ].forEach(({ pt, label }) => {
                         ctx.strokeStyle = pt.found ? '#10b981' : '#f59e0b';
-                        ctx.strokeRect(pt.x - 9, pt.y - 9, 18, 18);
+                        ctx.lineWidth = 2.5;
+                        ctx.strokeRect(pt.x - 11, pt.y - 11, 22, 22);
+                        ctx.beginPath();
+                        ctx.moveTo(pt.x - 15, pt.y); ctx.lineTo(pt.x + 15, pt.y);
+                        ctx.moveTo(pt.x, pt.y - 15); ctx.lineTo(pt.x, pt.y + 15);
+                        ctx.stroke();
+                        ctx.fillStyle = pt.found ? '#059669' : '#d97706';
+                        ctx.font = 'bold 10px sans-serif';
+                        ctx.fillText(label, pt.x + 13, pt.y + 4);
                     });
 
                     const validRooms = Array.isArray(rooms) ? rooms : [];
@@ -2509,29 +2541,29 @@
 
                     let colRelativeCenters = [];
                     if (activeType === 'both') {
+                        // พิกัดกึ่งกลางของแต่ละคอลัมน์วงกลม (คำนวณจากความกว้างคอลัมน์จริง: ที่ 7% + ห้อง 18% = 25%, หมวดห้อง 7 ช่อง = 40%, หมวดเขต 6 ช่อง = 35%)
                         colRelativeCenters = [
-                            0.220, 0.280, 0.340, 0.400, 0.462, 0.528, 0.590,
-                            0.652, 0.713, 0.775, 0.842, 0.909, 0.970
+                            0.2786, 0.3357, 0.3929, 0.4500, 0.5071, 0.5643, 0.6214,
+                            0.6792, 0.7375, 0.7958, 0.8542, 0.9125, 0.9708
                         ];
                     } else if (activeType === 'room') {
-                        colRelativeCenters = [0.304, 0.415, 0.526, 0.637, 0.751, 0.866, 0.962];
+                        colRelativeCenters = [0.3036, 0.4107, 0.5179, 0.6250, 0.7321, 0.8393, 0.9464];
                     } else {
-                        colRelativeCenters = [0.312, 0.440, 0.568, 0.702, 0.836, 0.952];
+                        colRelativeCenters = [0.3125, 0.4375, 0.5625, 0.6875, 0.8125, 0.9375];
                     }
 
                     const markThreshold = Math.max(26, 62 - (sensValue * 0.5));
-                    const uSpan = Math.max(1, tr.x - tl.x);
-                    const vSpan = Math.max(1, bl.y - tl.y);
-                    const tableTopV = 0.194;
-                    const rowStepV = 16.5 / vSpan;
+                    // พิกัดแนวตั้งของแถวแรกและระยะห่างแต่ละแถวเมื่อเทียบกับระยะห่างจุดมาร์คบน-ล่าง
+                    const tableTopV = 0.179;
+                    const rowStepV = 0.0221;
 
                     const scannedResults = targetRooms.map((r, i) => {
                         const isRightCol = i >= half;
                         const rowIdx = isRightCol ? (i - half) : i;
                         const vRow = tableTopV + ((rowIdx + 0.5) * rowStepV);
 
-                        const uTableLeft = isRightCol ? ((0.5 * (W - 72) + 5 - (tl.x - 36)) / uSpan) : ((-7) / uSpan);
-                        const uTableWidth = ((0.5 * (W - 72) - 5) / uSpan);
+                        const uTableLeft = isRightCol ? 0.505 : -0.006;
+                        const uTableWidth = 0.501;
 
                         const bubbleScores = colRelativeCenters.map(colRel => {
                             const uBubble = uTableLeft + (colRel * uTableWidth);
@@ -5743,52 +5775,52 @@
                                                 {paperIncludeDate && (
                                                     <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} className="bg-white border border-gray-200 rounded-lg px-2 py-0.5 text-[11px] font-bold text-gray-700 outline-none" />
                                                 )}
-                                            </div>
-
-                                            <label className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 px-3 py-2 rounded-xl text-xs font-bold text-gray-700 cursor-pointer select-none">
-                                                <input type="checkbox" checked={paperIncludeInspector} onChange={e => setPaperIncludeInspector(e.target.checked)} className="w-3.5 h-3.5 accent-[#C8102E] rounded cursor-pointer" />
-                                                <span>ใส่ชื่อผู้ตรวจ</span>
-                                            </label>
-                                        </div>
-
-                                        <div className="flex items-center gap-2">
-                                            <button onClick={() => handleExportPaperSheet('print')} className="bg-gray-900 hover:bg-black text-white px-3.5 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-sm">
-                                                <i className="ph ph-printer text-sm"></i> สั่งพิมพ์
-                                            </button>
-                                            <button onClick={() => handleExportPaperSheet('png')} className="bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 px-3 py-2 rounded-xl font-bold text-xs flex items-center gap-1">
-                                                <i className="ph ph-image text-sm"></i> รูปภาพ
-                                            </button>
-                                            <button onClick={() => handleExportPaperSheet('pdf')} className="bg-[#C8102E] hover:bg-red-800 text-white px-3.5 py-2 rounded-xl font-bold text-xs flex items-center gap-1 shadow-sm">
-                                                <i className="ph ph-file-pdf text-sm"></i> โหลด PDF
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    {/* แผงติ๊กเลือกห้องเรียนที่ต้องการใส่ในใบประเมิน */}
+                                    {/* แผงติ๊กเลือกห้องเรียนแบบจัดระเบียบตามสายชั้น (ไม่กาง 48 ห้องรวดเดียว) */}
                                     {paperSheetGradeFilter === 'custom' && showPaperRoomPicker && (
-                                        <div className="bg-amber-50/70 border border-amber-200 rounded-2xl p-3 space-y-2 animate-in fade-in">
+                                        <div className="bg-amber-50/70 border border-amber-200 rounded-2xl p-3 space-y-2.5 animate-in fade-in">
                                             <div className="flex flex-wrap items-center justify-between gap-2">
-                                                <span className="text-xs font-black text-amber-900">ติ๊กเลือกเฉพาะห้องที่จะให้ทีมนี้นำไปตรวจ ({paperCustomRoomIds.length} ห้อง):</span>
-                                                <div className="flex flex-wrap gap-1">
-                                                    <button type="button" onClick={() => setPaperCustomRoomIds(rooms.map(r => r.id))} className="px-2 py-1 rounded-lg bg-white border border-amber-300 text-[10px] font-bold text-gray-700 hover:bg-amber-100">เลือกทั้งหมด</button>
-                                                    <button type="button" onClick={() => setPaperCustomRoomIds([])} className="px-2 py-1 rounded-lg bg-white border border-amber-300 text-[10px] font-bold text-red-600 hover:bg-red-50">ล้างทั้งหมด</button>
-                                                    {['1','2','3','4','5','6'].map(g => (
-                                                        <button key={g} type="button" onClick={() => {
-                                                            const gradeIds = rooms.filter(r => { const m = (r.name||'').match(/(\d+)/); return m && m[1] === g; }).map(r => r.id);
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xs font-black text-amber-900">เลือกสายชั้นเพื่อติ๊กห้อง:</span>
+                                                    <select 
+                                                        value={pickerActiveGrade} 
+                                                        onChange={e => setPickerActiveGrade(e.target.value)}
+                                                        className="bg-gray-900 text-white rounded-xl px-3 py-1.5 text-xs font-bold outline-none cursor-pointer"
+                                                    >
+                                                        <option value="1">สายชั้น ม.1</option>
+                                                        <option value="2">สายชั้น ม.2</option>
+                                                        <option value="3">สายชั้น ม.3</option>
+                                                        <option value="4">สายชั้น ม.4</option>
+                                                        <option value="5">สายชั้น ม.5</option>
+                                                        <option value="6">สายชั้น ม.6</option>
+                                                        <option value="all">แสดงทุกห้อง</option>
+                                                    </select>
+                                                </div>
+                                                <div className="flex flex-wrap items-center gap-1.5">
+                                                    {pickerActiveGrade !== 'all' && (
+                                                        <button type="button" onClick={() => {
+                                                            const gradeIds = rooms.filter(r => { const m = (r.name||'').match(/(\d+)/); return m && m[1] === pickerActiveGrade; }).map(r => r.id);
                                                             const allSelected = gradeIds.every(id => paperCustomRoomIds.includes(id));
                                                             if (allSelected) setPaperCustomRoomIds(prev => prev.filter(id => !gradeIds.includes(id)));
                                                             else setPaperCustomRoomIds(prev => Array.from(new Set([...prev, ...gradeIds])));
-                                                        }} className="px-2 py-1 rounded-lg bg-white border border-amber-300 text-[10px] font-bold text-amber-900 hover:bg-amber-100">+/- ม.{g}</button>
-                                                    ))}
+                                                        }} className="px-2.5 py-1 rounded-lg bg-amber-600 text-white text-[11px] font-bold hover:bg-amber-700 shadow-sm">
+                                                            เลือก/ยกเลิก ทั้งสายชั้น ม.{pickerActiveGrade}
+                                                        </button>
+                                                    )}
+                                                    <button type="button" onClick={() => setPaperCustomRoomIds(rooms.map(r => r.id))} className="px-2.5 py-1 rounded-lg bg-white border border-amber-300 text-[11px] font-bold text-gray-700 hover:bg-amber-100">เลือกทุกห้อง ({rooms.length})</button>
+                                                    <button type="button" onClick={() => setPaperCustomRoomIds([])} className="px-2.5 py-1 rounded-lg bg-white border border-amber-300 text-[11px] font-bold text-red-600 hover:bg-red-50">ล้างทั้งหมด</button>
                                                 </div>
                                             </div>
-                                            <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-1.5 max-h-36 overflow-y-auto custom-scrollbar pr-1">
-                                                {rooms.map(r => {
+                                            <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-8 gap-1.5 max-h-32 overflow-y-auto custom-scrollbar pr-1">
+                                                {rooms.filter(r => {
+                                                    if (pickerActiveGrade === 'all') return true;
+                                                    const m = (r.name || '').match(/(\d+)/);
+                                                    return (m ? m[1] : '') === pickerActiveGrade;
+                                                }).map(r => {
                                                     const checked = paperCustomRoomIds.includes(r.id);
                                                     return (
-                                                        <button key={r.id} type="button" onClick={() => togglePaperCustomRoom(r.id)} className={`py-1.5 px-2 rounded-xl text-[11px] font-bold border transition-all flex items-center justify-between ${checked ? 'bg-[#C8102E] text-white border-[#C8102E] shadow-sm' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
+                                                        <button key={r.id} type="button" onClick={() => togglePaperCustomRoom(r.id)} className={`py-1.5 px-2.5 rounded-xl text-xs font-bold border transition-all flex items-center justify-between ${checked ? 'bg-[#C8102E] text-white border-[#C8102E] shadow-sm' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
                                                             <span className="truncate">{r.name}</span>
-                                                            {checked && <i className="ph ph-check text-[10px] font-bold shrink-0"></i>}
+                                                            {checked && <i className="ph ph-check text-xs font-bold shrink-0"></i>}
                                                         </button>
                                                     );
                                                 })}
@@ -5895,13 +5927,13 @@
                                                                         <td style={{ fontWeight: 'bold', textAlign: 'left', paddingLeft: '4px', fontSize: '9.5px', whiteSpace: 'nowrap' }}>{room.name}</td>
                                                                         {(paperSheetTypeFilter === 'both' || paperSheetTypeFilter === 'room') && (
                                                                             <>
-                                                                                <td><span className="omr-bubble">1</span></td>
                                                                                 <td><span className="omr-bubble">2</span></td>
-                                                                                <td><span className="omr-bubble">3</span></td>
-                                                                                <td><span className="omr-bubble">4</span></td>
-                                                                                <td><span className="omr-bubble">5</span></td>
+                                                                                <td><span className="omr-bubble">2</span></td>
+                                                                                <td><span className="omr-bubble">2</span></td>
+                                                                                <td><span className="omr-bubble">2</span></td>
+                                                                                <td><span className="omr-bubble">2</span></td>
                                                                                 <td><span className="omr-bubble">-5</span></td>
-                                                                                <td><span className="omr-bubble">ข</span></td>
+                                                                                <td><span className="omr-bubble">-</span></td>
                                                                             </>
                                                                         )}
                                                                         {(paperSheetTypeFilter === 'both' || paperSheetTypeFilter === 'zone') && (
@@ -5912,7 +5944,7 @@
                                                                                     <td><span className="omr-bubble">5</span></td>
                                                                                     <td><span className="omr-bubble">2</span></td>
                                                                                     <td><span className="omr-bubble">-5</span></td>
-                                                                                    <td><span className="omr-bubble">ข</span></td>
+                                                                                    <td><span className="omr-bubble">-</span></td>
                                                                                 </>
                                                                             ) : (
                                                                                 <td colSpan="6" style={{ color: '#9ca3af', fontSize: '8.5px', backgroundColor: '#f3f4f6' }}>ไม่มีเขตพื้นที่รับผิดชอบ</td>
@@ -6023,25 +6055,97 @@
 
                                         {omrScannerModal.scanGradeFilter === 'custom' && omrScannerModal.showRoomPicker && (
                                             <div className="bg-white border border-amber-200 rounded-xl p-2.5 space-y-2">
-                                                <div className="flex justify-between items-center">
-                                                    <span className="text-[11px] font-bold text-gray-600">เลือกห้องที่มีอยู่ในใบตรวจแผ่นนี้ (ห้องอื่นจะไม่ถูกเช็ค):</span>
-                                                    <div className="flex gap-1">
-                                                        <button type="button" onClick={() => handleUpdateOmrFilterConfig(omrScannerModal.scanTypeFilter, 'custom', rooms.map(r => r.id))} className="px-2 py-0.5 bg-gray-100 rounded text-[10px] font-bold">ทั้งหมด</button>
-                                                        <button type="button" onClick={() => handleUpdateOmrFilterConfig(omrScannerModal.scanTypeFilter, 'custom', [])} className="px-2 py-0.5 bg-red-50 text-red-600 rounded text-[10px] font-bold">ล้าง</button>
+                                                <div className="flex flex-wrap justify-between items-center gap-2">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-[11px] font-bold text-gray-700">เลือกสายชั้น:</span>
+                                                        <select 
+                                                            value={pickerActiveGrade} 
+                                                            onChange={e => setPickerActiveGrade(e.target.value)}
+                                                            className="bg-gray-900 text-white rounded-lg px-2.5 py-1 text-xs font-bold outline-none cursor-pointer"
+                                                        >
+                                                            <option value="1">สายชั้น ม.1</option>
+                                                            <option value="2">สายชั้น ม.2</option>
+                                                            <option value="3">สายชั้น ม.3</option>
+                                                            <option value="4">สายชั้น ม.4</option>
+                                                            <option value="5">สายชั้น ม.5</option>
+                                                            <option value="6">สายชั้น ม.6</option>
+                                                            <option value="all">แสดงทุกห้อง</option>
+                                                        </select>
+                                                    </div>
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {pickerActiveGrade !== 'all' && (
+                                                            <button type="button" onClick={() => {
+                                                                const gradeIds = rooms.filter(r => { const m = (r.name||'').match(/(\d+)/); return m && m[1] === pickerActiveGrade; }).map(r => r.id);
+                                                                const allSelected = gradeIds.every(id => omrScannerModal.scanCustomRoomIds.includes(id));
+                                                                const nextIds = allSelected
+                                                                    ? omrScannerModal.scanCustomRoomIds.filter(id => !gradeIds.includes(id))
+                                                                    : Array.from(new Set([...omrScannerModal.scanCustomRoomIds, ...gradeIds]));
+                                                                handleUpdateOmrFilterConfig(omrScannerModal.scanTypeFilter, 'custom', nextIds);
+                                                            }} className="px-2 py-1 bg-amber-600 text-white rounded-lg text-[10px] font-bold">
+                                                                เลือก/ยกเลิก ม.{pickerActiveGrade}
+                                                            </button>
+                                                        )}
+                                                        <button type="button" onClick={() => handleUpdateOmrFilterConfig(omrScannerModal.scanTypeFilter, 'custom', rooms.map(r => r.id))} className="px-2 py-1 bg-gray-100 rounded-lg text-[10px] font-bold">เลือกทุกห้อง</button>
+                                                        <button type="button" onClick={() => handleUpdateOmrFilterConfig(omrScannerModal.scanTypeFilter, 'custom', [])} className="px-2 py-1 bg-red-50 text-red-600 rounded-lg text-[10px] font-bold">ล้างทั้งหมด</button>
                                                     </div>
                                                 </div>
-                                                <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-1.5 max-h-32 overflow-y-auto custom-scrollbar">
-                                                    {rooms.map(r => {
+                                                <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-8 gap-1.5 max-h-28 overflow-y-auto custom-scrollbar">
+                                                    {rooms.filter(r => {
+                                                        if (pickerActiveGrade === 'all') return true;
+                                                        const m = (r.name || '').match(/(\d+)/);
+                                                        return (m ? m[1] : '') === pickerActiveGrade;
+                                                    }).map(r => {
                                                         const isSel = omrScannerModal.scanCustomRoomIds.includes(r.id);
                                                         return (
                                                             <button key={r.id} type="button" onClick={() => {
                                                                 const nextIds = isSel ? omrScannerModal.scanCustomRoomIds.filter(id => id !== r.id) : [...omrScannerModal.scanCustomRoomIds, r.id];
                                                                 handleUpdateOmrFilterConfig(omrScannerModal.scanTypeFilter, 'custom', nextIds);
-                                                            }} className={`py-1 px-2 rounded-lg text-[10px] font-bold border ${isSel ? 'bg-[#C8102E] text-white border-[#C8102E]' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>
-                                                                {r.name}
+                                                            }} className={`py-1.5 px-2 rounded-lg text-xs font-bold border flex items-center justify-between ${isSel ? 'bg-[#C8102E] text-white border-[#C8102E]' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>
+                                                                <span className="truncate">{r.name}</span>
+                                                                {isSel && <i className="ph ph-check text-[10px] font-bold"></i>}
                                                             </button>
                                                         );
                                                     })}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 flex flex-col gap-3">
+                                        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-11 h-11 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-[#C8102E] shadow-sm shrink-0">
+                                                    <i className="ph ph-CornersOut text-2xl"></i>
+                                                </div>
+                                                <div>
+                                                    <p className="text-xs sm:text-sm font-black text-gray-800">
+                                                        {omrScannerModal.imagePreview ? 'ผลการตรวจจับจุดมาร์ค 4 มุมและวงกลมคะแนน (แตะที่รูปเพื่อขยายเต็มจอ)' : '2. ถ่ายรูปใบประเมินให้เห็นจุดมาร์คสีดำทั้ง 4 มุมกระดาษ'}
+                                                    </p>
+                                                    <p className="text-[11px] text-gray-500 mt-0.5">
+                                                        กรอบสี่เหลี่ยมสีเขียว (TL, TR, BL, BR) คือจุดมาร์ค 4 มุมที่ระบบล็อกพิกัดได้ • วงกลมสีเขียว/ชมพูคือช่องที่ตรวจพบรอยปากกา
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            <label className="w-full sm:w-auto px-4 py-3 bg-[#C8102E] hover:bg-red-800 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-md shrink-0 transition-all active:scale-95">
+                                                <i className="ph ph-camera text-base"></i>
+                                                <span>{omrScannerModal.imagePreview ? 'ถ่ายรูปใหม่ / เปลี่ยนรูป' : 'ถ่ายรูป / เลือกรูปใบตรวจ'}</span>
+                                                <input type="file" accept="image/*" ref={omrFileInputRef} onChange={handleOmrImageUpload} className="hidden" />
+                                            </label>
+                                        </div>
+
+                                        {/* แสดงภาพสแกนขนาดใหญ่เห็นชัดๆ พร้อมกดขยายเต็มจอได้ */}
+                                        {(omrScannerModal.annotatedPreview || omrScannerModal.imagePreview) && (
+                                            <div 
+                                                onClick={() => setOmrZoomPreviewUrl(omrScannerModal.annotatedPreview || omrScannerModal.imagePreview)}
+                                                className="relative w-full bg-gray-900 rounded-xl overflow-hidden border-2 border-gray-300 cursor-zoom-in group shadow-md"
+                                            >
+                                                <img 
+                                                    src={omrScannerModal.annotatedPreview || omrScannerModal.imagePreview} 
+                                                    className="w-full max-h-[340px] object-contain mx-auto block" 
+                                                />
+                                                <div className="absolute bottom-2.5 right-2.5 bg-gray-900/85 backdrop-blur-sm text-white px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-lg">
+                                                    <i className="ph ph-magnifying-glass-plus text-sm text-amber-300"></i> แตะเพื่อขยายดูวงที่สแกนเต็มจอ
                                                 </div>
                                             </div>
                                         )}
@@ -6250,20 +6354,20 @@
                                                             })}
                                                         </tbody>
                                                     </table>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
+                    {/* Modal ขยายดูรูปใบประเมินที่สแกนแล้วแบบเต็มจอ */}
+                    {omrZoomPreviewUrl && (
+                        <div className="fixed inset-0 z-[99999] bg-black/95 backdrop-blur-md flex flex-col items-center justify-center p-2 sm:p-6 animate-in fade-in" onClick={() => setOmrZoomPreviewUrl(null)}>
+                            <div className="w-full max-w-6xl flex justify-between items-center text-white mb-3 px-2" onClick={e => e.stopPropagation()}>
+                                <div className="flex items-center gap-2">
+                                    <i className="ph ph-scan text-amber-400 text-xl"></i>
+                                    <span className="font-bold text-xs sm:text-sm">ภาพขยายตรวจสอบตำแหน่งการวงและจุดมาร์ค 4 มุม (TL, TR, BL, BR)</span>
                                 </div>
-
-                                <div className="pt-3 border-t border-gray-100 flex justify-between items-center gap-3 shrink-0">
-                                    <button onClick={() => setOmrScannerModal(prev => ({ ...prev, isOpen: false }))} className="px-5 py-3 rounded-xl bg-gray-100 text-gray-600 font-bold text-xs hover:bg-gray-200">
-                                        ยกเลิก
-                                    </button>
-                                    <button onClick={handleSaveOmrScannedResults} className="flex-1 sm:flex-none px-8 py-3.5 rounded-xl bg-[#C8102E] hover:bg-red-800 text-white font-black text-xs sm:text-sm shadow-lg shadow-red-500/25 flex items-center justify-center gap-2 active:scale-95 transition-all">
-                                        <i className="ph ph-check-circle text-base ph-fill"></i> ยืนยันบันทึกเฉพาะห้องที่เลือก ({omrScannerModal.results.filter(r => r.selectedForSave && (!omrScannerModal.onlySaveMarked || r.hasDetectedMark)).length} ห้อง)
-                                    </button>
-                                </div>
+                                <button onClick={() => setOmrZoomPreviewUrl(null)} className="px-4 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs font-bold flex items-center gap-1">
+                                    <i className="ph ph-x"></i> ปิดหน้าต่างขยาย
+                                </button>
+                            </div>
+                            <div className="flex-1 w-full overflow-auto flex items-center justify-center p-2" onClick={e => e.stopPropagation()}>
+                                <img src={omrZoomPreviewUrl} className="max-w-none w-[1122px] h-auto rounded-lg shadow-2xl border border-white/20 bg-white" />
                             </div>
                         </div>
                     )}
