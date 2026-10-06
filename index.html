@@ -563,6 +563,38 @@
                 }
             ]);
             const aiChatEndRef = useRef(null);
+            const [copiedMsgId, setCopiedMsgId] = useState(null);
+
+            const handleCopyAiMessage = async (msgId, text) => {
+                const value = String(text || '');
+                let ok = false;
+                try {
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        await navigator.clipboard.writeText(value);
+                        ok = true;
+                    }
+                } catch (e) {}
+                if (!ok) {
+                    try {
+                        const ta = document.createElement('textarea');
+                        ta.value = value;
+                        ta.setAttribute('readonly', '');
+                        ta.style.position = 'fixed';
+                        ta.style.opacity = '0';
+                        document.body.appendChild(ta);
+                        ta.select();
+                        ta.setSelectionRange(0, value.length);
+                        ok = document.execCommand('copy');
+                        document.body.removeChild(ta);
+                    } catch (e) {}
+                }
+                if (ok) {
+                    setCopiedMsgId(msgId);
+                    setTimeout(() => setCopiedMsgId(prev => (prev === msgId ? null : prev)), 1800);
+                } else {
+                    showToast('คัดลอกไม่สำเร็จ ลองกดค้างที่ข้อความแล้วเลือกคัดลอก', 'warning');
+                }
+            };
 
             useEffect(() => {
                 if (settings) {
@@ -7466,6 +7498,16 @@ ${roomSummaryLines}`;
                                             <div className={`max-w-[86%] rounded-2xl px-4 py-3 text-xs sm:text-[13px] leading-relaxed whitespace-pre-line shadow-sm ${msg.sender === 'user' ? 'bg-[#C8102E] text-white font-bold rounded-br-sm' : 'bg-white text-gray-800 border border-gray-200/80 font-medium rounded-bl-sm'}`}>
                                                 {msg.text}
                                             </div>
+                                            {msg.sender === 'bot' && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleCopyAiMessage(msg.id, msg.text)}
+                                                    className={`mt-1.5 ml-1 px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 border transition-all active:scale-95 ${copiedMsgId === msg.id ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}
+                                                >
+                                                    <i className={`ph ${copiedMsgId === msg.id ? 'ph-check' : 'ph-copy'} text-xs`}></i>
+                                                    <span>{copiedMsgId === msg.id ? 'คัดลอกแล้ว' : 'คัดลอก'}</span>
+                                                </button>
+                                            )}
                                             {msg.actions && msg.actions.length > 0 && (
                                                 <div className="flex flex-wrap gap-1.5 mt-2 max-w-[86%]">
                                                     {msg.actions.map((act, i) => (
