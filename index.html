@@ -236,7 +236,8 @@
             app_title: "ZoneCheck",
             app_version: "V3.0",
             map_pins_json: "{}",
-            gemini_api_key: DEFAULT_GEMINI_KEY
+            gemini_api_key: DEFAULT_GEMINI_KEY,
+            ai_bot_name: "น้องสภาฯ"
         };
 
         const ROOM_CRITERIA = [
@@ -545,10 +546,11 @@
             const [appTitleInput, setAppTitleInput] = useState('ZoneCheck');
             const [appVersionInput, setAppVersionInput] = useState('V3.0');
             const [geminiApiKeyInput, setGeminiApiKeyInput] = useState(DEFAULT_GEMINI_KEY);
+            const [aiBotNameInput, setAiBotNameInput] = useState('น้องสภาฯ');
             const [sysPasscode, setSysPasscode] = useState('');
             const [sysMasterPasscode, setSysMasterPasscode] = useState('');
 
-            // States สำหรับ ZoneCheck AI Chatbot
+            // States สำหรับ น้องสภาฯ AI Chatbot
             const [isAiChatOpen, setIsAiChatOpen] = useState(false);
             const [aiChatInput, setAiChatInput] = useState('');
             const [isAiTyping, setIsAiTyping] = useState(false);
@@ -556,7 +558,7 @@
                 {
                     id: 'welcome_msg',
                     sender: 'bot',
-                    text: 'สวัสดีครับ! ผมคือผู้ช่วยอัจฉริยะ ZoneCheck AI ของสภานักเรียนโรงเรียนคำม่วง\n\nสามารถพิมพ์ชื่อห้อง (เช่น ม.1/1, ม.4/2) เพื่อเช็คผลตรวจวันนี้ อันดับคะแนน พิกัดเขตพื้นที่ หรือกดปุ่มคำถามด่วนด้านล่างได้เลยครับ',
+                    text: 'สวัสดีครับ! ผมชื่อ "น้องสภาฯ" ผู้ช่วยอัจฉริยะของสภานักเรียนโรงเรียนคำม่วง\n\nสามารถพิมพ์ถามเรื่องคะแนน ชื่อห้อง (เช่น ม.1/1, ม.4/2) วิธีคิดคำนวณคะแนน พิกัดเขตพื้นที่ หรือจะชวนคุยเล่น ถามความรู้ทั่วไปก็ได้หมดเลยนะครับ!',
                     actions: []
                 }
             ]);
@@ -586,6 +588,7 @@
                     setAppTitleInput((settings.app_title || 'ZoneCheck').trim() || 'ZoneCheck');
                     setAppVersionInput((settings.app_version ?? 'V3.0').trim());
                     setGeminiApiKeyInput(settings.gemini_api_key || DEFAULT_GEMINI_KEY);
+                    setAiBotNameInput((settings.ai_bot_name || 'น้องสภาฯ').trim() || 'น้องสภาฯ');
                     setSysPasscode(settings.passcode || '1234');
                     setSysMasterPasscode(settings.master_passcode || '9999');
 
@@ -826,66 +829,38 @@ ${roomSummaryLines}`;
                     };
                 }
 
-                // 6. ถามเรื่องเกณฑ์การให้คะแนน / หักคะแนนยังไง / เหรียญทอง
-                if (qLower.includes('เกณฑ์') || qLower.includes('คิดคะแนน') || qLower.includes('หักคะแนน') || qLower.includes('เต็มเท่าไหร่') || qLower.includes('เหรียญ')) {
+                // 6. ถามเรื่องเกณฑ์การให้คะแนน / วิธีคิดคำนวณคะแนน / เปอร์เซ็นต์ / เหรียญทอง
+                if (qLower.includes('เกณฑ์') || qLower.includes('คำนวณ') || qLower.includes('คิดคะแนน') || qLower.includes('หักคะแนน') || qLower.includes('เต็มเท่าไหร่') || qLower.includes('เหรียญ') || qLower.includes('เปอร์เซ็น') || qLower.includes('ร้อยละ') || (qLower.includes('คะแนน') && (qLower.includes('ยังไง') || qLower.includes('อย่างไร') || qLower.includes('แบบไหน')))) {
                     return {
                         text: [
-                            `เกณฑ์การประเมินความสะอาด ZoneCheck สภานักเรียนโรงเรียนคำม่วง:`,
-                            `1. หมวดห้องเรียน (เต็ม 10 คะแนน):`,
+                            `วิธีคิดคำนวณคะแนนและเกณฑ์การประเมินของสภานักเรียนโรงเรียนคำม่วง:`,
+                            `1. หมวดห้องเรียน (เต็ม 10 คะแนน/วัน):`,
                             `   • แบ่งเป็น 5 จุด จุดละ 2 คะแนน ได้แก่ โต๊ะ, ขยะ, ไฟ/หน้าต่าง, พื้น, กระดาน`,
-                            `   • หากไม่ปฏิบัติหน้าที่เวรประจำวัน หัก -5 คะแนน`,
-                            `2. หมวดเขตพื้นที่ (เต็ม 10 คะแนน):`,
+                            `   • จุดไหนไม่สะอาดหักจุดละ -2 คะแนน`,
+                            `   • หากไม่ปฏิบัติหน้าที่เวรประจำวัน จะติดลบ -5 คะแนนทันที`,
+                            `2. หมวดเขตพื้นที่ (เต็ม 10 คะแนน/วัน):`,
                             `   • ดีเยี่ยม (+10), ดี (+8), พอใช้ (+5), ปรับปรุง (+2), ไม่ปฏิบัติหน้าที่ (-5)`,
-                            `3. เกณฑ์เหรียญรางวัลประจำเดือน/สะสม:`,
-                            `   • เหรียญทอง: ร้อยละ 80 ขึ้นไป`,
-                            `   • เหรียญเงิน: ร้อยละ 70 - 79.99`,
-                            `   • เหรียญทองแดง: ร้อยละ 60 - 69.99`
+                            `3. วิธีคำนวณร้อยละ (%) และเหรียญรางวัล:`,
+                            `   • สูตร: (คะแนนรวมที่ได้ ÷ คะแนนเต็มของจำนวนวันที่ได้รับการตรวจจริง) × 100`,
+                            `   • หากวันไหน "ข้ามการตรวจ" จะไม่ถูกนำมาคิดเป็นฐานคะแนนเต็ม ห้องนั้นจะไม่เสียเปรียบครับ`,
+                            `   • เหรียญทอง: ร้อยละ 80 ขึ้นไป | เหรียญเงิน: ร้อยละ 70 - 79.99 | เหรียญทองแดง: ร้อยละ 60 - 69.99`
                         ].join('\n'),
                         actions: []
                     };
                 }
 
                 // 7. ถามเกี่ยวกับแอดมิน / ติดต่อปัญหา / ลืมรหัสผ่าน
-                if (qLower.includes('แอดมิน') || qLower.includes('admin') || qLower.includes('รหัสผ่าน') || qLower.includes('ลืมรหัส') || qLower.includes('ติดต่อ') || qLower.includes('พี่ภีม')) {
-                    return {
-                        text: `ผู้ดูแลระบบ (System Admin):\n• ชื่อ: ${settings?.admin_name || 'นายภูธนากร หงษ์ทอง (พี่ภีม)'}\n• ตำแหน่ง: ${settings?.admin_role || 'เลขานุการสภานักเรียนโรงเรียนคำม่วง'}\nหากพบปัญหาการใช้งานหรือลืมรหัสผ่าน สามารถกดปุ่มช่วยเหลือด้านบนเพื่อติดต่อผ่าน LINE ได้เลยครับ`,
-                        actions: []
-                    };
-                }
-
-                // 8. ขอให้สรุปรายงานผลตรวจวันนี้สำหรับส่งเข้าไลน์
-                if (qLower.includes('สรุป') || qLower.includes('รายงาน') || qLower.includes('ส่งไลน์')) {
-                    const checkedRoomInsps = dayInsps.filter(i => i.type === 'room');
-                    const fullRooms = checkedRoomInsps.filter(i => i.totalScore === 10).length;
-                    const noDutyRooms = checkedRoomInsps.filter(i => i.scores?.status === 'ไม่ปฏิบัติหน้าที่' || i.totalScore === -5);
-                    const inspectorNames = dailyInspectorDutySummary.teams.map(t => t.allMembers.join(', ')).join(' / ') || 'คณะกรรมการสภานักเรียน';
-
-                    const reportText = [
-                        `สรุปผลการตรวจความสะอาดเรียบร้อย ประจำวันที่ ${formatDateObj(targetDateStr)}`,
-                        `สภานักเรียนโรงเรียนคำม่วง`,
-                        `------------------------`,
-                        `• ตรวจหมวดห้องเรียน: ${inspectProgress.roomDone}/${inspectProgress.roomTotal} ห้อง (ได้คะแนนเต็ม 10 จำนวน ${fullRooms} ห้อง)`,
-                        `• ตรวจหมวดเขตพื้นที่: ${inspectProgress.zoneDone}/${inspectProgress.zoneTotal} เขต`,
-                        noDutyRooms.length > 0 ? `• ห้องที่ไม่ปฏิบัติหน้าที่เวรประจำวัน: ${noDutyRooms.map(i => validRooms.find(r => r.id === i.roomId)?.name || '').filter(Boolean).join(', ')}` : `• การปฏิบัติหน้าที่: ทุกห้องที่ตรวจปฏิบัติหน้าที่เรียบร้อย`,
-                        `• คณะกรรมการผู้ตรวจ: ${inspectorNames}`
-                    ].join('\n');
-
-                    return {
-                        text: reportText,
-                        actions: [{ label: 'คัดลอกข้อความสรุป', type: 'copy', copyText: reportText }]
-                    };
-                }
-
-                // 9. ทักทายหรือถามว่าทำอะไรได้บ้าง
-                if (qLower.includes('สวัสดี') || qLower.includes('หวัดดี') || qLower.includes('ดีครับ') || qLower.includes('ดีค่ะ') || qLower.includes('ทำอะไรได้') || qLower.includes('ช่วยอะไร') || qLower.includes('คือใคร')) {
+                // 9. ทักทายหรือถามชื่อบอท
+                const botName = (settings?.ai_bot_name || 'น้องสภาฯ').trim() || 'น้องสภาฯ';
+                if (qLower.includes('สวัสดี') || qLower.includes('หวัดดี') || qLower.includes('ดีครับ') || qLower.includes('ดีค่ะ') || qLower.includes('ทำอะไรได้') || qLower.includes('ช่วยอะไร') || qLower.includes('คือใคร') || qLower.includes('ชื่ออะไร')) {
                     return {
                         text: [
-                            `สวัสดีครับ! ผมคือบอทผู้ช่วย ZoneCheck AI ของสภานักเรียนโรงเรียนคำม่วง คุณสามารถถามผมได้ทุกเรื่องในระบบเลยครับ เช่น:`,
+                            `สวัสดีครับ! ผมชื่อ "${botName}" เป็นบอทผู้ช่วยของสภานักเรียนโรงเรียนคำม่วง พี่ๆ น้องๆ สามารถถามหรือคุยกับผมได้ทุกเรื่องเลยครับ เช่น:`,
                             `• พิมพ์ชื่อห้อง เช่น "ม.1/1" หรือ "4/2" เพื่อดูคะแนนและพิกัดแผนผัง`,
                             `• พิมพ์สายชั้น เช่น "ม.1" หรือ "ม.ต้น" เพื่อดูภาพรวมทั้งสายชั้น`,
-                            `• ถามว่า "เหลือห้องไหนยังไม่ตรวจ" หรือ "วันนี้ใครเป็นคนตรวจ"`,
-                            `• ถามว่า "5 อันดับสูงสุด" หรือ "เกณฑ์การให้คะแนน"`,
-                            `• พิมพ์ว่า "สรุปผลส่งไลน์" เพื่อสร้างข้อความรายงานประจำวัน`
+                            `• ถามว่า "คิดคำนวณคะแนนยังไง", "เหลือห้องไหนยังไม่ตรวจ" หรือ "วันนี้ใครเป็นคนตรวจ"`,
+                            `• พิมพ์ว่า "สรุปผลส่งไลน์" เพื่อสร้างข้อความรายงานประจำวัน`,
+                            `• หรือจะชวนคุยเล่น ปรึกษาเรื่องทั่วไป ถามความรู้รอบตัวก็พิมพ์มาได้เลยครับ!`
                         ].join('\n'),
                         actions: []
                     };
@@ -918,18 +893,26 @@ ${roomSummaryLines}`;
                     return;
                 }
 
+                const botName = (settings?.ai_bot_name || 'น้องสภาฯ').trim() || 'น้องสภาฯ';
                 const activeApiKey = (settings?.gemini_api_key || DEFAULT_GEMINI_KEY).trim();
-                const systemPrompt = `คุณคือ "ZoneCheck AI" หุ่นยนต์ผู้ช่วยอัจฉริยะของสภานักเรียนโรงเรียนคำม่วง อำเภอคำม่วง จังหวัดกาฬสินธุ์ ตอบคำถามด้วยภาษาไทยที่สุภาพ กระชับ ชัดเจน และเป็นกันเอง ห้ามใช้อิโมจิโดยเด็ดขาด สามารถตอบได้ทั้งคำถามทั่วไปและคำถามเกี่ยวกับข้อมูลการตรวจความสะอาดของโรงเรียนตามข้อมูลจริงด้านล่างนี้:\n\n${buildSystemContextForAi()}`;
+                const systemPrompt = `คุณชื่อ "${botName}" เป็นผู้ช่วยอัจฉริยะที่น่ารัก สุภาพ เป็นกันเอง และฉลาดมากของสภานักเรียนโรงเรียนคำม่วง อำเภอคำม่วง จังหวัดกาฬสินธุ์ แทนตัวเองว่า "${botName}" หรือ "ผม" ห้ามใช้อิโมจิโดยเด็ดขาด สามารถชวนคุยเล่น ตอบคำถามความรู้ทั่วไป ช่วยคิดงานสภานักเรียน และตอบคำถามเกี่ยวกับข้อมูลการตรวจความสะอาดของโรงเรียนตามข้อมูลจริงด้านล่างนี้ได้อย่างเป็นธรรมชาติ:\n\n${buildSystemContextForAi()}`;
 
-                const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
                 let aiText = null;
 
+                // 1. ลองเรียกผ่าน Gemini API (รองรับทั้ง API Key ปกติ และ OAuth Token)
+                const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
                 for (const modelName of modelsToTry) {
                     try {
-                        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${activeApiKey}`;
+                        const isOAuthToken = activeApiKey.startsWith('AQ.') || activeApiKey.startsWith('ya29.');
+                        const apiUrl = isOAuthToken
+                            ? `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`
+                            : `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${activeApiKey}`;
+                        const headers = { 'Content-Type': 'application/json' };
+                        if (isOAuthToken) headers['Authorization'] = `Bearer ${activeApiKey}`;
+
                         const res = await fetch(apiUrl, {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
+                            headers,
                             body: JSON.stringify({
                                 contents: [{ parts: [{ text: queryText }] }],
                                 systemInstruction: { parts: [{ text: systemPrompt }] }
@@ -939,8 +922,33 @@ ${roomSummaryLines}`;
                             const data = await res.json();
                             const candidateText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
                             if (candidateText) {
-                                aiText = candidateText.trim();
+                                aiText = candidateText.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F900}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
                                 break;
+                            }
+                        }
+                    } catch (e) {}
+                }
+
+                // 2. หากคีย์ติดข้อจำกัด ให้สลับมาใช้ Cloud AI สำรองอัตโนมัติ เพื่อให้คุยโต้ตอบได้ทุกเรื่อง 100%
+                if (!aiText) {
+                    try {
+                        const fallbackRes = await fetch('https://text.pollinations.ai/openai', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                model: 'openai',
+                                messages: [
+                                    { role: 'system', content: systemPrompt },
+                                    { role: 'user', content: queryText }
+                                ],
+                                temperature: 0.7
+                            })
+                        });
+                        if (fallbackRes.ok) {
+                            const fbData = await fallbackRes.json();
+                            const fbContent = fbData?.choices?.[0]?.message?.content;
+                            if (fbContent) {
+                                aiText = fbContent.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F900}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
                             }
                         }
                     } catch (e) {}
@@ -958,10 +966,10 @@ ${roomSummaryLines}`;
                         id: generateId('msg'),
                         sender: 'bot',
                         text: [
-                            `สำหรับคำถาม "${queryText}" ตอนนี้สามารถตรวจสอบข้อมูลด่วนจากระบบได้ดังนี้ครับ:`,
+                            `${botName}ขอสรุปข้อมูลด่วนในระบบตอนนี้ให้ก่อนนะครับ:`,
                             `• ความคืบหน้าวันนี้: ห้องเรียนตรวจแล้ว ${inspectProgress.roomDone}/${inspectProgress.roomTotal} ห้อง, เขตพื้นที่ ${inspectProgress.zoneDone}/${inspectProgress.zoneTotal} เขต`,
                             `• อันดับ 1 คะแนนสะสมสูงสุดตอนนี้: ${top5AllTime[0]?.room?.name || '-'} (${top5AllTime[0]?.score || 0} คะแนน)`,
-                            `\nลองพิมพ์ชื่อห้อง เช่น "ม.1/1", "ม.4/2", "ใครตรวจ", "เกณฑ์คะแนน" หรือกดปุ่มลัดด้านบนได้เลยครับ!`
+                            `\nสามารถพิมพ์ชื่อห้อง เช่น "ม.1/1", "คิดคำนวณคะแนนยังไง", "ใครตรวจวันนี้" หรือกดปุ่มด้านบนได้เลยครับ!`
                         ].join('\n'),
                         actions: [
                             { label: 'ดูความคืบหน้าวันนี้', type: 'route', route: 'dashboard' },
@@ -2565,7 +2573,8 @@ ${roomSummaryLines}`;
                     { key: 'admin_name', val: adminNameInput },
                     { key: 'admin_role', val: adminRoleInput },
                     { key: 'admin_line_url', val: adminLineInput },
-                    { key: 'gemini_api_key', val: geminiApiKeyInput.trim() }
+                    { key: 'gemini_api_key', val: geminiApiKeyInput.trim() },
+                    { key: 'ai_bot_name', val: aiBotNameInput.trim() || 'น้องสภาฯ' }
                 ];
                 const newSettings = { ...settings };
                 updates.forEach(u => { newSettings[u.key] = u.val; });
@@ -4988,8 +4997,12 @@ ${roomSummaryLines}`;
                                             <label className="text-[10px] font-bold text-gray-500 mb-1 block uppercase">8. เลขเวอร์ชันแอป (แสดงด้านบนสุดต่อจากชื่อแอป)</label>
                                             <input type="text" value={appVersionInput} onChange={e=>setAppVersionInput(e.target.value)} placeholder="เช่น V2.6 หรือ V3.0 (เว้นว่างได้)" className="w-full p-2.5 rounded-lg border border-gray-200 text-xs font-bold outline-none focus:border-[#C8102E]" />
                                          </div>
-                                         <div className="col-span-full border border-gray-200 p-3 rounded-xl bg-white">
-                                            <label className="text-[10px] font-bold text-gray-500 mb-1 block uppercase">9. Gemini API Key สำหรับแชทบอท AI (เชื่อมต่อคีย์เริ่มต้นให้แล้ว)</label>
+                                         <div className="border border-gray-200 p-3 rounded-xl bg-white">
+                                            <label className="text-[10px] font-bold text-gray-500 mb-1 block uppercase">9. ชื่อหุ่นยนต์ผู้ช่วย AI (ค่าเริ่มต้น: น้องสภาฯ)</label>
+                                            <input type="text" value={aiBotNameInput} onChange={e=>setAiBotNameInput(e.target.value)} placeholder="เช่น น้องสภาฯ" className="w-full p-2.5 rounded-lg border border-gray-200 text-xs font-bold outline-none focus:border-[#C8102E]" />
+                                         </div>
+                                         <div className="border border-gray-200 p-3 rounded-xl bg-white">
+                                            <label className="text-[10px] font-bold text-gray-500 mb-1 block uppercase">10. Gemini API Key สำหรับแชทบอท AI</label>
                                             <input type="password" value={geminiApiKeyInput} onChange={e=>setGeminiApiKeyInput(e.target.value)} placeholder="วาง Gemini API Key เพื่อเปิดโหมดสนทนาอิสระ" className="w-full p-2.5 rounded-lg border border-gray-200 text-xs font-medium outline-none focus:border-[#C8102E]" />
                                          </div>
                                          <div className="col-span-full border border-gray-200 p-3.5 rounded-xl bg-white space-y-3">
@@ -7324,7 +7337,7 @@ ${roomSummaryLines}`;
                         <button
                             onClick={() => setIsAiChatOpen(true)}
                             className="fixed bottom-20 lg:bottom-6 right-4 z-40 rounded-full hover:scale-110 active:scale-95 transition-all group"
-                            title="คุยกับน้องบอท ZoneCheck AI"
+                            title={`คุยกับ ${(settings?.ai_bot_name || 'น้องสภาฯ').trim() || 'น้องสภาฯ'}`}
                         >
                             <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-white rounded-full z-10"></span>
                             <BotMascotAvatar size="lg" isFloating={true} />
@@ -7340,10 +7353,10 @@ ${roomSummaryLines}`;
                                         <BotMascotAvatar size="md" />
                                         <div className="min-w-0">
                                             <div className="flex items-center gap-1.5">
-                                                <h3 className="font-black text-sm sm:text-base truncate">ZoneCheck AI Bot</h3>
+                                                <h3 className="font-black text-sm sm:text-base truncate">{(settings?.ai_bot_name || 'น้องสภาฯ').trim() || 'น้องสภาฯ'}</h3>
                                                 <span className="px-2 py-0.5 text-[9px] font-black bg-emerald-400/25 text-emerald-100 border border-emerald-300/30 rounded-full">ONLINE</span>
                                             </div>
-                                            <p className="text-[11px] text-rose-100 truncate">หุ่นยนต์ผู้ช่วยสภานักเรียนโรงเรียนคำม่วง</p>
+                                            <p className="text-[11px] text-rose-100 truncate">ผู้ช่วยอัจฉริยะสภานักเรียนโรงเรียนคำม่วง</p>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-1.5 shrink-0">
@@ -7351,7 +7364,7 @@ ${roomSummaryLines}`;
                                             onClick={() => setAiMessages([{
                                                 id: generateId('msg'),
                                                 sender: 'bot',
-                                                text: 'ล้างประวัติการสนทนาเรียบร้อยครับ สามารถพิมพ์ชื่อห้องหรือเลือกคำถามด่วนด้านล่างได้เลยครับ',
+                                                text: `ล้างประวัติการสนทนาเรียบร้อยครับ มีเรื่องไหนให้ "${(settings?.ai_bot_name || 'น้องสภาฯ').trim() || 'น้องสภาฯ'}" ช่วยเช็คคะแนน หรืออยากชวนคุยเรื่องอะไร พิมพ์มาได้เลยครับ!`,
                                                 actions: []
                                             }])}
                                             className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center text-white transition-colors"
@@ -7370,7 +7383,7 @@ ${roomSummaryLines}`;
                                         { label: 'ความคืบหน้าวันนี้', q: 'ความคืบหน้าการตรวจวันนี้เหลือห้องไหนยังไม่ตรวจบ้าง' },
                                         { label: '5 อันดับสูงสุด', q: 'ขอดู 5 อันดับแรกคะแนนสูงสุด' },
                                         { label: 'ใครตรวจวันนี้', q: 'วันนี้ใครเป็นคนตรวจ' },
-                                        { label: 'เกณฑ์คะแนน', q: 'เกณฑ์การให้คะแนนและเหรียญรางวัล' },
+                                        { label: 'วิธีคำนวณคะแนน', q: 'คิดคำนวณคะแนนยังไง' },
                                         { label: 'สรุปผลส่ง LINE', q: 'ช่วยสรุปรายงานผลการตรวจวันนี้สำหรับส่งเข้าไลน์' },
                                         { label: 'เช็คห้อง ม.1/1', q: 'ม.1/1' }
                                     ].map((chip, idx) => (
@@ -7412,7 +7425,7 @@ ${roomSummaryLines}`;
                                         <div className="flex items-start">
                                             <div className="bg-white border border-gray-200 rounded-2xl rounded-bl-sm px-4 py-3 text-xs font-bold text-gray-500 flex items-center gap-2 shadow-sm">
                                                 <i className="ph ph-spinner animate-spin text-[#C8102E] text-sm"></i>
-                                                <span>ZoneCheck AI กำลังประมวลผลข้อมูล...</span>
+                                                <span>{(settings?.ai_bot_name || 'น้องสภาฯ').trim() || 'น้องสภาฯ'} กำลังพิมพ์...</span>
                                             </div>
                                         </div>
                                     )}
@@ -7427,7 +7440,7 @@ ${roomSummaryLines}`;
                                         type="text"
                                         value={aiChatInput}
                                         onChange={e => setAiChatInput(e.target.value)}
-                                        placeholder="พิมพ์ชื่อห้อง เช่น ม.2/5 หรือถามเรื่องคะแนน..."
+                                        placeholder={`ถาม${(settings?.ai_bot_name || 'น้องสภาฯ').trim() || 'น้องสภาฯ'} ได้ทุกเรื่องเลย...`}
                                         className="flex-1 px-4 py-3 rounded-2xl bg-gray-100 focus:bg-white border border-transparent focus:border-[#C8102E] text-xs sm:text-sm font-bold text-gray-800 outline-none transition-all"
                                     />
                                     <button
