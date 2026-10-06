@@ -747,6 +747,17 @@ ${roomSummaryLines}`;
                         if (rPin?.note) lines.push(`• ตำแหน่งห้องเรียน: ${rPin.note}`);
                         if (zPin?.note && matchedRoom.hasZone !== false) lines.push(`• ตำแหน่งเขตพื้นที่: ${zPin.note}`);
 
+                        const insight = getRoomAiInsight(matchedRoom.id, matchedRoom.name);
+                        if (insight && insight.hasData) {
+                            lines.push(`\nวิเคราะห์สถิติสะสมของห้อง ${matchedRoom.name} (ตรวจห้อง ${insight.roomCheckedCount} ครั้ง / เขต ${insight.zoneCheckedCount} ครั้ง):`);
+                            lines.push(`• จุดแข็ง: ${insight.strengthText}`);
+                            lines.push(`• จุดอ่อนที่ควรระวัง: ${insight.weaknessText}`);
+                            if (matchedRoom.hasZone !== false) {
+                                lines.push(`• แนวโน้มเขตพื้นที่: ${insight.zoneTrendText}`);
+                            }
+                            lines.push(`• คำแนะนำ: ${insight.adviceText}`);
+                        }
+
                         return { text: lines.join('\n'), actions };
                     }
                 }
@@ -1014,22 +1025,10 @@ ${roomSummaryLines}`;
                 } else if (action.type === 'inspect_room' && action.roomObj) {
                     setIsAiChatOpen(false);
                     setCurrentRoute('inspect');
-                        if (rPin?.note) lines.push(`• ตำแหน่งห้องเรียน: ${rPin.note}`);
-                        if (zPin?.note && matchedRoom.hasZone !== false) lines.push(`• ตำแหน่งเขตพื้นที่: ${zPin.note}`);
-
-                        const insight = getRoomAiInsight(matchedRoom.id, matchedRoom.name);
-                        if (insight && insight.hasData) {
-                            lines.push(`\nวิเคราะห์สถิติสะสมของห้อง ${matchedRoom.name} (ตรวจห้อง ${insight.roomCheckedCount} ครั้ง / เขต ${insight.zoneCheckedCount} ครั้ง):`);
-                            lines.push(`• จุดแข็ง: ${insight.strengthText}`);
-                            lines.push(`• จุดอ่อนที่ควรระวัง: ${insight.weaknessText}`);
-                            if (matchedRoom.hasZone !== false) {
-                                lines.push(`• แนวโน้มเขตพื้นที่: ${insight.zoneTrendText}`);
-                            }
-                            lines.push(`• คำแนะนำ: ${insight.adviceText}`);
-                        }
-
-                        return { text: lines.join('\n'), actions };
-                    }
+                    setInspectSearchRoom(action.roomObj.name || '');
+                } else if (action.type === 'route' && action.route) {
+                    setIsAiChatOpen(false);
+                    setCurrentRoute(action.route);
                 }
             };
 
@@ -6842,7 +6841,7 @@ ${roomSummaryLines}`;
                                     <div className="bg-red-50/50 border border-red-100 rounded-2xl p-3.5 space-y-2.5">
                                         <div className="flex flex-wrap items-center justify-between gap-2">
                                             <span className="text-xs font-black text-gray-800 flex items-center gap-1.5">
-                                                <i className="ph ph-Sliders text-[#C8102E]"></i> 1. เลือกประเภทใบประเมินที่นำมาสแกน (ให้ตรงกับใบที่พิมพ์ไป):
+                                                <i className="ph ph-sliders text-[#C8102E]"></i> 1. เลือกประเภทใบประเมินที่นำมาสแกน (ให้ตรงกับใบที่พิมพ์ไป):
                                             </span>
                                             <label className="flex items-center gap-1.5 bg-white border border-red-200 px-3 py-1 rounded-xl text-[11px] font-bold text-[#C8102E] cursor-pointer select-none shadow-sm">
                                                 <input type="checkbox" checked={omrScannerModal.onlySaveMarked} onChange={e => setOmrScannerModal(prev => ({ ...prev, onlySaveMarked: e.target.checked }))} className="accent-[#C8102E] rounded" />
@@ -6950,7 +6949,7 @@ ${roomSummaryLines}`;
                                         <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
                                             <div className="flex items-center gap-3">
                                                 <div className="w-11 h-11 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-[#C8102E] shadow-sm shrink-0">
-                                                    <i className="ph ph-CornersOut text-2xl"></i>
+                                                    <i className="ph ph-corners-out text-2xl"></i>
                                                 </div>
                                                 <div>
                                                     <p className="text-xs sm:text-sm font-black text-gray-800">
@@ -7476,7 +7475,7 @@ ${roomSummaryLines}`;
                                                             onClick={() => handleAiActionClick(act)}
                                                             className="px-3 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 text-[#C8102E] border border-red-200 text-[11px] font-bold flex items-center gap-1 shadow-sm transition-all"
                                                         >
-                                                            <i className="ph ph-arrow-Elbow-Down-Right text-xs"></i>
+                                                            <i className="ph ph-arrow-elbow-down-right text-xs"></i>
                                                             <span>{act.label}</span>
                                                         </button>
                                                     ))}
