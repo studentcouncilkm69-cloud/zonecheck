@@ -794,79 +794,106 @@ ${roomSummaryLines}`;
                     return { text: lines.join('\n'), actions: [] };
                 }
 
-                // 4. ถามถึงอันดับคะแนน / ที่ 1 / Top 5 / คะแนนสูงสุด / คะแนนน้อยสุด
-                if (qLower.includes('อันดับ') || qLower.includes('ที่ 1') || qLower.includes('ที่1') || qLower.includes('ท็อป') || qLower.includes('top') || qLower.includes('สูงสุด') || qLower.includes('เยอะสุด') || qLower.includes('น้อยสุด') || qLower.includes('ต่ำสุด') || qLower.includes('รั้งท้าย')) {
-                    if (qLower.includes('น้อยสุด') || qLower.includes('ต่ำสุด') || qLower.includes('รั้งท้าย')) {
-                        const bottomAll = [...leaderboardDataAllTime].sort((a, b) => a.score - b.score).slice(0, 5);
-                        const txt = bottomAll.map((item, i) => `${i + 1}. ${item.room?.name} (${item.score} คะแนน)`).join('\n');
-                        return {
-                            text: `ห้องที่มีคะแนนสะสมน้อยที่สุด 5 ลำดับ:\n${txt || 'ยังไม่มีข้อมูล'}`,
-                            actions: [{ label: 'เปิดหน้าจัดอันดับทั้งหมด', type: 'route', route: 'leaderboard' }]
-                        };
-                    }
-                    const topAll = top5AllTime.slice(0, 5).map(item => `อันดับ ${item.trueRank}: ${item.room?.name} (${item.score} คะแนน)`).join('\n');
-                    const topMonth = top5Monthly.slice(0, 5).map(item => `อันดับ ${item.trueRank}: ${item.room?.name} (${item.score} คะแนน)`).join('\n');
-                    return {
-                        text: `สรุป 5 อันดับแรก (คะแนนสะสมรวมทั้งหมด):\n${topAll || 'ยังไม่มีข้อมูล'}\n\nสรุป 5 อันดับแรก (ประจำเดือนนี้):\n${topMonth || 'ยังไม่มีข้อมูล'}`,
-                        actions: [{ label: 'เปิดหน้าจัดอันดับทั้งหมด', type: 'route', route: 'leaderboard' }]
-                    };
-                }
-
-                // 5. ถามว่าใครเป็นคนตรวจ / กรรมการเวรวันนี้
-                if (qLower.includes('ใครตรวจ') || qLower.includes('คนตรวจ') || qLower.includes('ผู้ตรวจ') || qLower.includes('กรรมการ')) {
-                    if (dailyInspectorDutySummary.teams.length === 0) {
-                        return {
-                            text: `ประจำวันที่ ${formatDateObj(targetDateStr)} ยังไม่มีประวัติบันทึกชื่อผู้ตรวจในระบบครับ`,
-                            actions: []
-                        };
-                    }
-                    const teamLines = dailyInspectorDutySummary.teams.map((t, idx) =>
-                        `${idx + 1}. ทีมของ ${t.mainInspector}${t.coInspectors.length > 0 ? ` (ร่วมกับ ${t.coInspectors.join(', ')})` : ''} — ตรวจห้อง ${t.roomList.length} ห้อง, เขต ${t.zoneList.length} เขต`
-                    ).join('\n');
-                    return {
-                        text: `รายชื่อคณะกรรมการผู้ตรวจ ประจำวันที่ ${formatDateObj(targetDateStr)} (รวม ${dailyInspectorDutySummary.totalUniqueInspectors} คน):\n${teamLines}`,
-                        actions: []
-                    };
-                }
-
-                // 6. ถามเรื่องเกณฑ์การให้คะแนน / วิธีคิดคำนวณคะแนน / เปอร์เซ็นต์ / เหรียญทอง
-                if (qLower.includes('เกณฑ์') || qLower.includes('คำนวณ') || qLower.includes('คิดคะแนน') || qLower.includes('หักคะแนน') || qLower.includes('เต็มเท่าไหร่') || qLower.includes('เหรียญ') || qLower.includes('เปอร์เซ็น') || qLower.includes('ร้อยละ') || (qLower.includes('คะแนน') && (qLower.includes('ยังไง') || qLower.includes('อย่างไร') || qLower.includes('แบบไหน')))) {
-                    return {
-                        text: [
-                            `วิธีคิดคำนวณคะแนนและเกณฑ์การประเมินของสภานักเรียนโรงเรียนคำม่วง:`,
-                            `1. หมวดห้องเรียน (เต็ม 10 คะแนน/วัน):`,
-                            `   • แบ่งเป็น 5 จุด จุดละ 2 คะแนน ได้แก่ โต๊ะ, ขยะ, ไฟ/หน้าต่าง, พื้น, กระดาน`,
-                            `   • จุดไหนไม่สะอาดหักจุดละ -2 คะแนน`,
-                            `   • หากไม่ปฏิบัติหน้าที่เวรประจำวัน จะติดลบ -5 คะแนนทันที`,
-                            `2. หมวดเขตพื้นที่ (เต็ม 10 คะแนน/วัน):`,
-                            `   • ดีเยี่ยม (+10), ดี (+8), พอใช้ (+5), ปรับปรุง (+2), ไม่ปฏิบัติหน้าที่ (-5)`,
-                            `3. วิธีคำนวณร้อยละ (%) และเหรียญรางวัล:`,
-                            `   • สูตร: (คะแนนรวมที่ได้ ÷ คะแนนเต็มของจำนวนวันที่ได้รับการตรวจจริง) × 100`,
-                            `   • หากวันไหน "ข้ามการตรวจ" จะไม่ถูกนำมาคิดเป็นฐานคะแนนเต็ม ห้องนั้นจะไม่เสียเปรียบครับ`,
-                            `   • เหรียญทอง: ร้อยละ 80 ขึ้นไป | เหรียญเงิน: ร้อยละ 70 - 79.99 | เหรียญทองแดง: ร้อยละ 60 - 69.99`
-                        ].join('\n'),
-                        actions: []
-                    };
-                }
-
-                // 7. ถามเกี่ยวกับแอดมิน / ติดต่อปัญหา / ลืมรหัสผ่าน
-                // 9. ทักทายหรือถามชื่อบอท
-                const botName = (settings?.ai_bot_name || 'น้องสภาฯ').trim() || 'น้องสภาฯ';
-                if (qLower.includes('สวัสดี') || qLower.includes('หวัดดี') || qLower.includes('ดีครับ') || qLower.includes('ดีค่ะ') || qLower.includes('ทำอะไรได้') || qLower.includes('ช่วยอะไร') || qLower.includes('คือใคร') || qLower.includes('ชื่ออะไร')) {
-                    return {
-                        text: [
-                            `สวัสดีครับ! ผมชื่อ "${botName}" เป็นบอทผู้ช่วยของสภานักเรียนโรงเรียนคำม่วง พี่ๆ น้องๆ สามารถถามหรือคุยกับผมได้ทุกเรื่องเลยครับ เช่น:`,
-                            `• พิมพ์ชื่อห้อง เช่น "ม.1/1" หรือ "4/2" เพื่อดูคะแนนและพิกัดแผนผัง`,
-                            `• พิมพ์สายชั้น เช่น "ม.1" หรือ "ม.ต้น" เพื่อดูภาพรวมทั้งสายชั้น`,
-                            `• ถามว่า "คิดคำนวณคะแนนยังไง", "เหลือห้องไหนยังไม่ตรวจ" หรือ "วันนี้ใครเป็นคนตรวจ"`,
-                            `• พิมพ์ว่า "สรุปผลส่งไลน์" เพื่อสร้างข้อความรายงานประจำวัน`,
-                            `• หรือจะชวนคุยเล่น ปรึกษาเรื่องทั่วไป ถามความรู้รอบตัวก็พิมพ์มาได้เลยครับ!`
-                        ].join('\n'),
-                        actions: []
-                    };
-                }
-
                 return null;
+            };
+
+            const getRoomAiInsight = (roomId, roomName = '') => {
+                if (!roomId) return null;
+                const validInspections = Array.isArray(inspections) ? inspections : [];
+                const roomHistory = validInspections.filter(i => i.roomId === roomId && i.totalScore !== null && i.totalScore !== undefined);
+                const rInsps = roomHistory.filter(i => i.type === 'room');
+                const zInsps = roomHistory.filter(i => i.type === 'zone');
+
+                if (rInsps.length === 0 && zInsps.length === 0) {
+                    return {
+                        hasData: false,
+                        summary: 'ยังไม่มีสถิติการตรวจสะสมเพียงพอสำหรับการวิเคราะห์',
+                        weaknessText: '-',
+                        strengthText: '-',
+                        zoneTrendText: '-',
+                        roomCheckedCount: 0,
+                        zoneCheckedCount: 0
+                    };
+                }
+
+                const failCounts = { c1: 0, c2: 0, c3: 0, c4: 0, c5: 0 };
+                let noDutyCount = 0;
+                let perfectRoomCount = 0;
+
+                rInsps.forEach(insp => {
+                    if (insp.scores?.status === 'ไม่ปฏิบัติหน้าที่' || insp.totalScore === -5) {
+                        noDutyCount++;
+                    } else {
+                        if (Number(insp.totalScore) === 10) perfectRoomCount++;
+                        ROOM_CRITERIA.forEach(c => {
+                            if (insp.scores && insp.scores[c.id] === 0) {
+                                failCounts[c.id] = (failCounts[c.id] || 0) + 1;
+                            }
+                        });
+                    }
+                });
+
+                const sortedFails = ROOM_CRITERIA
+                    .map(c => ({ id: c.id, name: c.name, count: failCounts[c.id] || 0 }))
+                    .sort((a, b) => b.count - a.count);
+
+                const topWeaknesses = sortedFails.filter(f => f.count > 0);
+                const topStrengths = sortedFails.filter(f => f.count === 0).map(f => f.name);
+
+                let weaknessText = 'ยังไม่เคยถูกหักคะแนนรายจุดเลย รักษามาตรฐานได้ดีเยี่ยม';
+                if (topWeaknesses.length > 0) {
+                    const topList = topWeaknesses.slice(0, 2).map(w => `${w.name} (${w.count} ครั้ง)`).join(', ');
+                    weaknessText = `มักถูกหักเรื่อง ${topList}`;
+                    if (noDutyCount > 0) {
+                        weaknessText += ` และไม่ปฏิบัติหน้าที่เวร ${noDutyCount} ครั้ง`;
+                    }
+                } else if (noDutyCount > 0) {
+                    weaknessText = `ไม่ปฏิบัติหน้าที่เวร ${noDutyCount} ครั้ง`;
+                }
+
+                let strengthText = '-';
+                if (rInsps.length > 0) {
+                    if (perfectRoomCount === rInsps.length) {
+                        strengthText = `ได้คะแนนห้องเรียนเต็ม 10 ทุกครั้งที่ตรวจ (${perfectRoomCount} ครั้ง)`;
+                    } else if (topStrengths.length > 0) {
+                        strengthText = `หมวดที่ทำได้ดีไม่เคยถูกหักเลย: ${topStrengths.join(', ')}`;
+                    } else {
+                        const leastFail = sortedFails[sortedFails.length - 1];
+                        strengthText = `หมวดที่ดูแลได้ดีที่สุด: ${leastFail.name} (พลาดเพียง ${leastFail.count} ครั้ง)`;
+                    }
+                }
+
+                let zoneTrendText = 'ยังไม่มีประวัติตรวจเขตพื้นที่';
+                if (zInsps.length > 0) {
+                    const statusCounts = {};
+                    let zNoDuty = 0;
+                    zInsps.forEach(z => {
+                        const st = z.scores?.status || (z.totalScore === 10 ? 'ดีเยี่ยม' : z.totalScore === 8 ? 'ดี' : z.totalScore === 5 ? 'พอใช้' : z.totalScore === 2 ? 'ปรับปรุง' : 'ไม่ปฏิบัติหน้าที่');
+                        statusCounts[st] = (statusCounts[st] || 0) + 1;
+                        if (st === 'ไม่ปฏิบัติหน้าที่' || z.totalScore === -5) zNoDuty++;
+                    });
+                    const topZStatus = Object.entries(statusCounts).sort((a, b) => b[1] - a[1])[0];
+                    zoneTrendText = `ส่วนใหญ่ได้ระดับ "${topZStatus[0]}" (${topZStatus[1]} จาก ${zInsps.length} ครั้ง)` + (zNoDuty > 0 ? ` • ขาดเวรเขต ${zNoDuty} ครั้ง` : '');
+                }
+
+                let adviceText = 'รักษามาตรฐานความสะอาดนี้ไว้ต่อไปได้เลย';
+                if (topWeaknesses.length > 0) {
+                    adviceText = `ควรกำชับเวรประจำวันให้เน้นตรวจเช็คเรื่อง "${topWeaknesses[0].name}" ก่อนออกจากห้องเรียน`;
+                } else if (noDutyCount > 0) {
+                    adviceText = 'ควรกำชับให้เวรประจำวันเข้าทำหน้าที่อย่างสม่ำเสมอเพื่อไม่ให้ติดลบคะแนน';
+                }
+
+                return {
+                    hasData: true,
+                    roomCheckedCount: rInsps.length,
+                    zoneCheckedCount: zInsps.length,
+                    perfectRoomCount,
+                    noDutyCount,
+                    weaknessText,
+                    strengthText,
+                    zoneTrendText,
+                    adviceText
+                };
             };
 
             const handleSendAiMessage = async (presetQuery = null) => {
@@ -987,21 +1014,21 @@ ${roomSummaryLines}`;
                 } else if (action.type === 'inspect_room' && action.roomObj) {
                     setIsAiChatOpen(false);
                     setCurrentRoute('inspect');
-                    handleOpenInspect(action.roomObj, 'room');
-                } else if (action.type === 'route' && action.route) {
-                    setIsAiChatOpen(false);
-                    setCurrentRoute(action.route);
-                } else if (action.type === 'copy' && action.copyText) {
-                    try {
-                        const ta = document.createElement('textarea');
-                        ta.value = action.copyText;
-                        document.body.appendChild(ta);
-                        ta.select();
-                        document.execCommand('copy');
-                        document.body.removeChild(ta);
-                        showToast('คัดลอกข้อความสรุปเรียบร้อยแล้ว', 'success');
-                    } catch (e) {
-                        showToast('ไม่สามารถคัดลอกข้อความได้', 'error');
+                        if (rPin?.note) lines.push(`• ตำแหน่งห้องเรียน: ${rPin.note}`);
+                        if (zPin?.note && matchedRoom.hasZone !== false) lines.push(`• ตำแหน่งเขตพื้นที่: ${zPin.note}`);
+
+                        const insight = getRoomAiInsight(matchedRoom.id, matchedRoom.name);
+                        if (insight && insight.hasData) {
+                            lines.push(`\nวิเคราะห์สถิติสะสมของห้อง ${matchedRoom.name} (ตรวจห้อง ${insight.roomCheckedCount} ครั้ง / เขต ${insight.zoneCheckedCount} ครั้ง):`);
+                            lines.push(`• จุดแข็ง: ${insight.strengthText}`);
+                            lines.push(`• จุดอ่อนที่ควรระวัง: ${insight.weaknessText}`);
+                            if (matchedRoom.hasZone !== false) {
+                                lines.push(`• แนวโน้มเขตพื้นที่: ${insight.zoneTrendText}`);
+                            }
+                            lines.push(`• คำแนะนำ: ${insight.adviceText}`);
+                        }
+
+                        return { text: lines.join('\n'), actions };
                     }
                 }
             };
@@ -5780,6 +5807,42 @@ ${roomSummaryLines}`;
                                             )}
                                         </div>
                                     )}
+
+                                    {(() => {
+                                        const roomInsight = getRoomAiInsight(viewDetailModal.roomId || viewDetailModal.room?.id, viewDetailModal.room?.name);
+                                        if (!roomInsight || !roomInsight.hasData) return null;
+                                        return (
+                                            <div className="bg-gradient-to-br from-rose-50/80 via-white to-amber-50/50 p-4 rounded-2xl border border-red-100 space-y-2 shadow-sm">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-xs font-black text-[#C8102E] flex items-center gap-1.5">
+                                                        <i className="ph ph-sparkle ph-fill text-sm"></i> วิเคราะห์จุดอ่อน-จุดแข็งสะสม (AI Insights)
+                                                    </span>
+                                                    <span className="text-[10px] font-bold text-gray-400">
+                                                        จากสถิติ {roomInsight.roomCheckedCount} ครั้ง
+                                                    </span>
+                                                </div>
+                                                <div className="space-y-1.5 text-xs">
+                                                    <div className="bg-white/90 p-2.5 rounded-xl border border-emerald-100">
+                                                        <span className="font-bold text-emerald-700 block text-[11px]">จุดแข็งของห้องนี้:</span>
+                                                        <span className="text-gray-700 font-medium">{roomInsight.strengthText}</span>
+                                                    </div>
+                                                    <div className="bg-white/90 p-2.5 rounded-xl border border-rose-100">
+                                                        <span className="font-bold text-rose-600 block text-[11px]">จุดอ่อนที่ถูกหักบ่อยสุด:</span>
+                                                        <span className="text-gray-700 font-medium">{roomInsight.weaknessText}</span>
+                                                    </div>
+                                                    {viewDetailModal.room?.hasZone !== false && (
+                                                        <div className="bg-white/90 p-2.5 rounded-xl border border-purple-100">
+                                                            <span className="font-bold text-purple-700 block text-[11px]">สถิติเขตพื้นที่:</span>
+                                                            <span className="text-gray-700 font-medium">{roomInsight.zoneTrendText}</span>
+                                                        </div>
+                                                    )}
+                                                    <p className="text-[11px] font-bold text-amber-800 bg-amber-50/80 px-2.5 py-1.5 rounded-xl border border-amber-200/60">
+                                                        คำแนะนำ: {roomInsight.adviceText}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
 
                                 <div className="pt-4 mt-2 border-t border-gray-100 flex gap-2">
