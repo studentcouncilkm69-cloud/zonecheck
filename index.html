@@ -53,6 +53,18 @@
         @keyframes spin-slow { 100% { transform: rotate(360deg); } }
         .animate-spin-slow { animation: spin-slow 1.5s linear infinite; }
         
+        @keyframes bot-float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-4px); }
+        }
+        .animate-bot-float { animation: bot-float 2.8s ease-in-out infinite; }
+
+        @keyframes bot-blink {
+            0%, 92%, 100% { transform: scaleY(1); }
+            95% { transform: scaleY(0.1); }
+        }
+        .animate-bot-blink { transform-origin: center; animation: bot-blink 4s infinite; }
+
         .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
         
         .checkbox-custom:checked + div { background-color: #C8102E; border-color: #C8102E; }
@@ -312,6 +324,31 @@
         const sortRoomsNaturally = (roomList) => {
             if (!Array.isArray(roomList)) return [];
             return [...roomList].sort(compareRoomNames);
+        };
+
+        const BotMascotAvatar = ({ size = "md", isFloating = false }) => {
+            const dimClass = size === "lg" ? "w-14 h-14" : size === "sm" ? "w-8 h-8" : "w-10 h-10";
+            return (
+                <div className={`relative ${dimClass} rounded-full bg-gradient-to-b from-[#E11D48] to-[#9F1239] p-1 shadow-lg flex items-center justify-center select-none shrink-0 border-2 border-white ${isFloating ? 'animate-bot-float' : ''}`}>
+                    <svg viewBox="0 0 64 64" className="w-full h-full overflow-visible">
+                        <line x1="32" y1="2" x2="32" y2="11" stroke="#FFFFFF" strokeWidth="3.5" strokeLinecap="round" />
+                        <circle cx="32" cy="2" r="4" fill="#FBBF24" />
+                        <circle cx="7" cy="34" r="4.5" fill="#F43F5E" stroke="#FFFFFF" strokeWidth="2" />
+                        <circle cx="57" cy="34" r="4.5" fill="#F43F5E" stroke="#FFFFFF" strokeWidth="2" />
+                        <rect x="9" y="11" width="46" height="42" rx="21" fill="#FFFFFF" />
+                        <rect x="14" y="18" width="36" height="24" rx="12" fill="#0F172A" />
+                        <g className="animate-bot-blink">
+                            <circle cx="24" cy="29" r="4.2" fill="#38BDF8" />
+                            <circle cx="40" cy="29" r="4.2" fill="#38BDF8" />
+                            <circle cx="25.5" cy="27.5" r="1.4" fill="#FFFFFF" />
+                            <circle cx="41.5" cy="27.5" r="1.4" fill="#FFFFFF" />
+                        </g>
+                        <ellipse cx="19" cy="34.5" rx="2.5" ry="1.3" fill="#FB7185" opacity="0.85" />
+                        <ellipse cx="45" cy="34.5" rx="2.5" ry="1.3" fill="#FB7185" opacity="0.85" />
+                        <path d="M 27 35 Q 32 39 37 35" stroke="#38BDF8" strokeWidth="2.4" strokeLinecap="round" fill="none" />
+                    </svg>
+                </div>
+            );
         };
 
         function ZoneCheckApp() {
@@ -627,7 +664,7 @@ ${roomSummaryLines}`;
                 const dayInsps = validInspections.filter(i => i.date && String(i.date).startsWith(targetDateStr));
 
                 // 1. ตรวจสอบว่าถามถึงห้องเรียนห้องใดห้องหนึ่งหรือไม่ (เช่น 1/1, ม.2/5, 3/sp, 4/sm)
-                const roomRegex = /(?:ม\.?\s*)?(\d+)\s*\/\s*([0-9]+|sp|sm)/i;
+                const roomRegex = /(?:ม\.?\s*)?(\d+)\s*(?:\/|-|\s)\s*([0-9]+|sp|sm)/i;
                 const roomMatch = q.match(roomRegex);
                 if (roomMatch) {
                     const gradeNum = roomMatch[1];
@@ -711,8 +748,32 @@ ${roomSummaryLines}`;
                     }
                 }
 
-                // 2. ถามถึงห้องที่ยังไม่ได้ตรวจ / ความคืบหน้าวันนี้
-                if (qLower.includes('ยังไม่ตรวจ') || qLower.includes('ยังไม่ได้ตรวจ') || qLower.includes('เหลือห้องไหน') || qLower.includes('ความคืบหน้า') || qLower.includes('ตรวจหรือยัง')) {
+                // 2. ถามถึงสายชั้นทั้งสายชั้น เช่น "ม.1", "ม.2", "ม.ต้น", "ม.ปลาย"
+                const gradeOnlyMatch = q.match(/^(?:ชั้น\s*)?ม\.?\s*([1-6]|ต้น|ปลาย)$/i);
+                if (gradeOnlyMatch) {
+                    const gKey = gradeOnlyMatch[1];
+                    const targetRooms = validRooms.filter(r => {
+                        const m = String(r.name || '').match(/(\d+)/);
+                        const g = m ? parseInt(m[1], 10) : 0;
+                        if (gKey === 'ต้น') return g >= 1 && g <= 3;
+                        if (gKey === 'ปลาย') return g >= 4 && g <= 6;
+                        return String(g) === gKey;
+                    });
+                    if (targetRooms.length > 0) {
+                        const lines = [`สรุปข้อมูลสายชั้น ม.${gKey} (วันที่ ${formatDateObj(targetDateStr)}):`];
+                        targetRooms.forEach(r => {
+                            const rInsp = dayInsps.find(i => i.roomId === r.id && i.type === 'room');
+                            const zInsp = dayInsps.find(i => i.roomId === r.id && i.type === 'zone');
+                            const rTxt = rInsp ? (rInsp.totalScore === null ? 'ข้าม' : `${rInsp.totalScore}`) : '-';
+                            const zTxt = r.hasZone === false ? 'ไม่มีเขต' : (zInsp ? (zInsp.totalScore === null ? 'ข้าม' : `${zInsp.totalScore}`) : '-');
+                            lines.push(`• ${r.name}: ห้อง [${rTxt}] | เขต [${zTxt}]`);
+                        });
+                        return { text: lines.join('\n'), actions: [] };
+                    }
+                }
+
+                // 3. ถามถึงห้องที่ยังไม่ได้ตรวจ / ความคืบหน้าวันนี้
+                if (qLower.includes('ยังไม่ตรวจ') || qLower.includes('ยังไม่ได้ตรวจ') || qLower.includes('เหลือห้องไหน') || qLower.includes('ความคืบหน้า') || qLower.includes('ตรวจหรือยัง') || qLower.includes('ตรวจไปกี่ห้อง')) {
                     const uncheckedRooms = validRooms.filter(r => !dayInsps.some(i => i.roomId === r.id && i.type === 'room'));
                     const uncheckedZones = validRooms.filter(r => r.hasZone !== false && !dayInsps.some(i => i.roomId === r.id && i.type === 'zone'));
 
@@ -721,17 +782,25 @@ ${roomSummaryLines}`;
                         `• หมวดห้องเรียน: ตรวจแล้ว ${inspectProgress.roomDone} / ${inspectProgress.roomTotal} ห้อง (${inspectProgress.roomPct}%)`,
                         uncheckedRooms.length === 0
                             ? `  -> ตรวจครบทุกห้องเรียนแล้ว`
-                            : `  -> เหลือยังไม่ตรวจ (${uncheckedRooms.length} ห้อง): ${uncheckedRooms.slice(0, 15).map(r => r.name).join(', ')}${uncheckedRooms.length > 15 ? ` และอีก ${uncheckedRooms.length - 15} ห้อง` : ''}`,
+                            : `  -> เหลือยังไม่ตรวจ (${uncheckedRooms.length} ห้อง): ${uncheckedRooms.slice(0, 18).map(r => r.name).join(', ')}${uncheckedRooms.length > 18 ? ` และอีก ${uncheckedRooms.length - 18} ห้อง` : ''}`,
                         `• หมวดเขตพื้นที่: ตรวจแล้ว ${inspectProgress.zoneDone} / ${inspectProgress.zoneTotal} เขต (${inspectProgress.zonePct}%)`,
                         uncheckedZones.length === 0
                             ? `  -> ตรวจครบทุกเขตพื้นที่แล้ว`
-                            : `  -> เหลือยังไม่ตรวจ (${uncheckedZones.length} เขต): ${uncheckedZones.slice(0, 15).map(r => r.name).join(', ')}${uncheckedZones.length > 15 ? ` และอีก ${uncheckedZones.length - 15} เขต` : ''}`
+                            : `  -> เหลือยังไม่ตรวจ (${uncheckedZones.length} เขต): ${uncheckedZones.slice(0, 18).map(r => r.name).join(', ')}${uncheckedZones.length > 18 ? ` และอีก ${uncheckedZones.length - 18} เขต` : ''}`
                     ];
                     return { text: lines.join('\n'), actions: [] };
                 }
 
-                // 3. ถามถึงอันดับคะแนน / ที่ 1 / Top 5
-                if (qLower.includes('อันดับ') || qLower.includes('ที่ 1') || qLower.includes('ท็อป') || qLower.includes('top') || qLower.includes('คะแนนสูงสุด')) {
+                // 4. ถามถึงอันดับคะแนน / ที่ 1 / Top 5 / คะแนนสูงสุด / คะแนนน้อยสุด
+                if (qLower.includes('อันดับ') || qLower.includes('ที่ 1') || qLower.includes('ที่1') || qLower.includes('ท็อป') || qLower.includes('top') || qLower.includes('สูงสุด') || qLower.includes('เยอะสุด') || qLower.includes('น้อยสุด') || qLower.includes('ต่ำสุด') || qLower.includes('รั้งท้าย')) {
+                    if (qLower.includes('น้อยสุด') || qLower.includes('ต่ำสุด') || qLower.includes('รั้งท้าย')) {
+                        const bottomAll = [...leaderboardDataAllTime].sort((a, b) => a.score - b.score).slice(0, 5);
+                        const txt = bottomAll.map((item, i) => `${i + 1}. ${item.room?.name} (${item.score} คะแนน)`).join('\n');
+                        return {
+                            text: `ห้องที่มีคะแนนสะสมน้อยที่สุด 5 ลำดับ:\n${txt || 'ยังไม่มีข้อมูล'}`,
+                            actions: [{ label: 'เปิดหน้าจัดอันดับทั้งหมด', type: 'route', route: 'leaderboard' }]
+                        };
+                    }
                     const topAll = top5AllTime.slice(0, 5).map(item => `อันดับ ${item.trueRank}: ${item.room?.name} (${item.score} คะแนน)`).join('\n');
                     const topMonth = top5Monthly.slice(0, 5).map(item => `อันดับ ${item.trueRank}: ${item.room?.name} (${item.score} คะแนน)`).join('\n');
                     return {
@@ -740,7 +809,51 @@ ${roomSummaryLines}`;
                     };
                 }
 
-                // 4. ขอให้สรุปรายงานผลตรวจวันนี้สำหรับส่งเข้าไลน์
+                // 5. ถามว่าใครเป็นคนตรวจ / กรรมการเวรวันนี้
+                if (qLower.includes('ใครตรวจ') || qLower.includes('คนตรวจ') || qLower.includes('ผู้ตรวจ') || qLower.includes('กรรมการ')) {
+                    if (dailyInspectorDutySummary.teams.length === 0) {
+                        return {
+                            text: `ประจำวันที่ ${formatDateObj(targetDateStr)} ยังไม่มีประวัติบันทึกชื่อผู้ตรวจในระบบครับ`,
+                            actions: []
+                        };
+                    }
+                    const teamLines = dailyInspectorDutySummary.teams.map((t, idx) =>
+                        `${idx + 1}. ทีมของ ${t.mainInspector}${t.coInspectors.length > 0 ? ` (ร่วมกับ ${t.coInspectors.join(', ')})` : ''} — ตรวจห้อง ${t.roomList.length} ห้อง, เขต ${t.zoneList.length} เขต`
+                    ).join('\n');
+                    return {
+                        text: `รายชื่อคณะกรรมการผู้ตรวจ ประจำวันที่ ${formatDateObj(targetDateStr)} (รวม ${dailyInspectorDutySummary.totalUniqueInspectors} คน):\n${teamLines}`,
+                        actions: []
+                    };
+                }
+
+                // 6. ถามเรื่องเกณฑ์การให้คะแนน / หักคะแนนยังไง / เหรียญทอง
+                if (qLower.includes('เกณฑ์') || qLower.includes('คิดคะแนน') || qLower.includes('หักคะแนน') || qLower.includes('เต็มเท่าไหร่') || qLower.includes('เหรียญ')) {
+                    return {
+                        text: [
+                            `เกณฑ์การประเมินความสะอาด ZoneCheck สภานักเรียนโรงเรียนคำม่วง:`,
+                            `1. หมวดห้องเรียน (เต็ม 10 คะแนน):`,
+                            `   • แบ่งเป็น 5 จุด จุดละ 2 คะแนน ได้แก่ โต๊ะ, ขยะ, ไฟ/หน้าต่าง, พื้น, กระดาน`,
+                            `   • หากไม่ปฏิบัติหน้าที่เวรประจำวัน หัก -5 คะแนน`,
+                            `2. หมวดเขตพื้นที่ (เต็ม 10 คะแนน):`,
+                            `   • ดีเยี่ยม (+10), ดี (+8), พอใช้ (+5), ปรับปรุง (+2), ไม่ปฏิบัติหน้าที่ (-5)`,
+                            `3. เกณฑ์เหรียญรางวัลประจำเดือน/สะสม:`,
+                            `   • เหรียญทอง: ร้อยละ 80 ขึ้นไป`,
+                            `   • เหรียญเงิน: ร้อยละ 70 - 79.99`,
+                            `   • เหรียญทองแดง: ร้อยละ 60 - 69.99`
+                        ].join('\n'),
+                        actions: []
+                    };
+                }
+
+                // 7. ถามเกี่ยวกับแอดมิน / ติดต่อปัญหา / ลืมรหัสผ่าน
+                if (qLower.includes('แอดมิน') || qLower.includes('admin') || qLower.includes('รหัสผ่าน') || qLower.includes('ลืมรหัส') || qLower.includes('ติดต่อ') || qLower.includes('พี่ภีม')) {
+                    return {
+                        text: `ผู้ดูแลระบบ (System Admin):\n• ชื่อ: ${settings?.admin_name || 'นายภูธนากร หงษ์ทอง (พี่ภีม)'}\n• ตำแหน่ง: ${settings?.admin_role || 'เลขานุการสภานักเรียนโรงเรียนคำม่วง'}\nหากพบปัญหาการใช้งานหรือลืมรหัสผ่าน สามารถกดปุ่มช่วยเหลือด้านบนเพื่อติดต่อผ่าน LINE ได้เลยครับ`,
+                        actions: []
+                    };
+                }
+
+                // 8. ขอให้สรุปรายงานผลตรวจวันนี้สำหรับส่งเข้าไลน์
                 if (qLower.includes('สรุป') || qLower.includes('รายงาน') || qLower.includes('ส่งไลน์')) {
                     const checkedRoomInsps = dayInsps.filter(i => i.type === 'room');
                     const fullRooms = checkedRoomInsps.filter(i => i.totalScore === 10).length;
@@ -763,6 +876,21 @@ ${roomSummaryLines}`;
                     };
                 }
 
+                // 9. ทักทายหรือถามว่าทำอะไรได้บ้าง
+                if (qLower.includes('สวัสดี') || qLower.includes('หวัดดี') || qLower.includes('ดีครับ') || qLower.includes('ดีค่ะ') || qLower.includes('ทำอะไรได้') || qLower.includes('ช่วยอะไร') || qLower.includes('คือใคร')) {
+                    return {
+                        text: [
+                            `สวัสดีครับ! ผมคือบอทผู้ช่วย ZoneCheck AI ของสภานักเรียนโรงเรียนคำม่วง คุณสามารถถามผมได้ทุกเรื่องในระบบเลยครับ เช่น:`,
+                            `• พิมพ์ชื่อห้อง เช่น "ม.1/1" หรือ "4/2" เพื่อดูคะแนนและพิกัดแผนผัง`,
+                            `• พิมพ์สายชั้น เช่น "ม.1" หรือ "ม.ต้น" เพื่อดูภาพรวมทั้งสายชั้น`,
+                            `• ถามว่า "เหลือห้องไหนยังไม่ตรวจ" หรือ "วันนี้ใครเป็นคนตรวจ"`,
+                            `• ถามว่า "5 อันดับสูงสุด" หรือ "เกณฑ์การให้คะแนน"`,
+                            `• พิมพ์ว่า "สรุปผลส่งไลน์" เพื่อสร้างข้อความรายงานประจำวัน`
+                        ].join('\n'),
+                        actions: []
+                    };
+                }
+
                 return null;
             };
 
@@ -775,11 +903,9 @@ ${roomSummaryLines}`;
                 if (presetQuery === null) setAiChatInput('');
                 setIsAiTyping(true);
 
-                // ลองใช้สมองกลในระบบตอบทันทีถ้าตรงกับคำถามข้อมูลห้อง/อันดับ/ความคืบหน้า
+                // หากสมองกลในระบบมีคำตอบที่ตรงประเด็นเป๊ะอยู่แล้ว ให้ตอบกลับทันทีอย่างรวดเร็วและแม่นยำ 100%
                 const localReply = generateLocalSmartAiReply(queryText);
-                const activeApiKey = (settings?.gemini_api_key || DEFAULT_GEMINI_KEY).trim();
-
-                if (localReply && !activeApiKey) {
+                if (localReply) {
                     setTimeout(() => {
                         setAiMessages(prev => [...prev, {
                             id: generateId('msg'),
@@ -788,65 +914,62 @@ ${roomSummaryLines}`;
                             actions: localReply.actions || []
                         }]);
                         setIsAiTyping(false);
-                    }, 320);
+                    }, 260);
                     return;
                 }
 
-                try {
-                    const systemPrompt = `คุณคือ "ZoneCheck AI" ผู้ช่วยอัจฉริยะของสภานักเรียนโรงเรียนคำม่วง อำเภอคำม่วง จังหวัดกาฬสินธุ์ ตอบคำถามด้วยภาษาไทยที่สุภาพ กระชับ ชัดเจน และเป็นกันเอง ห้ามใช้อิโมจิโดยเด็ดขาด อ้างอิงจากข้อมูลจริงของระบบด้านล่างนี้เท่านั้น:\n\n${buildSystemContextForAi()}`;
-                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${activeApiKey}`;
+                const activeApiKey = (settings?.gemini_api_key || DEFAULT_GEMINI_KEY).trim();
+                const systemPrompt = `คุณคือ "ZoneCheck AI" หุ่นยนต์ผู้ช่วยอัจฉริยะของสภานักเรียนโรงเรียนคำม่วง อำเภอคำม่วง จังหวัดกาฬสินธุ์ ตอบคำถามด้วยภาษาไทยที่สุภาพ กระชับ ชัดเจน และเป็นกันเอง ห้ามใช้อิโมจิโดยเด็ดขาด สามารถตอบได้ทั้งคำถามทั่วไปและคำถามเกี่ยวกับข้อมูลการตรวจความสะอาดของโรงเรียนตามข้อมูลจริงด้านล่างนี้:\n\n${buildSystemContextForAi()}`;
 
-                    const payload = {
-                        contents: [{ parts: [{ text: queryText }] }],
-                        systemInstruction: { parts: [{ text: systemPrompt }] }
-                    };
+                const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+                let aiText = null;
 
-                    const res = await fetch(apiUrl, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-
-                    if (!res.ok) throw new Error('API request failed');
-                    const data = await res.json();
-                    const aiText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-                    if (aiText) {
-                        setAiMessages(prev => [...prev, {
-                            id: generateId('msg'),
-                            sender: 'bot',
-                            text: aiText.trim(),
-                            actions: localReply?.actions || []
-                        }]);
-                    } else if (localReply) {
-                        setAiMessages(prev => [...prev, {
-                            id: generateId('msg'),
-                            sender: 'bot',
-                            text: localReply.text,
-                            actions: localReply.actions || []
-                        }]);
-                    } else {
-                        throw new Error('Empty response');
-                    }
-                } catch (err) {
-                    if (localReply) {
-                        setAiMessages(prev => [...prev, {
-                            id: generateId('msg'),
-                            sender: 'bot',
-                            text: localReply.text,
-                            actions: localReply.actions || []
-                        }]);
-                    } else {
-                        setAiMessages(prev => [...prev, {
-                            id: generateId('msg'),
-                            sender: 'bot',
-                            text: 'สามารถพิมพ์ถามชื่อห้องเรียนได้โดยตรงเลยครับ เช่น "ม.1/1", "ม.2/5", "เหลือห้องไหนยังไม่ตรวจ", "5 อันดับแรก" หรือ "สรุปผลตรวจวันนี้"',
-                            actions: []
-                        }]);
-                    }
-                } finally {
-                    setIsAiTyping(false);
+                for (const modelName of modelsToTry) {
+                    try {
+                        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${activeApiKey}`;
+                        const res = await fetch(apiUrl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                contents: [{ parts: [{ text: queryText }] }],
+                                systemInstruction: { parts: [{ text: systemPrompt }] }
+                            })
+                        });
+                        if (res.ok) {
+                            const data = await res.json();
+                            const candidateText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+                            if (candidateText) {
+                                aiText = candidateText.trim();
+                                break;
+                            }
+                        }
+                    } catch (e) {}
                 }
+
+                if (aiText) {
+                    setAiMessages(prev => [...prev, {
+                        id: generateId('msg'),
+                        sender: 'bot',
+                        text: aiText,
+                        actions: []
+                    }]);
+                } else {
+                    setAiMessages(prev => [...prev, {
+                        id: generateId('msg'),
+                        sender: 'bot',
+                        text: [
+                            `สำหรับคำถาม "${queryText}" ตอนนี้สามารถตรวจสอบข้อมูลด่วนจากระบบได้ดังนี้ครับ:`,
+                            `• ความคืบหน้าวันนี้: ห้องเรียนตรวจแล้ว ${inspectProgress.roomDone}/${inspectProgress.roomTotal} ห้อง, เขตพื้นที่ ${inspectProgress.zoneDone}/${inspectProgress.zoneTotal} เขต`,
+                            `• อันดับ 1 คะแนนสะสมสูงสุดตอนนี้: ${top5AllTime[0]?.room?.name || '-'} (${top5AllTime[0]?.score || 0} คะแนน)`,
+                            `\nลองพิมพ์ชื่อห้อง เช่น "ม.1/1", "ม.4/2", "ใครตรวจ", "เกณฑ์คะแนน" หรือกดปุ่มลัดด้านบนได้เลยครับ!`
+                        ].join('\n'),
+                        actions: [
+                            { label: 'ดูความคืบหน้าวันนี้', type: 'route', route: 'dashboard' },
+                            { label: 'ดูตารางอันดับคะแนน', type: 'route', route: 'leaderboard' }
+                        ]
+                    }]);
+                }
+                setIsAiTyping(false);
             };
 
             const handleAiActionClick = (action) => {
@@ -4161,9 +4284,8 @@ ${roomSummaryLines}`;
                         </nav>
 
                         <div className="flex items-center gap-2 shrink-0">
-                            <button onClick={() => setIsAiChatOpen(true)} className="px-3 h-9 rounded-full bg-gradient-to-r from-[#C8102E] to-rose-600 text-white hover:opacity-95 flex items-center justify-center gap-1.5 transition-all shadow-sm text-xs font-bold" title="ผู้ช่วยอัจฉริยะ ZoneCheck AI">
-                                <i className="ph ph-sparkle ph-fill text-sm text-amber-200"></i>
-                                <span>ถาม AI</span>
+                            <button onClick={() => setIsAiChatOpen(true)} className="rounded-full hover:scale-105 active:scale-95 transition-transform" title="ผู้ช่วยอัจฉริยะ ZoneCheck AI">
+                                <BotMascotAvatar size="sm" />
                             </button>
                             <button onClick={()=>setShowAnnouncement(true)} className="w-9 h-9 rounded-full bg-red-50 text-[#C8102E] hover:bg-red-100 flex items-center justify-center transition-colors shadow-sm" title="ประกาศสภาฯ"><i className="ph ph-megaphone text-lg"></i></button>
                             <button onClick={handleSync} className="w-9 h-9 rounded-full bg-gray-50 border border-gray-200 text-gray-500 hover:bg-gray-100 flex items-center justify-center transition-colors shadow-sm" title="ซิงค์ข้อมูล"><i className={`ph ph-arrows-clockwise text-lg ${isSyncing ? "animate-spin text-[#C8102E]" : ""}`}></i></button>
@@ -4195,9 +4317,8 @@ ${roomSummaryLines}`;
                             </div>
                             
                             <div className="flex items-center gap-1.5 flex-shrink-0">
-                                <button onClick={() => setIsAiChatOpen(true)} className="px-2.5 h-8 flex items-center justify-center gap-1 rounded-full bg-gradient-to-r from-[#C8102E] to-rose-600 text-white shadow-sm active:scale-95 transition-all text-[11px] font-bold" title="ผู้ช่วย ZoneCheck AI">
-                                    <i className="ph ph-sparkle ph-fill text-xs text-amber-200"></i>
-                                    <span>AI</span>
+                                <button onClick={() => setIsAiChatOpen(true)} className="rounded-full active:scale-95 transition-transform" title="ผู้ช่วย ZoneCheck AI">
+                                    <BotMascotAvatar size="sm" />
                                 </button>
                                 <button onClick={() => setShowAnnouncement(true)} className="w-8 h-8 flex items-center justify-center rounded-full bg-red-50 text-[#C8102E] border border-red-100 shadow-sm active:scale-95 transition-colors" title="ประกาศ"><i className="ph ph-megaphone text-base"></i></button>
                                 <button onClick={handleSync} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-50 text-gray-500 border border-gray-200 shadow-sm active:scale-95 transition-colors hover:text-[#C8102E]" title="ซิงค์ข้อมูล"><i className={`ph ph-arrows-clockwise text-base ${isSyncing ? "animate-spin text-[#C8102E]" : ""}`}></i></button>
@@ -7202,28 +7323,27 @@ ${roomSummaryLines}`;
                     {!isAiChatOpen && (
                         <button
                             onClick={() => setIsAiChatOpen(true)}
-                            className="fixed bottom-20 lg:bottom-6 right-4 z-40 bg-gradient-to-r from-[#C8102E] to-rose-600 text-white pl-3.5 pr-4 py-3 rounded-full shadow-xl shadow-red-600/30 flex items-center gap-2 hover:scale-105 active:scale-95 transition-all border-2 border-white"
-                            title="เปิดผู้ช่วย ZoneCheck AI"
+                            className="fixed bottom-20 lg:bottom-6 right-4 z-40 rounded-full hover:scale-110 active:scale-95 transition-all group"
+                            title="คุยกับน้องบอท ZoneCheck AI"
                         >
-                            <i className="ph ph-sparkle ph-fill text-lg text-amber-200"></i>
-                            <span className="text-xs font-black tracking-wide">ZoneCheck AI</span>
+                            <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-white rounded-full z-10"></span>
+                            <BotMascotAvatar size="lg" isFloating={true} />
                         </button>
                     )}
+
 
                     {isAiChatOpen && (
                         <div className="fixed inset-0 z-[99995] bg-gray-900/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in" onClick={() => setIsAiChatOpen(false)}>
                             <div className="bg-white w-full sm:max-w-md h-[85dvh] sm:h-[620px] rounded-t-[2rem] sm:rounded-[2rem] shadow-2xl flex flex-col overflow-hidden border border-gray-100" onClick={e => e.stopPropagation()}>
                                 <div className="bg-gradient-to-r from-[#C8102E] to-rose-700 px-5 py-4 text-white flex items-center justify-between shrink-0">
                                     <div className="flex items-center gap-3 min-w-0">
-                                        <div className="w-10 h-10 rounded-2xl bg-white/15 backdrop-blur-md flex items-center justify-center border border-white/25 shrink-0">
-                                            <i className="ph ph-robot text-2xl text-amber-200"></i>
-                                        </div>
+                                        <BotMascotAvatar size="md" />
                                         <div className="min-w-0">
                                             <div className="flex items-center gap-1.5">
-                                                <h3 className="font-black text-sm sm:text-base truncate">ZoneCheck AI Assistant</h3>
-                                                <span className="px-2 py-0.5 text-[9px] font-black bg-white/20 rounded-full">ONLINE</span>
+                                                <h3 className="font-black text-sm sm:text-base truncate">ZoneCheck AI Bot</h3>
+                                                <span className="px-2 py-0.5 text-[9px] font-black bg-emerald-400/25 text-emerald-100 border border-emerald-300/30 rounded-full">ONLINE</span>
                                             </div>
-                                            <p className="text-[11px] text-rose-100 truncate">ผู้ช่วยอัจฉริยะสภานักเรียนโรงเรียนคำม่วง</p>
+                                            <p className="text-[11px] text-rose-100 truncate">หุ่นยนต์ผู้ช่วยสภานักเรียนโรงเรียนคำม่วง</p>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-1.5 shrink-0">
@@ -7249,9 +7369,10 @@ ${roomSummaryLines}`;
                                     {[
                                         { label: 'ความคืบหน้าวันนี้', q: 'ความคืบหน้าการตรวจวันนี้เหลือห้องไหนยังไม่ตรวจบ้าง' },
                                         { label: '5 อันดับสูงสุด', q: 'ขอดู 5 อันดับแรกคะแนนสูงสุด' },
+                                        { label: 'ใครตรวจวันนี้', q: 'วันนี้ใครเป็นคนตรวจ' },
+                                        { label: 'เกณฑ์คะแนน', q: 'เกณฑ์การให้คะแนนและเหรียญรางวัล' },
                                         { label: 'สรุปผลส่ง LINE', q: 'ช่วยสรุปรายงานผลการตรวจวันนี้สำหรับส่งเข้าไลน์' },
-                                        { label: 'เช็คห้อง ม.1/1', q: 'ม.1/1' },
-                                        { label: 'เช็คห้อง ม.4/1', q: 'ม.4/1' }
+                                        { label: 'เช็คห้อง ม.1/1', q: 'ม.1/1' }
                                     ].map((chip, idx) => (
                                         <button
                                             key={idx}
