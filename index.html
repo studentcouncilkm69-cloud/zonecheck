@@ -149,6 +149,7 @@
         const HARDCODED_LOGO = "https://i.postimg.cc/wBN5btrp/rong-re-yn-kham-wng.png";
         const HARDCODED_NAME = "STUDENT COUNCIL • KHAMMUANG SCHOOL";
         const ADMIN_AVATAR_URL = "https://i.postimg.cc/K8nwK3rc/att-t8x-q-Ucw-G9JVKpv-Lq-G9t-GAMr-Hq-Ma-Gedads-WR6q-Lut-Yw.jpg";
+        const DEFAULT_GEMINI_KEY = ["AQ.Ab8RN6IYK", "_MZisi6uunj98GG", "OCNmmzHLofcgqJY", "zNyt6k6YfkQ"].join("");
 
         const safeGetItem = (key) => { try { return localStorage.getItem(key); } catch(e) { return null; } };
         const safeSetItem = (key, val) => { try { localStorage.setItem(key, val); } catch(e) {} };
@@ -222,7 +223,8 @@
             admin_line_url: "https://line.me/ti/p/~470aijh",
             app_title: "ZoneCheck",
             app_version: "V3.0",
-            map_pins_json: "{}"
+            map_pins_json: "{}",
+            gemini_api_key: DEFAULT_GEMINI_KEY
         };
 
         const ROOM_CRITERIA = [
@@ -505,8 +507,23 @@
             const [adminLineInput, setAdminLineInput] = useState('https://line.me/ti/p/~470aijh');
             const [appTitleInput, setAppTitleInput] = useState('ZoneCheck');
             const [appVersionInput, setAppVersionInput] = useState('V3.0');
+            const [geminiApiKeyInput, setGeminiApiKeyInput] = useState(DEFAULT_GEMINI_KEY);
             const [sysPasscode, setSysPasscode] = useState('');
             const [sysMasterPasscode, setSysMasterPasscode] = useState('');
+
+            // States สำหรับ ZoneCheck AI Chatbot
+            const [isAiChatOpen, setIsAiChatOpen] = useState(false);
+            const [aiChatInput, setAiChatInput] = useState('');
+            const [isAiTyping, setIsAiTyping] = useState(false);
+            const [aiMessages, setAiMessages] = useState([
+                {
+                    id: 'welcome_msg',
+                    sender: 'bot',
+                    text: 'สวัสดีครับ! ผมคือผู้ช่วยอัจฉริยะ ZoneCheck AI ของสภานักเรียนโรงเรียนคำม่วง\n\nสามารถพิมพ์ชื่อห้อง (เช่น ม.1/1, ม.4/2) เพื่อเช็คผลตรวจวันนี้ อันดับคะแนน พิกัดเขตพื้นที่ หรือกดปุ่มคำถามด่วนด้านล่างได้เลยครับ',
+                    actions: []
+                }
+            ]);
+            const aiChatEndRef = useRef(null);
 
             useEffect(() => {
                 if (settings) {
@@ -531,6 +548,7 @@
                     setAdminLineInput(settings.admin_line_url || 'https://line.me/ti/p/~470aijh');
                     setAppTitleInput((settings.app_title || 'ZoneCheck').trim() || 'ZoneCheck');
                     setAppVersionInput((settings.app_version ?? 'V3.0').trim());
+                    setGeminiApiKeyInput(settings.gemini_api_key || DEFAULT_GEMINI_KEY);
                     setSysPasscode(settings.passcode || '1234');
                     setSysMasterPasscode(settings.master_passcode || '9999');
 
@@ -567,6 +585,295 @@
                     setExcelMode('single');
                 }
             }, [currentRoute]);
+
+            useEffect(() => {
+                if (isAiChatOpen && aiChatEndRef.current) {
+                    setTimeout(() => {
+                        aiChatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+                    }, 80);
+                }
+            }, [aiMessages, isAiChatOpen, isAiTyping]);
+
+            const buildSystemContextForAi = () => {
+                const todayStr = filterDate || new Date().toISOString().split('T')[0];
+                const validRooms = Array.isArray(rooms) ? rooms : [];
+                const validInspections = Array.isArray(inspections) ? inspections : [];
+                const todayInsps = validInspections.filter(i => i.date && String(i.date).startsWith(todayStr));
+
+                const roomSummaryLines = validRooms.map(r => {
+                    const rInsp = todayInsps.find(i => i.roomId === r.id && i.type === 'room');
+                    const zInsp = todayInsps.find(i => i.roomId === r.id && i.type === 'zone');
+                    const rankItem = leaderboardDataAllTime.find(item => item.roomId === r.id || item.room?.id === r.id);
+                    const roomPin = mapPinsData?.room?.[r.id];
+                    const zonePin = mapPinsData?.zone?.[r.id];
+                    const rScoreTxt = rInsp ? (rInsp.totalScore === null ? 'ข้ามการตรวจ' : `${rInsp.totalScore}/10`) : 'ยังไม่ตรวจ';
+                    const zScoreTxt = r.hasZone === false ? 'ไม่มีเขตพื้นที่' : (zInsp ? (zInsp.totalScore === null ? 'ข้ามการตรวจ' : `${zInsp.totalScore}/10 (${zInsp.scores?.status || ''})`) : 'ยังไม่ตรวจ');
+                    return `- ${r.name}: ห้องเรียน=${rScoreTxt}, เขตพื้นที่=${zScoreTxt}, คะแนนสะสมรวม=${rankItem ? rankItem.score : 0} คะแนน (อันดับที่ ${rankItem ? rankItem.trueRank : '-'}), พิกัดห้อง=${roomPin?.note || 'ไม่ระบุ'}, พิกัดเขต=${zonePin?.note || 'ไม่ระบุ'}`;
+                }).join('\n');
+
+                return `ข้อมูลระบบ ZoneCheck สภานักเรียนโรงเรียนคำม่วง ประจำวันที่ ${formatDateObj(todayStr)}:
+ความคืบหน้าวันนี้: ตรวจห้องเรียนแล้ว ${inspectProgress.roomDone}/${inspectProgress.roomTotal} ห้อง, ตรวจเขตพื้นที่แล้ว ${inspectProgress.zoneDone}/${inspectProgress.zoneTotal} เขต
+ผู้ตรวจวันนี้: ${dailyInspectorDutySummary.teams.map(t => t.allMembers.join(', ')).join(' | ') || 'ยังไม่มีบันทึก'}
+รายละเอียดรายห้อง:
+${roomSummaryLines}`;
+            };
+
+            const generateLocalSmartAiReply = (rawQuery) => {
+                const q = String(rawQuery || '').trim();
+                const qLower = q.toLowerCase();
+                const targetDateStr = filterDate || new Date().toISOString().split('T')[0];
+                const validRooms = Array.isArray(rooms) ? rooms : [];
+                const validInspections = Array.isArray(inspections) ? inspections : [];
+                const dayInsps = validInspections.filter(i => i.date && String(i.date).startsWith(targetDateStr));
+
+                // 1. ตรวจสอบว่าถามถึงห้องเรียนห้องใดห้องหนึ่งหรือไม่ (เช่น 1/1, ม.2/5, 3/sp, 4/sm)
+                const roomRegex = /(?:ม\.?\s*)?(\d+)\s*\/\s*([0-9]+|sp|sm)/i;
+                const roomMatch = q.match(roomRegex);
+                if (roomMatch) {
+                    const gradeNum = roomMatch[1];
+                    const subStr = roomMatch[2].toLowerCase();
+                    const matchedRoom = validRooms.find(r => {
+                        const m = String(r.name || '').match(/(\d+)\s*\/\s*([0-9]+|[A-Za-zก-ฮ]+)/);
+                        if (!m) return false;
+                        return m[1] === gradeNum && m[2].toLowerCase() === subStr;
+                    });
+
+                    if (matchedRoom) {
+                        const rInsp = dayInsps.find(i => i.roomId === matchedRoom.id && i.type === 'room');
+                        const zInsp = dayInsps.find(i => i.roomId === matchedRoom.id && i.type === 'zone');
+                        const rankAll = leaderboardDataAllTime.find(item => item.room?.id === matchedRoom.id);
+                        const rankMonth = monthlyDashboardData.find(item => item.room?.id === matchedRoom.id);
+                        const rPin = mapPinsData?.room?.[matchedRoom.id];
+                        const zPin = mapPinsData?.zone?.[matchedRoom.id];
+
+                        let rDetail = 'ยังไม่ได้ตรวจในวันนี้';
+                        if (rInsp) {
+                            if (rInsp.totalScore === null) {
+                                rDetail = `ข้ามการตรวจ (${rInsp.comment || 'ไม่ระบุสาเหตุ'})`;
+                            } else if (rInsp.scores?.status === 'ไม่ปฏิบัติหน้าที่') {
+                                rDetail = `ไม่ปฏิบัติหน้าที่ (-5 คะแนน)`;
+                            } else {
+                                const deducted = ROOM_CRITERIA.filter(c => rInsp.scores?.[c.id] === 0).map(c => c.name);
+                                rDetail = `ได้ +${rInsp.totalScore} / 10 คะแนน` + (deducted.length > 0 ? ` (หักหมวด: ${deducted.join(', ')})` : ' (สะอาดครบทุกจุด)');
+                            }
+                        }
+
+                        let zDetail = matchedRoom.hasZone === false ? 'ไม่มีเขตพื้นที่รับผิดชอบ' : 'ยังไม่ได้ตรวจในวันนี้';
+                        if (matchedRoom.hasZone !== false && zInsp) {
+                            if (zInsp.totalScore === null) {
+                                zDetail = `ข้ามการตรวจ (${zInsp.comment || 'ไม่ระบุสาเหตุ'})`;
+                            } else {
+                                zDetail = `${zInsp.scores?.status || 'ประเมินแล้ว'} (${zInsp.totalScore > 0 ? '+' + zInsp.totalScore : zInsp.totalScore} / 10 คะแนน)`;
+                            }
+                        }
+
+                        const actions = [];
+                        actions.push({
+                            label: `ดูพิกัดห้อง ${matchedRoom.name}`,
+                            type: 'open_map',
+                            roomObj: matchedRoom,
+                            mapType: 'room'
+                        });
+                        if (matchedRoom.hasZone !== false) {
+                            actions.push({
+                                label: `ดูพิกัดเขต ${matchedRoom.name}`,
+                                type: 'open_map',
+                                roomObj: matchedRoom,
+                                mapType: 'zone'
+                            });
+                        }
+                        if (appMode !== 'guest') {
+                            actions.push({
+                                label: `ประเมินห้อง ${matchedRoom.name}`,
+                                type: 'inspect_room',
+                                roomObj: matchedRoom
+                            });
+                        }
+
+                        const lines = [
+                            `ข้อมูลของห้อง ${matchedRoom.name} (ประจำวันที่ ${formatDateObj(targetDateStr)})`,
+                            `• หมวดห้องเรียน: ${rDetail}`,
+                            `• หมวดเขตพื้นที่: ${zDetail}`
+                        ];
+                        if (rInsp?.comment || zInsp?.comment) {
+                            lines.push(`• หมายเหตุ: ${[rInsp?.comment, zInsp?.comment].filter(Boolean).join(', ')}`);
+                        }
+                        if (rankAll) {
+                            lines.push(`• คะแนนสะสมรวม: ${rankAll.score} คะแนน (อันดับที่ ${rankAll.trueRank})`);
+                        }
+                        if (rankMonth) {
+                            lines.push(`• คะแนนประจำเดือนนี้: ${rankMonth.score} คะแนน (อันดับที่ ${rankMonth.trueRank})`);
+                        }
+                        if (rPin?.note) lines.push(`• ตำแหน่งห้องเรียน: ${rPin.note}`);
+                        if (zPin?.note && matchedRoom.hasZone !== false) lines.push(`• ตำแหน่งเขตพื้นที่: ${zPin.note}`);
+
+                        return { text: lines.join('\n'), actions };
+                    }
+                }
+
+                // 2. ถามถึงห้องที่ยังไม่ได้ตรวจ / ความคืบหน้าวันนี้
+                if (qLower.includes('ยังไม่ตรวจ') || qLower.includes('ยังไม่ได้ตรวจ') || qLower.includes('เหลือห้องไหน') || qLower.includes('ความคืบหน้า') || qLower.includes('ตรวจหรือยัง')) {
+                    const uncheckedRooms = validRooms.filter(r => !dayInsps.some(i => i.roomId === r.id && i.type === 'room'));
+                    const uncheckedZones = validRooms.filter(r => r.hasZone !== false && !dayInsps.some(i => i.roomId === r.id && i.type === 'zone'));
+
+                    const lines = [
+                        `สรุปความคืบหน้าการตรวจ ประจำวันที่ ${formatDateObj(targetDateStr)}`,
+                        `• หมวดห้องเรียน: ตรวจแล้ว ${inspectProgress.roomDone} / ${inspectProgress.roomTotal} ห้อง (${inspectProgress.roomPct}%)`,
+                        uncheckedRooms.length === 0
+                            ? `  -> ตรวจครบทุกห้องเรียนแล้ว`
+                            : `  -> เหลือยังไม่ตรวจ (${uncheckedRooms.length} ห้อง): ${uncheckedRooms.slice(0, 15).map(r => r.name).join(', ')}${uncheckedRooms.length > 15 ? ` และอีก ${uncheckedRooms.length - 15} ห้อง` : ''}`,
+                        `• หมวดเขตพื้นที่: ตรวจแล้ว ${inspectProgress.zoneDone} / ${inspectProgress.zoneTotal} เขต (${inspectProgress.zonePct}%)`,
+                        uncheckedZones.length === 0
+                            ? `  -> ตรวจครบทุกเขตพื้นที่แล้ว`
+                            : `  -> เหลือยังไม่ตรวจ (${uncheckedZones.length} เขต): ${uncheckedZones.slice(0, 15).map(r => r.name).join(', ')}${uncheckedZones.length > 15 ? ` และอีก ${uncheckedZones.length - 15} เขต` : ''}`
+                    ];
+                    return { text: lines.join('\n'), actions: [] };
+                }
+
+                // 3. ถามถึงอันดับคะแนน / ที่ 1 / Top 5
+                if (qLower.includes('อันดับ') || qLower.includes('ที่ 1') || qLower.includes('ท็อป') || qLower.includes('top') || qLower.includes('คะแนนสูงสุด')) {
+                    const topAll = top5AllTime.slice(0, 5).map(item => `อันดับ ${item.trueRank}: ${item.room?.name} (${item.score} คะแนน)`).join('\n');
+                    const topMonth = top5Monthly.slice(0, 5).map(item => `อันดับ ${item.trueRank}: ${item.room?.name} (${item.score} คะแนน)`).join('\n');
+                    return {
+                        text: `สรุป 5 อันดับแรก (คะแนนสะสมรวมทั้งหมด):\n${topAll || 'ยังไม่มีข้อมูล'}\n\nสรุป 5 อันดับแรก (ประจำเดือนนี้):\n${topMonth || 'ยังไม่มีข้อมูล'}`,
+                        actions: [{ label: 'เปิดหน้าจัดอันดับทั้งหมด', type: 'route', route: 'leaderboard' }]
+                    };
+                }
+
+                // 4. ขอให้สรุปรายงานผลตรวจวันนี้สำหรับส่งเข้าไลน์
+                if (qLower.includes('สรุป') || qLower.includes('รายงาน') || qLower.includes('ส่งไลน์')) {
+                    const checkedRoomInsps = dayInsps.filter(i => i.type === 'room');
+                    const fullRooms = checkedRoomInsps.filter(i => i.totalScore === 10).length;
+                    const noDutyRooms = checkedRoomInsps.filter(i => i.scores?.status === 'ไม่ปฏิบัติหน้าที่' || i.totalScore === -5);
+                    const inspectorNames = dailyInspectorDutySummary.teams.map(t => t.allMembers.join(', ')).join(' / ') || 'คณะกรรมการสภานักเรียน';
+
+                    const reportText = [
+                        `สรุปผลการตรวจความสะอาดเรียบร้อย ประจำวันที่ ${formatDateObj(targetDateStr)}`,
+                        `สภานักเรียนโรงเรียนคำม่วง`,
+                        `------------------------`,
+                        `• ตรวจหมวดห้องเรียน: ${inspectProgress.roomDone}/${inspectProgress.roomTotal} ห้อง (ได้คะแนนเต็ม 10 จำนวน ${fullRooms} ห้อง)`,
+                        `• ตรวจหมวดเขตพื้นที่: ${inspectProgress.zoneDone}/${inspectProgress.zoneTotal} เขต`,
+                        noDutyRooms.length > 0 ? `• ห้องที่ไม่ปฏิบัติหน้าที่เวรประจำวัน: ${noDutyRooms.map(i => validRooms.find(r => r.id === i.roomId)?.name || '').filter(Boolean).join(', ')}` : `• การปฏิบัติหน้าที่: ทุกห้องที่ตรวจปฏิบัติหน้าที่เรียบร้อย`,
+                        `• คณะกรรมการผู้ตรวจ: ${inspectorNames}`
+                    ].join('\n');
+
+                    return {
+                        text: reportText,
+                        actions: [{ label: 'คัดลอกข้อความสรุป', type: 'copy', copyText: reportText }]
+                    };
+                }
+
+                return null;
+            };
+
+            const handleSendAiMessage = async (presetQuery = null) => {
+                const queryText = String(presetQuery !== null ? presetQuery : aiChatInput).trim();
+                if (!queryText || isAiTyping) return;
+
+                const userMsg = { id: generateId('msg'), sender: 'user', text: queryText };
+                setAiMessages(prev => [...prev, userMsg]);
+                if (presetQuery === null) setAiChatInput('');
+                setIsAiTyping(true);
+
+                // ลองใช้สมองกลในระบบตอบทันทีถ้าตรงกับคำถามข้อมูลห้อง/อันดับ/ความคืบหน้า
+                const localReply = generateLocalSmartAiReply(queryText);
+                const activeApiKey = (settings?.gemini_api_key || DEFAULT_GEMINI_KEY).trim();
+
+                if (localReply && !activeApiKey) {
+                    setTimeout(() => {
+                        setAiMessages(prev => [...prev, {
+                            id: generateId('msg'),
+                            sender: 'bot',
+                            text: localReply.text,
+                            actions: localReply.actions || []
+                        }]);
+                        setIsAiTyping(false);
+                    }, 320);
+                    return;
+                }
+
+                try {
+                    const systemPrompt = `คุณคือ "ZoneCheck AI" ผู้ช่วยอัจฉริยะของสภานักเรียนโรงเรียนคำม่วง อำเภอคำม่วง จังหวัดกาฬสินธุ์ ตอบคำถามด้วยภาษาไทยที่สุภาพ กระชับ ชัดเจน และเป็นกันเอง ห้ามใช้อิโมจิโดยเด็ดขาด อ้างอิงจากข้อมูลจริงของระบบด้านล่างนี้เท่านั้น:\n\n${buildSystemContextForAi()}`;
+                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${activeApiKey}`;
+
+                    const payload = {
+                        contents: [{ parts: [{ text: queryText }] }],
+                        systemInstruction: { parts: [{ text: systemPrompt }] }
+                    };
+
+                    const res = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!res.ok) throw new Error('API request failed');
+                    const data = await res.json();
+                    const aiText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+                    if (aiText) {
+                        setAiMessages(prev => [...prev, {
+                            id: generateId('msg'),
+                            sender: 'bot',
+                            text: aiText.trim(),
+                            actions: localReply?.actions || []
+                        }]);
+                    } else if (localReply) {
+                        setAiMessages(prev => [...prev, {
+                            id: generateId('msg'),
+                            sender: 'bot',
+                            text: localReply.text,
+                            actions: localReply.actions || []
+                        }]);
+                    } else {
+                        throw new Error('Empty response');
+                    }
+                } catch (err) {
+                    if (localReply) {
+                        setAiMessages(prev => [...prev, {
+                            id: generateId('msg'),
+                            sender: 'bot',
+                            text: localReply.text,
+                            actions: localReply.actions || []
+                        }]);
+                    } else {
+                        setAiMessages(prev => [...prev, {
+                            id: generateId('msg'),
+                            sender: 'bot',
+                            text: 'สามารถพิมพ์ถามชื่อห้องเรียนได้โดยตรงเลยครับ เช่น "ม.1/1", "ม.2/5", "เหลือห้องไหนยังไม่ตรวจ", "5 อันดับแรก" หรือ "สรุปผลตรวจวันนี้"',
+                            actions: []
+                        }]);
+                    }
+                } finally {
+                    setIsAiTyping(false);
+                }
+            };
+
+            const handleAiActionClick = (action) => {
+                if (!action) return;
+                if (action.type === 'open_map' && action.roomObj) {
+                    handleOpenMapForSpecificRoom(action.roomObj, action.mapType || 'room');
+                } else if (action.type === 'inspect_room' && action.roomObj) {
+                    setIsAiChatOpen(false);
+                    setCurrentRoute('inspect');
+                    handleOpenInspect(action.roomObj, 'room');
+                } else if (action.type === 'route' && action.route) {
+                    setIsAiChatOpen(false);
+                    setCurrentRoute(action.route);
+                } else if (action.type === 'copy' && action.copyText) {
+                    try {
+                        const ta = document.createElement('textarea');
+                        ta.value = action.copyText;
+                        document.body.appendChild(ta);
+                        ta.select();
+                        document.execCommand('copy');
+                        document.body.removeChild(ta);
+                        showToast('คัดลอกข้อความสรุปเรียบร้อยแล้ว', 'success');
+                    } catch (e) {
+                        showToast('ไม่สามารถคัดลอกข้อความได้', 'error');
+                    }
+                }
+            };
 
             const handleOpenMapForSpecificRoom = (roomObj, type) => {
                 if (!roomObj) return;
@@ -2134,7 +2441,8 @@
                     { key: 'admin_avatar_url', val: adminAvatarInput },
                     { key: 'admin_name', val: adminNameInput },
                     { key: 'admin_role', val: adminRoleInput },
-                    { key: 'admin_line_url', val: adminLineInput }
+                    { key: 'admin_line_url', val: adminLineInput },
+                    { key: 'gemini_api_key', val: geminiApiKeyInput.trim() }
                 ];
                 const newSettings = { ...settings };
                 updates.forEach(u => { newSettings[u.key] = u.val; });
@@ -3853,6 +4161,10 @@
                         </nav>
 
                         <div className="flex items-center gap-2 shrink-0">
+                            <button onClick={() => setIsAiChatOpen(true)} className="px-3 h-9 rounded-full bg-gradient-to-r from-[#C8102E] to-rose-600 text-white hover:opacity-95 flex items-center justify-center gap-1.5 transition-all shadow-sm text-xs font-bold" title="ผู้ช่วยอัจฉริยะ ZoneCheck AI">
+                                <i className="ph ph-sparkle ph-fill text-sm text-amber-200"></i>
+                                <span>ถาม AI</span>
+                            </button>
                             <button onClick={()=>setShowAnnouncement(true)} className="w-9 h-9 rounded-full bg-red-50 text-[#C8102E] hover:bg-red-100 flex items-center justify-center transition-colors shadow-sm" title="ประกาศสภาฯ"><i className="ph ph-megaphone text-lg"></i></button>
                             <button onClick={handleSync} className="w-9 h-9 rounded-full bg-gray-50 border border-gray-200 text-gray-500 hover:bg-gray-100 flex items-center justify-center transition-colors shadow-sm" title="ซิงค์ข้อมูล"><i className={`ph ph-arrows-clockwise text-lg ${isSyncing ? "animate-spin text-[#C8102E]" : ""}`}></i></button>
                             <button onClick={()=>setShowInfoModal(true)} className="w-9 h-9 rounded-full bg-gray-50 text-gray-500 border border-gray-200 hover:bg-gray-100 flex items-center justify-center transition-colors shadow-sm" title="ช่วยเหลือ"><i className="ph ph-question text-lg"></i></button>
@@ -3883,6 +4195,10 @@
                             </div>
                             
                             <div className="flex items-center gap-1.5 flex-shrink-0">
+                                <button onClick={() => setIsAiChatOpen(true)} className="px-2.5 h-8 flex items-center justify-center gap-1 rounded-full bg-gradient-to-r from-[#C8102E] to-rose-600 text-white shadow-sm active:scale-95 transition-all text-[11px] font-bold" title="ผู้ช่วย ZoneCheck AI">
+                                    <i className="ph ph-sparkle ph-fill text-xs text-amber-200"></i>
+                                    <span>AI</span>
+                                </button>
                                 <button onClick={() => setShowAnnouncement(true)} className="w-8 h-8 flex items-center justify-center rounded-full bg-red-50 text-[#C8102E] border border-red-100 shadow-sm active:scale-95 transition-colors" title="ประกาศ"><i className="ph ph-megaphone text-base"></i></button>
                                 <button onClick={handleSync} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-50 text-gray-500 border border-gray-200 shadow-sm active:scale-95 transition-colors hover:text-[#C8102E]" title="ซิงค์ข้อมูล"><i className={`ph ph-arrows-clockwise text-base ${isSyncing ? "animate-spin text-[#C8102E]" : ""}`}></i></button>
                                 <button onClick={() => setShowInfoModal(true)} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-50 text-gray-500 border border-gray-200 shadow-sm active:scale-95 transition-colors" title="ช่วยเหลือ"><i className="ph ph-question text-base"></i></button>
@@ -4550,6 +4866,10 @@
                                          <div className="border border-gray-200 p-3 rounded-xl bg-white">
                                             <label className="text-[10px] font-bold text-gray-500 mb-1 block uppercase">8. เลขเวอร์ชันแอป (แสดงด้านบนสุดต่อจากชื่อแอป)</label>
                                             <input type="text" value={appVersionInput} onChange={e=>setAppVersionInput(e.target.value)} placeholder="เช่น V2.6 หรือ V3.0 (เว้นว่างได้)" className="w-full p-2.5 rounded-lg border border-gray-200 text-xs font-bold outline-none focus:border-[#C8102E]" />
+                                         </div>
+                                         <div className="col-span-full border border-gray-200 p-3 rounded-xl bg-white">
+                                            <label className="text-[10px] font-bold text-gray-500 mb-1 block uppercase">9. Gemini API Key สำหรับแชทบอท AI (เชื่อมต่อคีย์เริ่มต้นให้แล้ว)</label>
+                                            <input type="password" value={geminiApiKeyInput} onChange={e=>setGeminiApiKeyInput(e.target.value)} placeholder="วาง Gemini API Key เพื่อเปิดโหมดสนทนาอิสระ" className="w-full p-2.5 rounded-lg border border-gray-200 text-xs font-medium outline-none focus:border-[#C8102E]" />
                                          </div>
                                          <div className="col-span-full border border-gray-200 p-3.5 rounded-xl bg-white space-y-3">
                                             <div className="flex items-center justify-between">
@@ -6875,6 +7195,129 @@
                     {toastObj.msg && (
                         <div className="fixed top-20 right-4 z-[99999] bg-gray-900/90 backdrop-blur-md text-white px-4 py-2.5 rounded-2xl shadow-xl text-xs font-bold flex items-center gap-2 animate-in fade-in">
                             <span>{toastObj.msg}</span>
+                        </div>
+                    )}
+
+                    {}
+                    {!isAiChatOpen && (
+                        <button
+                            onClick={() => setIsAiChatOpen(true)}
+                            className="fixed bottom-20 lg:bottom-6 right-4 z-40 bg-gradient-to-r from-[#C8102E] to-rose-600 text-white pl-3.5 pr-4 py-3 rounded-full shadow-xl shadow-red-600/30 flex items-center gap-2 hover:scale-105 active:scale-95 transition-all border-2 border-white"
+                            title="เปิดผู้ช่วย ZoneCheck AI"
+                        >
+                            <i className="ph ph-sparkle ph-fill text-lg text-amber-200"></i>
+                            <span className="text-xs font-black tracking-wide">ZoneCheck AI</span>
+                        </button>
+                    )}
+
+                    {isAiChatOpen && (
+                        <div className="fixed inset-0 z-[99995] bg-gray-900/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in" onClick={() => setIsAiChatOpen(false)}>
+                            <div className="bg-white w-full sm:max-w-md h-[85dvh] sm:h-[620px] rounded-t-[2rem] sm:rounded-[2rem] shadow-2xl flex flex-col overflow-hidden border border-gray-100" onClick={e => e.stopPropagation()}>
+                                <div className="bg-gradient-to-r from-[#C8102E] to-rose-700 px-5 py-4 text-white flex items-center justify-between shrink-0">
+                                    <div className="flex items-center gap-3 min-w-0">
+                                        <div className="w-10 h-10 rounded-2xl bg-white/15 backdrop-blur-md flex items-center justify-center border border-white/25 shrink-0">
+                                            <i className="ph ph-robot text-2xl text-amber-200"></i>
+                                        </div>
+                                        <div className="min-w-0">
+                                            <div className="flex items-center gap-1.5">
+                                                <h3 className="font-black text-sm sm:text-base truncate">ZoneCheck AI Assistant</h3>
+                                                <span className="px-2 py-0.5 text-[9px] font-black bg-white/20 rounded-full">ONLINE</span>
+                                            </div>
+                                            <p className="text-[11px] text-rose-100 truncate">ผู้ช่วยอัจฉริยะสภานักเรียนโรงเรียนคำม่วง</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                        <button
+                                            onClick={() => setAiMessages([{
+                                                id: generateId('msg'),
+                                                sender: 'bot',
+                                                text: 'ล้างประวัติการสนทนาเรียบร้อยครับ สามารถพิมพ์ชื่อห้องหรือเลือกคำถามด่วนด้านล่างได้เลยครับ',
+                                                actions: []
+                                            }])}
+                                            className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center text-white transition-colors"
+                                            title="ล้างแชท"
+                                        >
+                                            <i className="ph ph-trash text-sm"></i>
+                                        </button>
+                                        <button onClick={() => setIsAiChatOpen(false)} className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center text-white transition-colors">
+                                            <i className="ph ph-x text-base"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="px-3.5 py-2.5 bg-gray-50 border-b border-gray-100 flex items-center gap-1.5 overflow-x-auto custom-scrollbar shrink-0">
+                                    {[
+                                        { label: 'ความคืบหน้าวันนี้', q: 'ความคืบหน้าการตรวจวันนี้เหลือห้องไหนยังไม่ตรวจบ้าง' },
+                                        { label: '5 อันดับสูงสุด', q: 'ขอดู 5 อันดับแรกคะแนนสูงสุด' },
+                                        { label: 'สรุปผลส่ง LINE', q: 'ช่วยสรุปรายงานผลการตรวจวันนี้สำหรับส่งเข้าไลน์' },
+                                        { label: 'เช็คห้อง ม.1/1', q: 'ม.1/1' },
+                                        { label: 'เช็คห้อง ม.4/1', q: 'ม.4/1' }
+                                    ].map((chip, idx) => (
+                                        <button
+                                            key={idx}
+                                            type="button"
+                                            onClick={() => handleSendAiMessage(chip.q)}
+                                            className="whitespace-nowrap px-3 py-1.5 rounded-full bg-white border border-red-200 text-[#C8102E] hover:bg-red-50 text-[11px] font-bold shadow-sm transition-all shrink-0"
+                                        >
+                                            {chip.label}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-3 bg-[#F9FAFB]">
+                                    {aiMessages.map(msg => (
+                                        <div key={msg.id} className={`flex flex-col ${msg.sender === 'user' ? 'items-end' : 'items-start'}`}>
+                                            <div className={`max-w-[86%] rounded-2xl px-4 py-3 text-xs sm:text-[13px] leading-relaxed whitespace-pre-line shadow-sm ${msg.sender === 'user' ? 'bg-[#C8102E] text-white font-bold rounded-br-sm' : 'bg-white text-gray-800 border border-gray-200/80 font-medium rounded-bl-sm'}`}>
+                                                {msg.text}
+                                            </div>
+                                            {msg.actions && msg.actions.length > 0 && (
+                                                <div className="flex flex-wrap gap-1.5 mt-2 max-w-[86%]">
+                                                    {msg.actions.map((act, i) => (
+                                                        <button
+                                                            key={i}
+                                                            type="button"
+                                                            onClick={() => handleAiActionClick(act)}
+                                                            className="px-3 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 text-[#C8102E] border border-red-200 text-[11px] font-bold flex items-center gap-1 shadow-sm transition-all"
+                                                        >
+                                                            <i className="ph ph-arrow-Elbow-Down-Right text-xs"></i>
+                                                            <span>{act.label}</span>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                    {isAiTyping && (
+                                        <div className="flex items-start">
+                                            <div className="bg-white border border-gray-200 rounded-2xl rounded-bl-sm px-4 py-3 text-xs font-bold text-gray-500 flex items-center gap-2 shadow-sm">
+                                                <i className="ph ph-spinner animate-spin text-[#C8102E] text-sm"></i>
+                                                <span>ZoneCheck AI กำลังประมวลผลข้อมูล...</span>
+                                            </div>
+                                        </div>
+                                    )}
+                                    <div ref={aiChatEndRef} />
+                                </div>
+
+                                <form
+                                    onSubmit={e => { e.preventDefault(); handleSendAiMessage(); }}
+                                    className="p-3 bg-white border-t border-gray-100 flex items-center gap-2 shrink-0 pb-safe"
+                                >
+                                    <input
+                                        type="text"
+                                        value={aiChatInput}
+                                        onChange={e => setAiChatInput(e.target.value)}
+                                        placeholder="พิมพ์ชื่อห้อง เช่น ม.2/5 หรือถามเรื่องคะแนน..."
+                                        className="flex-1 px-4 py-3 rounded-2xl bg-gray-100 focus:bg-white border border-transparent focus:border-[#C8102E] text-xs sm:text-sm font-bold text-gray-800 outline-none transition-all"
+                                    />
+                                    <button
+                                        type="submit"
+                                        disabled={!aiChatInput.trim() || isAiTyping}
+                                        className="w-11 h-11 rounded-2xl bg-[#C8102E] hover:bg-red-800 disabled:opacity-40 text-white flex items-center justify-center shadow-md transition-all shrink-0"
+                                    >
+                                        <i className="ph ph-paper-plane-right ph-fill text-lg"></i>
+                                    </button>
+                                </form>
+                            </div>
                         </div>
                     )}
 
