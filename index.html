@@ -245,32 +245,6 @@
             { id: 'c3', name: "ไฟ/หน้าต่าง" }, { id: 'c4', name: "พื้น" }, { id: 'c5', name: "กระดาน" }
         ];
 
-const G_ = (g, l) => l.map(s => `ม.${g}/${s}`);
-const DEFAULT_BUILDINGS = [
-    { id: 'b1', name: 'อาคาร 1 (หลังคาส้ม)', floors: [
-        { label: 'ชั้น 2', rooms: G_(4, [1,2,3,4,5,6,7,'Sp']) },
-        { label: 'ชั้น 3', rooms: G_(5, [1,2,3,4,5,6,7]) },
-        { label: 'ชั้น 4 (ห้อง Sm)', rooms: [1,2,3,4,5,6].map(g => `ม.${g}/Sm`) } ] },
-    { id: 'b2', name: 'อาคาร 2 (หลังคาม่วง)', floors: [
-        { label: 'ชั้น 1', rooms: G_(2, [1,2,3,4,5,6]) },
-        { label: 'ชั้น 2', rooms: G_(6, [1,2,3]) } ] },
-    { id: 'b3', name: 'อาคาร 3 (หลังคาเทา)', floors: [
-        { label: 'ชั้น 1', rooms: G_(1, [1,2,3,4,5]) },
-        { label: 'ชั้น 2', rooms: G_(3, [1,2,3,4,5,6]) },
-        { label: 'ชั้น 3', rooms: G_(6, [4,5,6]) } ] },
-    { id: 'b4', name: 'อาคารห้องสมุด', floors: [{ label: 'ชั้น 1', rooms: ['ม.6/7'] }] },
-    { id: 'b5', name: 'อาคารหลังคาเทา (Sp ม.1, ม.3)', floors: [{ label: 'ชั้น 1', rooms: ['ม.1/Sp', 'ม.3/Sp'] }] },
-    { id: 'b6', name: 'อาคารหลังคาเทา (Sp ม.2)', floors: [{ label: 'ชั้น 1', rooms: ['ม.2/Sp'] }] }
-];
-const bRoomText = (insp) => {
-    if (!insp) return '';
-    if (insp.totalScore === null) return 'ข้ามการตรวจ';
-    if (insp.scores?.status === 'ไม่ปฏิบัติหน้าที่') return 'ไม่ปฏิบัติหน้าที่';
-    const d = ROOM_CRITERIA.filter(c => insp.scores?.[c.id] === 0).map(c => c.name);
-    return d.length ? `หัก: ${d.join(', ')}` : 'สะอาดครบทุกจุด';
-};
-const bScoreShow = (insp) => insp.totalScore === null ? 'ข้าม' : (insp.totalScore > 0 ? `+${insp.totalScore}` : `${insp.totalScore}`);
-
         const formatThaiDateForFile = (dateStr) => {
             if(!dateStr) return '';
             const d = new Date(dateStr);
@@ -589,9 +563,6 @@ const bScoreShow = (insp) => insp.totalScore === null ? 'ข้าม' : (insp.t
 
             const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, message: '', onConfirm: null, isAlert: false });
             const [viewDetailModal, setViewDetailModal] = useState(null);
-            const [showBuildings, setShowBuildings] = useState(false);
-            const [buildingId, setBuildingId] = useState(null);
-            const [bFilter, setBFilter] = useState('all');
             const [showInfoModal, setShowInfoModal] = useState(false);
             const [showAnnouncement, setShowAnnouncement] = useState(false);
             const [showZoneMap, setShowZoneMap] = useState(false); 
@@ -2592,33 +2563,6 @@ ${roomSummaryLines}`;
                 return { dateStr: targetDateStr, roomTotal, zoneTotal, roomDone, zoneDone, roomPct, zonePct };
             }, [rooms, inspections, filterDate]);
 
-            const buildingStats = useMemo(() => {
-                const day = filterDate || new Date().toISOString().split('T')[0];
-                const vr = Array.isArray(rooms) ? rooms : [];
-                const vi = Array.isArray(inspections) ? inspections : [];
-                const byName = {};
-                vr.forEach(r => { byName[String(r.name || '').replace(/\s/g, '')] = r; });
-                const dayI = vi.filter(i => i && i.date && String(i.date).startsWith(day));
-                const parsed = safeParse(settings?.building_layout_json, null);
-                const layout = Array.isArray(parsed) && parsed.length ? parsed : DEFAULT_BUILDINGS;
-                return layout.map(b => {
-                    let rT = 0, rD = 0, zT = 0, zD = 0;
-                    const floors = (b.floors || []).map(f => {
-                        const items = (f.rooms || []).map(n => byName[String(n).replace(/\s/g, '')]).filter(Boolean).map(room => {
-                            const roomInsp = dayI.find(i => i.roomId === room.id && i.type === 'room') || null;
-                            const zoneInsp = dayI.find(i => i.roomId === room.id && i.type === 'zone') || null;
-                            const hasZone = room.hasZone !== false;
-                            rT++; if (roomInsp) rD++;
-                            if (hasZone) { zT++; if (zoneInsp) zD++; }
-                            return { room, roomInsp, zoneInsp, hasZone, dateStr: day, roomId: room.id, done: !!roomInsp && (!hasZone || !!zoneInsp) };
-                        });
-                        return { label: f.label, items };
-                    }).filter(f => f.items.length);
-                    return { id: b.id, name: b.name, floors, rT, rD, zT, zD };
-                }).filter(b => b.rT > 0);
-            }, [rooms, inspections, filterDate, settings?.building_layout_json]);
-
-            
             const groupedRoomsForInspect = useMemo(() => {
                 const validRooms = Array.isArray(rooms) ? rooms : [];
                 const filtered = validRooms.filter(r => (r.name || '').toLowerCase().includes((inspectSearchRoom || '').toLowerCase()));
@@ -5030,19 +4974,7 @@ ${roomSummaryLines}`;
                                     </div>
                                 </button>
 
-                                <button onClick={() => { setBuildingId(null); setBFilter('all'); setShowBuildings(true); }} className="w-full bg-white border border-gray-200 text-gray-800 p-4 rounded-2xl shadow-sm flex items-center justify-between hover:bg-gray-50 active:scale-[0.99] transition-all">
-                                    <div className="flex items-center gap-3 text-left">
-                                        <div className="w-11 h-11 rounded-xl bg-red-50 text-[#C8102E] flex items-center justify-center shrink-0"><i className="ph ph-buildings text-2xl"></i></div>
-                                        <div>
-                                            <div className="font-black text-sm sm:text-base leading-tight">ความคืบหน้ารายอาคาร</div>
-                                            <div className="text-[11px] text-gray-500 font-medium mt-0.5">ดูว่าแต่ละอาคารตรวจไปกี่ห้อง ห้องไหนยังไม่ตรวจ และผลที่ตรวจแล้ว</div>
-                                        </div>
-                                    </div>
-                                    <i className="ph ph-caret-right text-gray-400"></i>
-                                </button>
-
-                                
-<div className="bg-white p-5 rounded-[2rem] shadow-sm border border-gray-100 mb-6 relative overflow-hidden">
+                                <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-gray-100 mb-6 relative overflow-hidden">
                                     <div className="flex justify-between items-center mb-4 gap-2">
                                         <div>
                                             <h3 className="font-bold text-gray-800 text-base flex items-center gap-2"><i className="ph ph-chart-bar text-[#C8102E]"></i> ความคืบหน้าการตรวจ</h3>
@@ -5865,76 +5797,7 @@ ${roomSummaryLines}`;
                         </div>
                     )}
 
-                    {showBuildings && appMode !== 'guest' && (() => {
-                        const sel = buildingStats.find(b => b.id === buildingId);
-                        const pct = (d, t) => t > 0 ? Math.round((d / t) * 100) : 0;
-                        const tabs = [{ id: 'all', l: 'ทั้งหมด' }, { id: 'todo', l: 'ยังไม่ตรวจ' }, { id: 'done', l: 'ตรวจแล้ว' }];
-                        return (
-                        <div className="fixed inset-0 z-[9970] bg-gray-900/80 backdrop-blur-sm flex items-center justify-center p-3 animate-in fade-in" onClick={() => setShowBuildings(false)}>
-                            <div className="bg-white rounded-[2rem] w-full max-w-lg max-h-[92vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
-                                <div className="flex items-center gap-2 p-4 border-b border-gray-100 shrink-0">
-                                    {sel && <button onClick={() => setBuildingId(null)} className="w-8 h-8 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center shrink-0"><i className="ph ph-caret-left"></i></button>}
-                                    <div className="min-w-0 flex-1">
-                                        <h3 className="font-black text-gray-800 text-base truncate">{sel ? sel.name : 'ความคืบหน้ารายอาคาร'}</h3>
-                                        <p className="text-[11px] font-bold text-gray-400">ประจำวันที่ {formatDateObj(filterDate)}{sel ? ` • ห้องเรียน ${sel.rD}/${sel.rT} • เขต ${sel.zD}/${sel.zT}` : ''}</p>
-                                    </div>
-                                    <button onClick={() => setShowBuildings(false)} className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center shrink-0"><i className="ph ph-x"></i></button>
-                                </div>
-                                <div className="overflow-y-auto custom-scrollbar p-4 space-y-3">
-                                    {!sel && buildingStats.map(b => {
-                                        const d = b.rD + b.zD, t = b.rT + b.zT, p = pct(d, t), left = (b.rT - b.rD) + (b.zT - b.zD);
-                                        return (
-                                            <button key={b.id} onClick={() => { setBuildingId(b.id); setBFilter('all'); }} className="w-full text-left bg-gray-50 border border-gray-100 rounded-2xl p-3.5 hover:bg-gray-100 transition-colors">
-                                                <div className="flex items-center justify-between gap-2">
-                                                    <span className="font-black text-sm text-gray-800">{b.name}</span>
-                                                    <span className={`text-[11px] font-black px-2 py-0.5 rounded-full ${p === 100 ? 'bg-emerald-100 text-emerald-700' : p === 0 ? 'bg-gray-200 text-gray-500' : 'bg-amber-100 text-amber-700'}`}>{p === 100 ? 'ครบแล้ว' : `เหลือ ${left} รายการ`}</span>
-                                                </div>
-                                                <div className="text-[11px] text-gray-500 font-bold mt-1">ห้องเรียน {b.rD}/{b.rT} • เขตพื้นที่ {b.zD}/{b.zT}</div>
-                                                <div className="w-full bg-gray-200 rounded-full h-2 mt-2 overflow-hidden"><div className={`h-2 rounded-full ${p === 100 ? 'bg-emerald-500' : 'bg-gradient-to-r from-rose-400 to-[#C8102E]'}`} style={{ width: `${p}%` }}></div></div>
-                                            </button>
-                                        );
-                                    })}
-                                    {sel && (
-                                        <>
-                                            <div className="flex gap-1.5 bg-gray-100 p-1 rounded-xl">
-                                                {tabs.map(t => <button key={t.id} onClick={() => setBFilter(t.id)} className={`flex-1 py-2 rounded-lg text-xs font-bold ${bFilter === t.id ? 'bg-white text-[#C8102E] shadow-sm' : 'text-gray-500'}`}>{t.l}</button>)}
-                                            </div>
-                                            {sel.floors.map(fl => {
-                                                const list = fl.items.filter(it => bFilter === 'all' || (bFilter === 'todo' ? !it.done : it.done));
-                                                if (!list.length) return null;
-                                                return (
-                                                    <div key={fl.label}>
-                                                        <p className="text-[11px] font-black text-gray-400 uppercase mb-1.5">{fl.label}</p>
-                                                        <div className="space-y-1.5">
-                                                            {list.map(it => (
-                                                                <div key={it.room.id} className={`flex items-center gap-2 p-2.5 rounded-xl border ${it.done ? 'border-emerald-100 bg-emerald-50/50' : 'border-gray-100 bg-gray-50'}`}>
-                                                                    <div className="w-14 font-black text-sm text-gray-800 shrink-0">{it.room.name}</div>
-                                                                    <div className="flex-1 min-w-0 text-[11px] font-medium leading-snug">
-                                                                        <div>ห้อง: {it.roomInsp ? <><b className={it.roomInsp.totalScore !== null && it.roomInsp.totalScore < 10 ? 'text-amber-600' : 'text-emerald-600'}>{bScoreShow(it.roomInsp)}</b> <span className="text-gray-500">{bRoomText(it.roomInsp)}</span></> : <span className="text-gray-400">ยังไม่ตรวจ</span>}</div>
-                                                                        {it.hasZone && <div>เขต: {it.zoneInsp ? <><b className={it.zoneInsp.totalScore !== null && it.zoneInsp.totalScore < 10 ? 'text-amber-600' : 'text-emerald-600'}>{bScoreShow(it.zoneInsp)}</b> <span className="text-gray-500">{it.zoneInsp.scores?.status || ''}</span></> : <span className="text-gray-400">ยังไม่ตรวจ</span>}</div>}
-                                                                    </div>
-                                                                    <div className="flex flex-col gap-1 shrink-0">
-                                                                        {!it.roomInsp && <button onClick={() => handleOpenInspect(it.room, 'room')} className="px-2.5 py-1 rounded-lg bg-[#C8102E] text-white text-[10px] font-bold">ตรวจห้อง</button>}
-                                                                        {it.hasZone && !it.zoneInsp && <button onClick={() => handleOpenInspect(it.room, 'zone')} className="px-2.5 py-1 rounded-lg bg-fuchsia-600 text-white text-[10px] font-bold">ตรวจเขต</button>}
-                                                                        {(it.roomInsp || it.zoneInsp) && <button onClick={() => setViewDetailModal({ ...it, key: `${it.room.id}_${it.dateStr}`, room: it.room })} className="px-2.5 py-1 rounded-lg bg-white border border-gray-200 text-gray-600 text-[10px] font-bold">รายละเอียด</button>}
-                                                                    </div>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </>
-                                    )}
-                                    {buildingStats.length === 0 && <p className="text-center text-gray-400 text-xs font-bold py-8">ไม่พบห้องที่ตรงกับผังอาคาร</p>}
-                                </div>
-                            </div>
-                        </div>
-                        );
-                    })()}
-
-                    
-{viewDetailModal && (
+                    {viewDetailModal && (
                         <div className="fixed inset-0 z-[9980] bg-gray-900/80 backdrop-blur-sm flex flex-col items-center justify-center p-4 animate-in fade-in overflow-hidden">
                             <div className="w-full max-w-md bg-white rounded-[2rem] shadow-2xl p-6 relative flex flex-col max-h-[90vh]">
                                 <div className="flex justify-between items-center border-b border-gray-100 pb-4 mb-4">
