@@ -1,0 +1,120 @@
+html, body {
+    font-family: 'Noto Sans Thai', sans-serif !important;
+    background-color: #E5E7EB;
+    overscroll-behavior: none;
+    -webkit-overflow-scrolling: touch;
+    -webkit-tap-highlight-color: transparent;
+    height: 100dvh;
+    width: 100%;
+    overflow: hidden;
+    color: #1F2937;
+}
+
+#root { height: 100dvh; width: 100%; display: flex; flex-direction: column; }
+
+.custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+
+.hide-scrollbar::-webkit-scrollbar { display: none; }
+.hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+.no-select { -webkit-user-select: none; user-select: none; }
+
+@keyframes spin-slow { 100% { transform: rotate(360deg); } }
+.animate-spin-slow { animation: spin-slow 1.5s linear infinite; }
+
+@keyframes bot-float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-4px); }
+}
+.animate-bot-float { animation: bot-float 2.8s ease-in-out infinite; }
+
+@keyframes bot-blink {
+    0%, 92%, 100% { transform: scaleY(1); }
+    95% { transform: scaleY(0.1); }
+}
+.animate-bot-blink { transform-origin: center; animation: bot-blink 4s infinite; }
+
+.pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+
+.checkbox-custom:checked + div { background-color: #C8102E; border-color: #C8102E; }
+.checkbox-custom:checked + div svg { display: block; }
+
+/* PDF Export Styles */
+.pdf-export-wrapper {
+    font-family: 'Sarabun', sans-serif !important;
+    color: #1e293b;
+    background: white;
+    box-sizing: border-box;
+    width: 1123px !important;
+    padding: 30px 40px !important;
+}
+.pdf-table { width: 100%; border-collapse: collapse; font-size: 13px; border: 1px solid #ddd6fe; }
+.pdf-table th { background-color: #7c3aed !important; color: #ffffff !important; padding: 9px 6px; border: 1px solid #6d28d9; font-weight: bold; text-align: center; }
+.pdf-table td { padding: 7px 6px; border: 1px solid #ede9fe; text-align: center; vertical-align: middle; }
+.pdf-table tr:nth-child(even) td { background-color: #faf5ff !important; }
+.pdf-table td.text-left { text-align: left; padding-left: 10px; }
+.col-purple { color: #7c3aed !important; font-weight: bold; }
+
+/* ใบตรวจแบบกระดาษคำตอบ (OMR Answer Sheet - Single A4 Landscape) */
+.omr-sheet-wrapper, .omr-sheet-wrapper * {
+    font-family: 'Sarabun', sans-serif !important;
+}
+.omr-sheet-wrapper {
+    color: #111827;
+    background: white;
+    box-sizing: border-box;
+    width: 1122px !important;
+    height: 793px !important;
+    max-width: 1122px !important;
+    max-height: 793px !important;
+    padding: 16px 36px !important;
+    margin: 0 auto !important;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    overflow: hidden;
+}
+.omr-table { width: 100%; border-collapse: collapse; font-size: 9px; border: 1.5px solid #111827; table-layout: fixed; }
+.omr-table th { background-color: #f3f4f6 !important; color: #111827 !important; padding: 2px 1px; border: 1px solid #9ca3af; font-weight: bold; text-align: center; font-size: 8px; line-height: 1.1; }
+.omr-table td { padding: 0.5px 0.5px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; color: #111827; height: 15.5px; }
+.omr-table tr:nth-child(even) td { background-color: #f8fafc !important; }
+.omr-bubble {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 12.5px;
+    height: 12.5px;
+    border: 1px solid #cbd5e1;
+    border-radius: 9999px;
+    font-size: 6.8px;
+    font-weight: 600;
+    color: #cbd5e1;
+    background: #ffffff;
+    line-height: 1;
+    margin: 0 auto;
+}
+.omr-corner-mark {
+    width: 14px;
+    height: 14px;
+    background-color: #111827;
+    border: 2px solid #111827;
+    flex-shrink: 0;
+}
+.masked-pin-input {
+    -webkit-text-security: disc !important;
+    text-security: disc !important;
+}
+@page {
+    size: A4 landscape;
+    margin: 0;
+}
+@media print {
+    html, body { width: 297mm; height: 210mm; margin: 0 !important; padding: 0 !important; background: #fff !important; overflow: visible !important; }
+    body * { visibility: hidden; }
+    #omr-print-area, #omr-print-area * { visibility: visible; }
+    #omr-print-area { position: fixed; left: 0; top: 0; width: 297mm; height: 210mm; margin: 0 !important; padding: 0 !important; box-shadow: none !important; display: flex; align-items: center; justify-content: center; }
+}
+
+.nav-item { transition: all 0.2s ease; position: relative; }
