@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+  <!DOCTYPE html>
 <html lang="th">
 <head>
     <meta charset="UTF-8">
@@ -6,461 +6,45 @@
     <meta name="theme-color" content="#ffffff">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    
+
     <title>ZoneCheck | สภานักเรียนโรงเรียนคำม่วง</title>
-    
+
     <!-- Tailwind CSS & React -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    
+
     <!-- Phosphor Icons -->
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
-    
+
     <!-- PDF & Excel Export -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
-    
+
     <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700;900&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
-    
-    <style>
-        html, body { 
-            font-family: 'Noto Sans Thai', sans-serif !important; 
-            background-color: #E5E7EB;
-            overscroll-behavior: none; 
-            -webkit-overflow-scrolling: touch;
-            -webkit-tap-highlight-color: transparent;
-            height: 100dvh;
-            width: 100%;
-            overflow: hidden;
-            color: #1F2937;
-        }
-        
-        #root { height: 100dvh; width: 100%; display: flex; flex-direction: column; }
-        
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-        
-        .hide-scrollbar::-webkit-scrollbar { display: none; }
-        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        
-        .no-select { -webkit-user-select: none; user-select: none; }
-        
-        @keyframes spin-slow { 100% { transform: rotate(360deg); } }
-        .animate-spin-slow { animation: spin-slow 1.5s linear infinite; }
-        
-        @keyframes bot-float {
-            0%, 100% { transform: translateY(0px); }
-            50% { transform: translateY(-4px); }
-        }
-        .animate-bot-float { animation: bot-float 2.8s ease-in-out infinite; }
 
-        @keyframes bot-blink {
-            0%, 92%, 100% { transform: scaleY(1); }
-            95% { transform: scaleY(0.1); }
-        }
-        .animate-bot-blink { transform-origin: center; animation: bot-blink 4s infinite; }
-
-        .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
-        
-        .checkbox-custom:checked + div { background-color: #C8102E; border-color: #C8102E; }
-        .checkbox-custom:checked + div svg { display: block; }
-
-        /* PDF Export Styles */
-        .pdf-export-wrapper {
-            font-family: 'Sarabun', sans-serif !important;
-            color: #1e293b;
-            background: white;
-            box-sizing: border-box;
-            width: 1123px !important;
-            padding: 30px 40px !important;
-        }
-        .pdf-table { width: 100%; border-collapse: collapse; font-size: 13px; border: 1px solid #ddd6fe; }
-        .pdf-table th { background-color: #7c3aed !important; color: #ffffff !important; padding: 9px 6px; border: 1px solid #6d28d9; font-weight: bold; text-align: center; }
-        .pdf-table td { padding: 7px 6px; border: 1px solid #ede9fe; text-align: center; vertical-align: middle; }
-        .pdf-table tr:nth-child(even) td { background-color: #faf5ff !important; }
-        .pdf-table td.text-left { text-align: left; padding-left: 10px; }
-        .col-purple { color: #7c3aed !important; font-weight: bold; }
-
-        /* สไตล์สำหรับใบตรวจแบบกระดาษคำตอบ (OMR Answer Sheet - Single A4 Landscape) */
-        .omr-sheet-wrapper, .omr-sheet-wrapper * {
-            font-family: 'Sarabun', sans-serif !important;
-        }
-        .omr-sheet-wrapper {
-            color: #111827;
-            background: white;
-            box-sizing: border-box;
-            width: 1122px !important;
-            height: 793px !important;
-            max-width: 1122px !important;
-            max-height: 793px !important;
-            padding: 16px 36px !important;
-            margin: 0 auto !important;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            overflow: hidden;
-        }
-        .omr-table { width: 100%; border-collapse: collapse; font-size: 9px; border: 1.5px solid #111827; table-layout: fixed; }
-        .omr-table th { background-color: #f3f4f6 !important; color: #111827 !important; padding: 2px 1px; border: 1px solid #9ca3af; font-weight: bold; text-align: center; font-size: 8px; line-height: 1.1; }
-        .omr-table td { padding: 0.5px 0.5px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; color: #111827; height: 15.5px; }
-        .omr-table tr:nth-child(even) td { background-color: #f8fafc !important; }
-        .omr-bubble {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 12.5px;
-            height: 12.5px;
-            border: 1px solid #cbd5e1;
-            border-radius: 9999px;
-            font-size: 6.8px;
-            font-weight: 600;
-            color: #cbd5e1;
-            background: #ffffff;
-            line-height: 1;
-            margin: 0 auto;
-        }
-        .omr-corner-mark {
-            width: 14px;
-            height: 14px;
-            background-color: #111827;
-            border: 2px solid #111827;
-            flex-shrink: 0;
-        }
-        .masked-pin-input {
-            -webkit-text-security: disc !important;
-            text-security: disc !important;
-        }
-        @page {
-            size: A4 landscape;
-            margin: 0;
-        }
-        @media print {
-            html, body { width: 297mm; height: 210mm; margin: 0 !important; padding: 0 !important; background: #fff !important; overflow: visible !important; }
-            body * { visibility: hidden; }
-            #omr-print-area, #omr-print-area * { visibility: visible; }
-            #omr-print-area { position: fixed; left: 0; top: 0; width: 297mm; height: 210mm; margin: 0 !important; padding: 0 !important; box-shadow: none !important; display: flex; align-items: center; justify-content: center; }
-        }
-
-        .nav-item { transition: all 0.2s ease; position: relative; }
-    </style>
+    <!-- CSS ของเว็บ -->
+    <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
     <div id="root"></div>
 
+    <!-- JS ล้วน (ไม่มี JSX) -->
+    <script src="js/config.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/omr.js"></script>
+
+    <!-- Component ที่มี JSX -->
+    <script type="text/babel" src="js/components/ErrorBoundary.js"></script>
+    <script type="text/babel" src="js/components/BotMascotAvatar.js"></script>
+
     <script type="text/babel">
         const { useState, useEffect, useMemo, useRef } = React;
-
-        // ⚠️ ลิงก์ Google Apps Script Backend
-        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxp7RJqJIajrEx8J9IVnJC75saIt_FeiQDUxNgxnP7vrYOy7xcYy77RqXljRUXv_xHm/exec";
-
-        const HARDCODED_LOGO = "https://i.postimg.cc/wBN5btrp/rong-re-yn-kham-wng.png";
-        const HARDCODED_NAME = "STUDENT COUNCIL • KHAMMUANG SCHOOL";
-        const ADMIN_AVATAR_URL = "https://i.postimg.cc/K8nwK3rc/att-t8x-q-Ucw-G9JVKpv-Lq-G9t-GAMr-Hq-Ma-Gedads-WR6q-Lut-Yw.jpg";
-        const DEFAULT_GEMINI_KEY = ["AQ.Ab8RN6IYK", "_MZisi6uunj98GG", "OCNmmzHLofcgqJY", "zNyt6k6YfkQ"].join("");
-
-        const safeGetItem = (key) => { try { return localStorage.getItem(key); } catch(e) { return null; } };
-        const safeSetItem = (key, val) => { try { localStorage.setItem(key, val); } catch(e) {} };
-        const safeRemoveItem = (key) => { try { localStorage.removeItem(key); } catch(e) {} };
-        const safeSessionGet = (key) => { try { return sessionStorage.getItem(key); } catch(e) { return null; } };
-        const safeSessionSet = (key, val) => { try { sessionStorage.setItem(key, val); } catch(e) {} };
-        const safeSessionRemove = (key) => { try { sessionStorage.removeItem(key); } catch(e) {} };
-        const SESSION_TIMEOUT_MS = 5 * 60 * 1000;
-        const getValidSessionState = () => {
-            try {
-                const raw = safeSessionGet('zc26_active_session');
-                if (!raw) return null;
-                const parsed = JSON.parse(raw);
-                if (!parsed || !parsed.mode || parsed.mode === 'guest') return null;
-                const now = Date.now();
-                if (parsed.lastActive && (now - parsed.lastActive) > SESSION_TIMEOUT_MS) {
-                    safeSessionRemove('zc26_active_session');
-                    return null;
-                }
-                return parsed;
-            } catch (e) { return null; }
-        };
-
-        const safeParse = (data, fallback) => {
-            if (!data) return fallback;
-            try {
-                const parsed = JSON.parse(data);
-                if (Array.isArray(fallback) && !Array.isArray(parsed)) return fallback;
-                return parsed;
-            } catch (e) { return fallback; }
-        };
-
-        const generateId = (prefix) => `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).substr(2, 5)}`;
-        
-        class ErrorBoundary extends React.Component {
-            constructor(props) { super(props); this.state = { hasError: false, error: null }; }
-            static getDerivedStateFromError(error) { return { hasError: true, error }; }
-            render() {
-                if (this.state.hasError) {
-                    return (
-                        <div className="h-[100dvh] bg-red-50 p-8 flex flex-col items-center justify-center text-center">
-                            <i className="ph ph-warning-circle text-red-500 mb-4 text-6xl"></i>
-                            <h1 className="text-3xl font-bold text-red-600 mb-2">⚠️ ระบบขัดข้อง</h1>
-                            <p className="text-red-500 mb-4 text-sm font-medium">ตรวจพบข้อผิดพลาด หรืออินเทอร์เน็ตไม่เสถียร<br/>กรุณากดปุ่มด้านล่างเพื่อเริ่มใหม่</p>
-                            <button onClick={() => { 
-                                safeRemoveItem('zc26_rooms'); safeRemoveItem('zc26_inspectors'); 
-                                safeRemoveItem('zc26_inspections'); safeRemoveItem('zc26_settings'); 
-                                safeSessionRemove('zc26_active_session');
-                                window.location.reload(); 
-                            }} className="mt-6 px-6 py-3 bg-[#C8102E] text-white font-medium rounded-xl shadow-lg">รีเซ็ตและโหลดใหม่</button>
-                        </div>
-                    );
-                }
-                return this.props.children;
-            }
-        }
-
-        const initialSettings = { 
-            passcode: "1234", master_passcode: "9999", is_maintenance: "false", 
-            app_logo_url: "", logo_url: "", school_logo_url: "", zone_map_url: "", room_map_url: "",
-            banner_url: "", main_banner_url: "", popup_banner_url: "", 
-            announcement_title: "", announcement_msg: "",
-            visibility_main_banner: "public", visibility_popup_banner: "public", visibility_announce_banner: "public",
-            inspector_avatars_json: "{}",
-            signers_json: "[]",
-            signature_presets_json: "[]",
-            default_signature_preset: "none",
-            admin_avatar_url: ADMIN_AVATAR_URL,
-            admin_name: "นายภูธนากร หงษ์ทอง (พี่ภีม)",
-            admin_role: "เลขานุการสภานักเรียนโรงเรียนคำม่วง",
-            admin_line_url: "https://line.me/ti/p/~470aijh",
-            app_title: "ZoneCheck",
-            app_version: "V3.0",
-            map_pins_json: "{}",
-            gemini_api_key: DEFAULT_GEMINI_KEY,
-            ai_bot_name: "น้องสภาฯ"
-        };
-
-        const ROOM_CRITERIA = [
-            { id: 'c1', name: "โต๊ะ" }, { id: 'c2', name: "ขยะ" },
-            { id: 'c3', name: "ไฟ/หน้าต่าง" }, { id: 'c4', name: "พื้น" }, { id: 'c5', name: "กระดาน" }
-        ];
-
-        const formatThaiDateForFile = (dateStr) => {
-            if(!dateStr) return '';
-            const d = new Date(dateStr);
-            if (isNaN(d.getTime())) return '';
-            const months = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
-            return `${String(d.getDate()).padStart(2,'0')}_${months[d.getMonth()]}_${d.getFullYear()+543}`;
-        };
-
-        const formatDateObj = (dateStr) => {
-            if(!dateStr) return '';
-            const d = new Date(dateStr);
-            if (isNaN(d.getTime())) return 'วันที่ไม่ระบุ';
-            const months = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
-            return `${String(d.getDate()).padStart(2,'0')} ${months[d.getMonth()]} ${d.getFullYear()+543}`;
-        };
-
-        const formatMonthYearShort = (dateStr) => {
-            if(!dateStr) return '';
-            const parts = dateStr.split('-');
-            if(parts.length !== 2) return dateStr;
-            const [year, month] = parts;
-            const monthsShort = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
-            return `${monthsShort[parseInt(month)-1] || month} ${parseInt(year)+543}`;
-        };
-        
-        const formatMonthYearThai = (dateStr) => {
-            if(!dateStr) return '';
-            const d = new Date(dateStr);
-            if (isNaN(d.getTime())) return '';
-            const thaiMonths = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
-            return `${thaiMonths[d.getMonth()]} ${d.getFullYear() + 543}`;
-        };
-
-        const getPodiumFontSize = (name, isFirst = false) => {
-            const len = (name || '').length;
-            if (len > 7) return isFirst ? 'text-xs md:text-sm' : 'text-[10px] md:text-xs';
-            if (len > 5) return isFirst ? 'text-sm md:text-base' : 'text-xs md:text-sm';
-            return isFirst ? 'text-base md:text-xl' : 'text-sm md:text-lg';
-        };
-
-        const compareRoomNames = (a, b) => {
-            const nameA = String(a?.name || a || '').trim();
-            const nameB = String(b?.name || b || '').trim();
-            const parseRoom = (str) => {
-                const m = str.match(/(\d+)\s*\/\s*([0-9]+|[A-Za-zก-ฮ]+)/);
-                if (!m) return { grade: 999, subNum: 999, subOrder: 999, subText: str };
-                const grade = parseInt(m[1], 10);
-                const rawSub = m[2];
-                const isNum = /^\d+$/.test(rawSub);
-                const subText = isNum ? '' : rawSub.toLowerCase();
-                let subOrder = 500;
-                if (!isNum) {
-                    if (grade >= 1 && grade <= 3) {
-                        // ม.ต้น (ม.1 - ม.3): Sp ขึ้นก่อน Sm
-                        if (subText === 'sp') subOrder = 1;
-                        else if (subText === 'sm') subOrder = 2;
-                    } else {
-                        // ม.ปลาย (ม.4 - ม.6): Sm ขึ้นก่อน Sp
-                        if (subText === 'sm') subOrder = 1;
-                        else if (subText === 'sp') subOrder = 2;
-                    }
-                }
-                return {
-                    grade,
-                    subNum: isNum ? parseInt(rawSub, 10) : 999,
-                    subOrder,
-                    subText
-                };
-            };
-            const pa = parseRoom(nameA);
-            const pb = parseRoom(nameB);
-            if (pa.grade !== pb.grade) return pa.grade - pb.grade;
-            if (pa.subNum !== pb.subNum) return pa.subNum - pb.subNum;
-            if (pa.subOrder !== pb.subOrder) return pa.subOrder - pb.subOrder;
-            return pa.subText.localeCompare(pb.subText, 'th');
-        };
-
-        const sortRoomsNaturally = (roomList) => {
-            if (!Array.isArray(roomList)) return [];
-            return [...roomList].sort(compareRoomNames);
-        };
-
-        /*OMR_HELPERS_START*/
-        const omrBuildDarkness = (data, W, H) => {
-            const D = new Float32Array(W * H);
-            for (let i = 0, p = 0; i < D.length; i++, p += 4) {
-                const r = data[p], g = data[p + 1], b = data[p + 2];
-                const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-                const spread = Math.max(r, g, b) - Math.min(r, g, b);
-                D[i] = Math.min(255, (255 - lum) + spread * 0.65);
-            }
-            return D;
-        };
-        const omrPaperLevel = (D, W, H) => {
-            const s = [];
-            for (let y = 0; y < H; y += 6) for (let x = 0; x < W; x += 6) s.push(D[y * W + x]);
-            s.sort((a, b) => a - b);
-            return s[Math.floor(s.length * 0.5)] || 0;
-        };
-        // หาสี่เหลี่ยมทึบสีดำ (จุดมาร์คมุมกระดาษ) แบบปรับตามความสว่างกระดาษ เลือกอันที่ใกล้ตำแหน่งคาดหวังที่สุด
-        const omrFindCorner = (D, W, H, paperD, x0, x1, y0, y1, dx, dy) => {
-            x0 = Math.max(0, x0); y0 = Math.max(0, y0); x1 = Math.min(W - 1, x1); y1 = Math.min(H - 1, y1);
-            const thr = Math.min(185, paperD + 0.55 * (255 - paperD));
-            const w = x1 - x0 + 1, h = y1 - y0 + 1;
-            const seen = new Uint8Array(w * h);
-            let best = null, bestDist = Infinity;
-            for (let sy = 0; sy < h; sy++) {
-                for (let sx = 0; sx < w; sx++) {
-                    const si = sy * w + sx;
-                    if (seen[si] || D[(y0 + sy) * W + x0 + sx] < thr) continue;
-                    const stack = [si];
-                    seen[si] = 1;
-                    let minX = sx, maxX = sx, minY = sy, maxY = sy, cnt = 0;
-                    while (stack.length) {
-                        const c = stack.pop();
-                        const cx = c % w, cy = (c / w) | 0;
-                        cnt++;
-                        if (cx < minX) minX = cx; if (cx > maxX) maxX = cx;
-                        if (cy < minY) minY = cy; if (cy > maxY) maxY = cy;
-                        const nb = [[cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]];
-                        for (let k = 0; k < 4; k++) {
-                            const nx = nb[k][0], ny = nb[k][1];
-                            if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-                            const ni = ny * w + nx;
-                            if (seen[ni] || D[(y0 + ny) * W + x0 + nx] < thr) continue;
-                            seen[ni] = 1;
-                            stack.push(ni);
-                        }
-                    }
-                    const bw = maxX - minX + 1, bh = maxY - minY + 1;
-                    if (bw < 8 || bw > 26 || bh < 8 || bh > 26) continue;
-                    const ar = bw / bh;
-                    if (ar < 0.65 || ar > 1.55) continue;
-                    if (cnt / (bw * bh) < 0.6) continue;
-                    const mx = x0 + (minX + maxX) / 2, my = y0 + (minY + maxY) / 2;
-                    const dist = Math.hypot(mx - dx, my - dy);
-                    if (dist < bestDist) { bestDist = dist; best = { x: mx, y: my, found: true }; }
-                }
-            }
-            return best || { x: dx, y: dy, found: false };
-        };
-        // แปลงมุมมอง (perspective) จากสี่เหลี่ยมหน่วย (u,v) ไปยังจุดมาร์ค 4 มุมในภาพ
-        const omrMakeMapper = (tl, tr, bl, br) => {
-            const x0 = tl.x, y0 = tl.y, x1 = tr.x, y1 = tr.y, x2 = br.x, y2 = br.y, x3 = bl.x, y3 = bl.y;
-            const dx1 = x1 - x2, dx2 = x3 - x2, dx3 = x0 - x1 + x2 - x3;
-            const dy1 = y1 - y2, dy2 = y3 - y2, dy3 = y0 - y1 + y2 - y3;
-            const den = dx1 * dy2 - dx2 * dy1;
-            let a, b, d, e, g = 0, h = 0;
-            if ((Math.abs(dx3) < 1e-9 && Math.abs(dy3) < 1e-9) || Math.abs(den) < 1e-9) {
-                a = x1 - x0; b = x3 - x0; d = y1 - y0; e = y3 - y0;
-            } else {
-                g = (dx3 * dy2 - dx2 * dy3) / den;
-                h = (dx1 * dy3 - dx3 * dy1) / den;
-                a = x1 - x0 + g * x1; b = x3 - x0 + h * x3;
-                d = y1 - y0 + g * y1; e = y3 - y0 + h * y3;
-            }
-            return (u, v) => {
-                const k = g * u + h * v + 1;
-                return { x: (a * u + b * v + x0) / k, y: (d * u + e * v + y0) / k };
-            };
-        };
-        // นับพิกเซลหมึกในวงกลม และขยับหาตำแหน่งที่มีหมึกมากสุดในระยะ ±3 พิกเซล (รองรับรอยกากบาทบางและเยื้องศูนย์)
-        const omrBubbleInk = (D, W, H, cx, cy) => {
-            const at = (x, y) => D[Math.max(0, Math.min(H - 1, Math.round(y))) * W + Math.max(0, Math.min(W - 1, Math.round(x)))];
-            let best = { score: 0, x: cx, y: cy };
-            for (let oy = -3; oy <= 3; oy += 1.5) {
-                for (let ox = -3; ox <= 3; ox += 1.5) {
-                    const px = cx + ox, py = cy + oy;
-                    const ring = [];
-                    for (let t = 0; t < 8; t++) ring.push(at(px + Math.cos(t * Math.PI / 4) * 10.5, py + Math.sin(t * Math.PI / 4) * 10.5));
-                    ring.sort((p, q) => p - q);
-                    const bg = ring[3];
-                    const cut = Math.max(55, 0.4 * (255 - bg));
-                    let n = 0;
-                    for (let dy = -6; dy <= 6; dy++) {
-                        for (let dx = -6; dx <= 6; dx++) {
-                            if (dx * dx + dy * dy <= 36) {
-                                const x = px + dx, y = py + dy;
-                                if (at(x, y) - bg > cut && !(at(x - 10, y) - bg > cut && at(x + 10, y) - bg > cut)) n++;
-                            }
-                        }
-                    }
-                    const sc = n - (Math.abs(ox) + Math.abs(oy)) * 0.15;
-                    if (sc > best.score) best = { score: sc, x: px, y: py };
-                }
-            }
-            return best;
-        };
-        /*OMR_HELPERS_END*/
-
-        const BotMascotAvatar = ({ size = "md", isFloating = false }) => {
-            const dimClass = size === "lg" ? "w-14 h-14" : size === "sm" ? "w-8 h-8" : "w-10 h-10";
-            return (
-                <div className={`relative ${dimClass} rounded-full bg-gradient-to-b from-[#E11D48] to-[#9F1239] p-1 shadow-lg flex items-center justify-center select-none shrink-0 border-2 border-white ${isFloating ? 'animate-bot-float' : ''}`}>
-                    <svg viewBox="0 0 64 64" className="w-full h-full overflow-visible">
-                        <line x1="32" y1="2" x2="32" y2="11" stroke="#FFFFFF" strokeWidth="3.5" strokeLinecap="round" />
-                        <circle cx="32" cy="2" r="4" fill="#FBBF24" />
-                        <circle cx="7" cy="34" r="4.5" fill="#F43F5E" stroke="#FFFFFF" strokeWidth="2" />
-                        <circle cx="57" cy="34" r="4.5" fill="#F43F5E" stroke="#FFFFFF" strokeWidth="2" />
-                        <rect x="9" y="11" width="46" height="42" rx="21" fill="#FFFFFF" />
-                        <rect x="14" y="18" width="36" height="24" rx="12" fill="#0F172A" />
-                        <g className="animate-bot-blink">
-                            <circle cx="24" cy="29" r="4.2" fill="#38BDF8" />
-                            <circle cx="40" cy="29" r="4.2" fill="#38BDF8" />
-                            <circle cx="25.5" cy="27.5" r="1.4" fill="#FFFFFF" />
-                            <circle cx="41.5" cy="27.5" r="1.4" fill="#FFFFFF" />
-                        </g>
-                        <ellipse cx="19" cy="34.5" rx="2.5" ry="1.3" fill="#FB7185" opacity="0.85" />
-                        <ellipse cx="45" cy="34.5" rx="2.5" ry="1.3" fill="#FB7185" opacity="0.85" />
-                        <path d="M 27 35 Q 32 39 37 35" stroke="#38BDF8" strokeWidth="2.4" strokeLinecap="round" fill="none" />
-                    </svg>
-                </div>
-            );
-        };
-
-        function ZoneCheckApp() {
+  
+    function ZoneCheckApp() {
             const [appMode, setAppMode] = useState(() => getValidSessionState()?.mode || 'guest'); 
             const [currentRoute, setCurrentRoute] = useState(() => getValidSessionState()?.route || 'dashboard'); 
             const [showSplash, setShowSplash] = useState(true); 
