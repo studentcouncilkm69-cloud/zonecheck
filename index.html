@@ -1,4 +1,4 @@
-  <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="th">
 <head>
     <meta charset="UTF-8">
@@ -6,45 +6,651 @@
     <meta name="theme-color" content="#ffffff">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
-
+    
     <title>ZoneCheck | สภานักเรียนโรงเรียนคำม่วง</title>
-
+    
     <!-- Tailwind CSS & React -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
+    
     <!-- Phosphor Icons -->
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
-
+    
     <!-- PDF & Excel Export -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
-
+    
     <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700;900&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        html, body { 
+            font-family: 'Noto Sans Thai', sans-serif !important; 
+            background-color: #E5E7EB;
+            overscroll-behavior: none; 
+            -webkit-overflow-scrolling: touch;
+            -webkit-tap-highlight-color: transparent;
+            height: 100dvh;
+            width: 100%;
+            overflow: hidden;
+            color: #1F2937;
+        }
+        
+        #root { height: 100dvh; width: 100%; display: flex; flex-direction: column; }
+        
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        .no-select { -webkit-user-select: none; user-select: none; }
+        
+        @keyframes spin-slow { 100% { transform: rotate(360deg); } }
+        .animate-spin-slow { animation: spin-slow 1.5s linear infinite; }
+        
+        @keyframes bot-float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-4px); }
+        }
+        .animate-bot-float { animation: bot-float 2.8s ease-in-out infinite; }
 
-    <!-- CSS ของเว็บ -->
-    <link rel="stylesheet" href="css/style.css">
+        @keyframes bot-blink {
+            0%, 92%, 100% { transform: scaleY(1); }
+            95% { transform: scaleY(0.1); }
+        }
+        .animate-bot-blink { transform-origin: center; animation: bot-blink 4s infinite; }
+
+        .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+        
+        .checkbox-custom:checked + div { background-color: #C8102E; border-color: #C8102E; }
+        .checkbox-custom:checked + div svg { display: block; }
+
+        /* PDF Export Styles */
+        .pdf-export-wrapper {
+            font-family: 'Sarabun', sans-serif !important;
+            color: #1e293b;
+            background: white;
+            box-sizing: border-box;
+            width: 1123px !important;
+            padding: 30px 40px !important;
+        }
+        .pdf-table { width: 100%; border-collapse: collapse; font-size: 13px; border: 1px solid #ddd6fe; }
+        .pdf-table th { background-color: #7c3aed !important; color: #ffffff !important; padding: 9px 6px; border: 1px solid #6d28d9; font-weight: bold; text-align: center; }
+        .pdf-table td { padding: 7px 6px; border: 1px solid #ede9fe; text-align: center; vertical-align: middle; }
+        .pdf-table tr:nth-child(even) td { background-color: #faf5ff !important; }
+        .pdf-table td.text-left { text-align: left; padding-left: 10px; }
+        .col-purple { color: #7c3aed !important; font-weight: bold; }
+
+        /* สไตล์สำหรับใบตรวจแบบกระดาษคำตอบ (OMR Answer Sheet - Single A4 Landscape) */
+        .omr-sheet-wrapper, .omr-sheet-wrapper * {
+            font-family: 'Sarabun', sans-serif !important;
+        }
+        .omr-sheet-wrapper {
+            color: #111827;
+            background: white;
+            box-sizing: border-box;
+            width: 1122px !important;
+            height: 793px !important;
+            max-width: 1122px !important;
+            max-height: 793px !important;
+            padding: 16px 36px !important;
+            margin: 0 auto !important;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            overflow: hidden;
+        }
+        .omr-table { width: 100%; border-collapse: collapse; font-size: 9px; border: 1.5px solid #111827; table-layout: fixed; }
+        .omr-table th { background-color: #f3f4f6 !important; color: #111827 !important; padding: 2px 1px; border: 1px solid #9ca3af; font-weight: bold; text-align: center; font-size: 8px; line-height: 1.1; }
+        .omr-table td { padding: 0.5px 0.5px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; color: #111827; height: 15.5px; }
+        .omr-table tr:nth-child(even) td { background-color: #f8fafc !important; }
+        .omr-bubble {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 12.5px;
+            height: 12.5px;
+            border: 1px solid #cbd5e1;
+            border-radius: 9999px;
+            font-size: 6.8px;
+            font-weight: 600;
+            color: #cbd5e1;
+            background: #ffffff;
+            line-height: 1;
+            margin: 0 auto;
+        }
+        .omr-corner-mark {
+            width: 14px;
+            height: 14px;
+            background-color: #111827;
+            border: 2px solid #111827;
+            flex-shrink: 0;
+        }
+        .masked-pin-input {
+            -webkit-text-security: disc !important;
+            text-security: disc !important;
+        }
+        @page {
+            size: A4 landscape;
+            margin: 0;
+        }
+        @media print {
+            html, body { width: 297mm; height: 210mm; margin: 0 !important; padding: 0 !important; background: #fff !important; overflow: visible !important; }
+            body * { visibility: hidden; }
+            #omr-print-area, #omr-print-area * { visibility: visible; }
+            #omr-print-area { position: fixed; left: 0; top: 0; width: 297mm; height: 210mm; margin: 0 !important; padding: 0 !important; box-shadow: none !important; display: flex; align-items: center; justify-content: center; }
+        }
+
+        .nav-item { transition: all 0.2s ease; position: relative; }
+    </style>
 </head>
 <body>
     <div id="root"></div>
 
-    <!-- JS ล้วน (ไม่มี JSX) -->
-    <script src="js/config.js"></script>
-    <script src="js/utils.js"></script>
-    <script src="js/omr.js"></script>
-
-    <!-- Component ที่มี JSX -->
-    <script type="text/babel" src="js/components/ErrorBoundary.js"></script>
-    <script type="text/babel" src="js/components/BotMascotAvatar.js"></script>
-
     <script type="text/babel">
         const { useState, useEffect, useMemo, useRef } = React;
-  
-    function ZoneCheckApp() {
+
+        // ⚠️ ลิงก์ Google Apps Script Backend
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxp7RJqJIajrEx8J9IVnJC75saIt_FeiQDUxNgxnP7vrYOy7xcYy77RqXljRUXv_xHm/exec";
+
+        const HARDCODED_LOGO = "https://i.postimg.cc/wBN5btrp/rong-re-yn-kham-wng.png";
+        const HARDCODED_NAME = "STUDENT COUNCIL • KHAMMUANG SCHOOL";
+        const ADMIN_AVATAR_URL = "https://i.postimg.cc/K8nwK3rc/att-t8x-q-Ucw-G9JVKpv-Lq-G9t-GAMr-Hq-Ma-Gedads-WR6q-Lut-Yw.jpg";
+        const DEFAULT_GEMINI_KEY = ["AQ.Ab8RN6IYK", "_MZisi6uunj98GG", "OCNmmzHLofcgqJY", "zNyt6k6YfkQ"].join("");
+
+        const safeGetItem = (key) => { try { return localStorage.getItem(key); } catch(e) { return null; } };
+        const safeSetItem = (key, val) => { try { localStorage.setItem(key, val); } catch(e) {} };
+        const safeRemoveItem = (key) => { try { localStorage.removeItem(key); } catch(e) {} };
+        const safeSessionGet = (key) => { try { return sessionStorage.getItem(key); } catch(e) { return null; } };
+        const safeSessionSet = (key, val) => { try { sessionStorage.setItem(key, val); } catch(e) {} };
+        const safeSessionRemove = (key) => { try { sessionStorage.removeItem(key); } catch(e) {} };
+        const SESSION_TIMEOUT_MS = 5 * 60 * 1000;
+        const getValidSessionState = () => {
+            try {
+                const raw = safeSessionGet('zc26_active_session');
+                if (!raw) return null;
+                const parsed = JSON.parse(raw);
+                if (!parsed || !parsed.mode || parsed.mode === 'guest') return null;
+                const now = Date.now();
+                if (parsed.lastActive && (now - parsed.lastActive) > SESSION_TIMEOUT_MS) {
+                    safeSessionRemove('zc26_active_session');
+                    return null;
+                }
+                return parsed;
+            } catch (e) { return null; }
+        };
+
+        const safeParse = (data, fallback) => {
+            if (!data) return fallback;
+            try {
+                const parsed = JSON.parse(data);
+                if (Array.isArray(fallback) && !Array.isArray(parsed)) return fallback;
+                return parsed;
+            } catch (e) { return fallback; }
+        };
+
+        const generateId = (prefix) => `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).substr(2, 5)}`;
+        
+        class ErrorBoundary extends React.Component {
+            constructor(props) { super(props); this.state = { hasError: false, error: null }; }
+            static getDerivedStateFromError(error) { return { hasError: true, error }; }
+            render() {
+                if (this.state.hasError) {
+                    return (
+                        <div className="h-[100dvh] bg-red-50 p-8 flex flex-col items-center justify-center text-center">
+                            <i className="ph ph-warning-circle text-red-500 mb-4 text-6xl"></i>
+                            <h1 className="text-3xl font-bold text-red-600 mb-2">⚠️ ระบบขัดข้อง</h1>
+                            <p className="text-red-500 mb-4 text-sm font-medium">ตรวจพบข้อผิดพลาด หรืออินเทอร์เน็ตไม่เสถียร<br/>กรุณากดปุ่มด้านล่างเพื่อเริ่มใหม่</p>
+                            <button onClick={() => { 
+                                safeRemoveItem('zc26_rooms'); safeRemoveItem('zc26_inspectors'); 
+                                safeRemoveItem('zc26_inspections'); safeRemoveItem('zc26_settings'); 
+                                safeSessionRemove('zc26_active_session');
+                                window.location.reload(); 
+                            }} className="mt-6 px-6 py-3 bg-[#C8102E] text-white font-medium rounded-xl shadow-lg">รีเซ็ตและโหลดใหม่</button>
+                        </div>
+                    );
+                }
+                return this.props.children;
+            }
+        }
+
+        const initialSettings = { 
+            passcode: "1234", master_passcode: "9999", is_maintenance: "false", 
+            app_logo_url: "", logo_url: "", school_logo_url: "", zone_map_url: "", room_map_url: "",
+            banner_url: "", main_banner_url: "", popup_banner_url: "", 
+            announcement_title: "", announcement_msg: "",
+            visibility_main_banner: "public", visibility_popup_banner: "public", visibility_announce_banner: "public",
+            inspector_avatars_json: "{}",
+            signers_json: "[]",
+            signature_presets_json: "[]",
+            default_signature_preset: "none",
+            admin_avatar_url: ADMIN_AVATAR_URL,
+            admin_name: "นายภูธนากร หงษ์ทอง (พี่ภีม)",
+            admin_role: "เลขานุการสภานักเรียนโรงเรียนคำม่วง",
+            admin_line_url: "https://line.me/ti/p/~470aijh",
+            app_title: "ZoneCheck",
+            app_version: "V3.0",
+            map_pins_json: "{}",
+            gemini_api_key: DEFAULT_GEMINI_KEY,
+            ai_bot_name: "น้องสภาฯ"
+        };
+
+        const ROOM_CRITERIA = [
+            { id: 'c1', name: "โต๊ะ" }, { id: 'c2', name: "ขยะ" },
+            { id: 'c3', name: "ไฟ/หน้าต่าง" }, { id: 'c4', name: "พื้น" }, { id: 'c5', name: "กระดาน" }
+        ];
+
+        const formatThaiDateForFile = (dateStr) => {
+            if(!dateStr) return '';
+            const d = new Date(dateStr);
+            if (isNaN(d.getTime())) return '';
+            const months = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+            return `${String(d.getDate()).padStart(2,'0')}_${months[d.getMonth()]}_${d.getFullYear()+543}`;
+        };
+
+        const formatDateObj = (dateStr) => {
+            if(!dateStr) return '';
+            const d = new Date(dateStr);
+            if (isNaN(d.getTime())) return 'วันที่ไม่ระบุ';
+            const months = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+            return `${String(d.getDate()).padStart(2,'0')} ${months[d.getMonth()]} ${d.getFullYear()+543}`;
+        };
+
+        const formatMonthYearShort = (dateStr) => {
+            if(!dateStr) return '';
+            const parts = dateStr.split('-');
+            if(parts.length !== 2) return dateStr;
+            const [year, month] = parts;
+            const monthsShort = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+            return `${monthsShort[parseInt(month)-1] || month} ${parseInt(year)+543}`;
+        };
+        
+        const formatMonthYearThai = (dateStr) => {
+            if(!dateStr) return '';
+            const d = new Date(dateStr);
+            if (isNaN(d.getTime())) return '';
+            const thaiMonths = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+            return `${thaiMonths[d.getMonth()]} ${d.getFullYear() + 543}`;
+        };
+
+        const getPodiumFontSize = (name, isFirst = false) => {
+            const len = (name || '').length;
+            if (len > 7) return isFirst ? 'text-xs md:text-sm' : 'text-[10px] md:text-xs';
+            if (len > 5) return isFirst ? 'text-sm md:text-base' : 'text-xs md:text-sm';
+            return isFirst ? 'text-base md:text-xl' : 'text-sm md:text-lg';
+        };
+
+        const compareRoomNames = (a, b) => {
+            const nameA = String(a?.name || a || '').trim();
+            const nameB = String(b?.name || b || '').trim();
+            const parseRoom = (str) => {
+                const m = str.match(/(\d+)\s*\/\s*([0-9]+|[A-Za-zก-ฮ]+)/);
+                if (!m) return { grade: 999, subNum: 999, subOrder: 999, subText: str };
+                const grade = parseInt(m[1], 10);
+                const rawSub = m[2];
+                const isNum = /^\d+$/.test(rawSub);
+                const subText = isNum ? '' : rawSub.toLowerCase();
+                let subOrder = 500;
+                if (!isNum) {
+                    if (grade >= 1 && grade <= 3) {
+                        // ม.ต้น (ม.1 - ม.3): Sp ขึ้นก่อน Sm
+                        if (subText === 'sp') subOrder = 1;
+                        else if (subText === 'sm') subOrder = 2;
+                    } else {
+                        // ม.ปลาย (ม.4 - ม.6): Sm ขึ้นก่อน Sp
+                        if (subText === 'sm') subOrder = 1;
+                        else if (subText === 'sp') subOrder = 2;
+                    }
+                }
+                return {
+                    grade,
+                    subNum: isNum ? parseInt(rawSub, 10) : 999,
+                    subOrder,
+                    subText
+                };
+            };
+            const pa = parseRoom(nameA);
+            const pb = parseRoom(nameB);
+            if (pa.grade !== pb.grade) return pa.grade - pb.grade;
+            if (pa.subNum !== pb.subNum) return pa.subNum - pb.subNum;
+            if (pa.subOrder !== pb.subOrder) return pa.subOrder - pb.subOrder;
+            return pa.subText.localeCompare(pb.subText, 'th');
+        };
+
+        const sortRoomsNaturally = (roomList) => {
+            if (!Array.isArray(roomList)) return [];
+            return [...roomList].sort(compareRoomNames);
+        };
+
+        /*OMR_HELPERS_START*/
+        const omrBuildDarkness = (data, W, H) => {
+            const D = new Float32Array(W * H);
+            for (let i = 0, p = 0; i < D.length; i++, p += 4) {
+                const r = data[p], g = data[p + 1], b = data[p + 2];
+                const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+                const spread = Math.max(r, g, b) - Math.min(r, g, b);
+                D[i] = Math.min(255, (255 - lum) + spread * 0.65);
+            }
+            return D;
+        };
+        const omrPaperLevel = (D, W, H) => {
+            const s = [];
+            for (let y = 0; y < H; y += 6) for (let x = 0; x < W; x += 6) s.push(D[y * W + x]);
+            s.sort((a, b) => a - b);
+            return s[Math.floor(s.length * 0.5)] || 0;
+        };
+        // หาสี่เหลี่ยมทึบสีดำ (จุดมาร์คมุมกระดาษ) แบบปรับตามความสว่างกระดาษ เลือกอันที่ใกล้ตำแหน่งคาดหวังที่สุด
+        const omrFindCorner = (D, W, H, paperD, x0, x1, y0, y1, dx, dy) => {
+            x0 = Math.max(0, x0); y0 = Math.max(0, y0); x1 = Math.min(W - 1, x1); y1 = Math.min(H - 1, y1);
+            const thr = Math.min(185, paperD + 0.55 * (255 - paperD));
+            const w = x1 - x0 + 1, h = y1 - y0 + 1;
+            const seen = new Uint8Array(w * h);
+            let best = null, bestDist = Infinity;
+            for (let sy = 0; sy < h; sy++) {
+                for (let sx = 0; sx < w; sx++) {
+                    const si = sy * w + sx;
+                    if (seen[si] || D[(y0 + sy) * W + x0 + sx] < thr) continue;
+                    const stack = [si];
+                    seen[si] = 1;
+                    let minX = sx, maxX = sx, minY = sy, maxY = sy, cnt = 0;
+                    while (stack.length) {
+                        const c = stack.pop();
+                        const cx = c % w, cy = (c / w) | 0;
+                        cnt++;
+                        if (cx < minX) minX = cx; if (cx > maxX) maxX = cx;
+                        if (cy < minY) minY = cy; if (cy > maxY) maxY = cy;
+                        const nb = [[cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]];
+                        for (let k = 0; k < 4; k++) {
+                            const nx = nb[k][0], ny = nb[k][1];
+                            if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                            const ni = ny * w + nx;
+                            if (seen[ni] || D[(y0 + ny) * W + x0 + nx] < thr) continue;
+                            seen[ni] = 1;
+                            stack.push(ni);
+                        }
+                    }
+                    const bw = maxX - minX + 1, bh = maxY - minY + 1;
+                    if (bw < 8 || bw > 26 || bh < 8 || bh > 26) continue;
+                    const ar = bw / bh;
+                    if (ar < 0.65 || ar > 1.55) continue;
+                    if (cnt / (bw * bh) < 0.6) continue;
+                    const mx = x0 + (minX + maxX) / 2, my = y0 + (minY + maxY) / 2;
+                    const dist = Math.hypot(mx - dx, my - dy);
+                    if (dist < bestDist) { bestDist = dist; best = { x: mx, y: my, found: true }; }
+                }
+            }
+            return best || { x: dx, y: dy, found: false };
+        };
+        // แปลงมุมมอง (perspective) จากสี่เหลี่ยมหน่วย (u,v) ไปยังจุดมาร์ค 4 มุมในภาพ
+        const omrMakeMapper = (tl, tr, bl, br) => {
+            const x0 = tl.x, y0 = tl.y, x1 = tr.x, y1 = tr.y, x2 = br.x, y2 = br.y, x3 = bl.x, y3 = bl.y;
+            const dx1 = x1 - x2, dx2 = x3 - x2, dx3 = x0 - x1 + x2 - x3;
+            const dy1 = y1 - y2, dy2 = y3 - y2, dy3 = y0 - y1 + y2 - y3;
+            const den = dx1 * dy2 - dx2 * dy1;
+            let a, b, d, e, g = 0, h = 0;
+            if ((Math.abs(dx3) < 1e-9 && Math.abs(dy3) < 1e-9) || Math.abs(den) < 1e-9) {
+                a = x1 - x0; b = x3 - x0; d = y1 - y0; e = y3 - y0;
+            } else {
+                g = (dx3 * dy2 - dx2 * dy3) / den;
+                h = (dx1 * dy3 - dx3 * dy1) / den;
+                a = x1 - x0 + g * x1; b = x3 - x0 + h * x3;
+                d = y1 - y0 + g * y1; e = y3 - y0 + h * y3;
+            }
+            return (u, v) => {
+                const k = g * u + h * v + 1;
+                return { x: (a * u + b * v + x0) / k, y: (d * u + e * v + y0) / k };
+            };
+        };
+        // นับพิกเซลหมึกในวงกลม และขยับหาตำแหน่งที่มีหมึกมากสุดในระยะ ±3 พิกเซล (รองรับรอยกากบาทบางและเยื้องศูนย์)
+        const omrBubbleInk = (D, W, H, cx, cy) => {
+            const at = (x, y) => D[Math.max(0, Math.min(H - 1, Math.round(y))) * W + Math.max(0, Math.min(W - 1, Math.round(x)))];
+            let best = { score: 0, x: cx, y: cy };
+            for (let oy = -3; oy <= 3; oy += 1.5) {
+                for (let ox = -3; ox <= 3; ox += 1.5) {
+                    const px = cx + ox, py = cy + oy;
+                    const ring = [];
+                    for (let t = 0; t < 8; t++) ring.push(at(px + Math.cos(t * Math.PI / 4) * 10.5, py + Math.sin(t * Math.PI / 4) * 10.5));
+                    ring.sort((p, q) => p - q);
+                    const bg = ring[3];
+                    const cut = Math.max(55, 0.4 * (255 - bg));
+                    let n = 0;
+                    for (let dy = -6; dy <= 6; dy++) {
+                        for (let dx = -6; dx <= 6; dx++) {
+                            if (dx * dx + dy * dy <= 36) {
+                                const x = px + dx, y = py + dy;
+                                if (at(x, y) - bg > cut && !(at(x - 10, y) - bg > cut && at(x + 10, y) - bg > cut)) n++;
+                            }
+                        }
+                    }
+                    const sc = n - (Math.abs(ox) + Math.abs(oy)) * 0.15;
+                    if (sc > best.score) best = { score: sc, x: px, y: py };
+                }
+            }
+            return best;
+        };
+        /*OMR_HELPERS_END*/
+
+        const getThaiDateStr = (d = new Date()) => {
+            const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(d);
+            const g = (t) => parts.find(x => x.type === t).value;
+            return `${g('year')}-${g('month')}-${g('day')}`;
+        };
+
+        const SCORING_RULES_TEXT = [
+            'กติกาการให้คะแนน ZoneCheck:',
+            '• หมวดห้องเรียน (เต็ม 10 คะแนน): ตรวจ 5 จุด ได้แก่ โต๊ะ, ขยะ, ไฟ/หน้าต่าง, พื้น, กระดาน จุดละ 2 คะแนน ผ่านได้ 2 ไม่ผ่านได้ 0',
+            '• ห้องที่ไม่ปฏิบัติหน้าที่เวร: -5 คะแนน',
+            '• หมวดเขตพื้นที่ (เต็ม 10 คะแนน): ดีเยี่ยม +10, ดี +8, พอใช้ +5, ปรับปรุง +2, ไม่ปฏิบัติหน้าที่ -5',
+            '• ข้ามการตรวจ: ไม่นับคะแนน และไม่นับเป็นคะแนนเต็ม',
+            '• ห้องที่ไม่มีเขตพื้นที่รับผิดชอบ: นับเฉพาะหมวดห้องเรียน',
+            '• คะแนนสะสม = ผลรวมคะแนนของทุกครั้งที่ตรวจ, เปอร์เซ็นต์ = คะแนนสะสม ÷ คะแนนเต็ม x 100 (ตรวจแต่ละหมวดครั้งละเต็ม 10)',
+            '• เหรียญ: 80% ขึ้นไปเหรียญทอง, 70% ขึ้นไปเหรียญเงิน, 60% ขึ้นไปเหรียญทองแดง',
+            '• การจัดอันดับ: ผู้ใช้ที่เข้าสู่ระบบเรียงตามเปอร์เซ็นต์ก่อน (เท่ากันดูคะแนนรวม) ส่วนโหมดผู้เยี่ยมชมเรียงตามคะแนนรวมก่อน ถ้าเท่ากันได้อันดับเดียวกัน'
+        ].join('\n');
+
+        const LiveClock = ({ compact = false }) => {
+            const [now, setNow] = useState(() => new Date());
+            useEffect(() => {
+                const t = setInterval(() => setNow(new Date()), 1000);
+                return () => clearInterval(t);
+            }, []);
+            const timeStr = now.toLocaleTimeString('th-TH', { timeZone: 'Asia/Bangkok', hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            const dateStr = now.toLocaleDateString('th-TH', { timeZone: 'Asia/Bangkok', weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+            if (compact) {
+                return (
+                    <div className="flex items-center justify-center gap-2 text-[11px] font-bold text-gray-500 tabular-nums no-select">
+                        <i className="ph ph-clock text-[#C8102E]"></i>
+                        <span>{dateStr}</span>
+                        <span className="text-[#C8102E]">{timeStr} น.</span>
+                    </div>
+                );
+            }
+            return (
+                <div className="hidden lg:flex flex-col items-end leading-tight px-2 no-select tabular-nums" title="เวลาปัจจุบัน (ประเทศไทย)">
+                    <span className="text-[15px] font-black text-gray-800">{timeStr}</span>
+                    <span className="text-[10px] font-bold text-gray-400 hidden xl:block">{dateStr}</span>
+                </div>
+            );
+        };
+
+        const REMINDER_HOUR = 14; // เริ่มเตือนห้องที่ยังไม่ตรวจตั้งแต่เวลานี้ (ชั่วโมงเวลาไทย 0-23)
+
+        const UncheckedReminderBanner = ({ rooms, inspections, showGo, onGo }) => {
+            const [now, setNow] = useState(() => new Date());
+            const [dismissedDate, setDismissedDate] = useState(null);
+            useEffect(() => {
+                const t = setInterval(() => setNow(new Date()), 60000);
+                return () => clearInterval(t);
+            }, []);
+            const today = getThaiDateStr(now);
+            const hour = parseInt(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Bangkok', hour: '2-digit', hour12: false }).format(now), 10) % 24;
+            const weekday = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Bangkok', weekday: 'short' }).format(now);
+            const { uncheckedRooms, uncheckedZones } = useMemo(() => {
+                const validRooms = Array.isArray(rooms) ? rooms : [];
+                const dayInsps = (Array.isArray(inspections) ? inspections : []).filter(i => i && i.date && String(i.date).startsWith(today));
+                return {
+                    uncheckedRooms: validRooms.filter(r => !dayInsps.some(i => i.roomId === r.id && i.type === 'room')),
+                    uncheckedZones: validRooms.filter(r => r.hasZone !== false && !dayInsps.some(i => i.roomId === r.id && i.type === 'zone'))
+                };
+            }, [rooms, inspections, today]);
+
+            const isWeekend = weekday === 'Sat' || weekday === 'Sun';
+            if (isWeekend || hour < REMINDER_HOUR || dismissedDate === today) return null;
+            if (uncheckedRooms.length + uncheckedZones.length === 0) return null;
+
+            const chips = (list) => (
+                <div className="flex flex-wrap gap-1 mt-1">
+                    {list.slice(0, 14).map(r => <span key={r.id} className="px-2 py-0.5 rounded-full bg-white border border-amber-200 text-[11px] font-bold text-amber-800">{r.name}</span>)}
+                    {list.length > 14 && <span className="px-2 py-0.5 text-[11px] font-bold text-amber-700">และอีก {list.length - 14}</span>}
+                </div>
+            );
+
+            return (
+                <div className="bg-amber-50 border border-amber-200 rounded-[1.5rem] p-4 mb-5 shadow-sm animate-in fade-in">
+                    <div className="flex items-start gap-3">
+                        <div className="w-9 h-9 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center shrink-0"><i className="ph ph-bell-ringing text-xl"></i></div>
+                        <div className="flex-1 min-w-0">
+                            <p className="font-black text-sm text-amber-900">ยังตรวจไม่ครบ ({String(hour).padStart(2, '0')}:00 น. แล้ว)</p>
+                            {uncheckedRooms.length > 0 && (<div className="mt-1.5"><p className="text-[11px] font-bold text-amber-700">ห้องเรียนที่ยังไม่ตรวจ {uncheckedRooms.length} ห้อง</p>{chips(uncheckedRooms)}</div>)}
+                            {uncheckedZones.length > 0 && (<div className="mt-1.5"><p className="text-[11px] font-bold text-amber-700">เขตพื้นที่ที่ยังไม่ตรวจ {uncheckedZones.length} เขต</p>{chips(uncheckedZones)}</div>)}
+                            {showGo && (<button onClick={onGo} className="mt-3 px-4 py-2 rounded-xl bg-amber-500 text-white text-xs font-black shadow-sm active:scale-95 transition-transform">ไปหน้าตรวจ</button>)}
+                        </div>
+                        <button onClick={() => setDismissedDate(today)} className="w-7 h-7 rounded-full bg-white/70 text-amber-700 flex items-center justify-center shrink-0 active:scale-95" title="ปิดการแจ้งเตือนวันนี้"><i className="ph ph-x text-sm"></i></button>
+                    </div>
+                </div>
+            );
+        };
+
+        const RoomTrendModal = ({ room, inspections, onClose }) => {
+            const [range, setRange] = useState(14);
+            const data = useMemo(() => {
+                const byDate = {};
+                (Array.isArray(inspections) ? inspections : []).forEach(i => {
+                    if (!i || i.roomId !== room.id || !i.date || i.totalScore === null || i.totalScore === undefined) return;
+                    const d = String(i.date).slice(0, 10);
+                    if (!byDate[d]) byDate[d] = { d, room: null, zone: null };
+                    if (i.type === 'room') byDate[d].room = Number(i.totalScore);
+                    if (i.type === 'zone') byDate[d].zone = Number(i.totalScore);
+                });
+                return Object.values(byDate).sort((a, b) => a.d.localeCompare(b.d));
+            }, [inspections, room.id]);
+
+            const hasZone = room.hasZone !== false;
+            const shown = range === 0 ? data : data.slice(-range);
+            const avg = (key) => {
+                const vals = shown.map(p => p[key]).filter(v => v !== null);
+                return vals.length ? (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1) : '-';
+            };
+            const countOf = (key) => shown.filter(p => p[key] !== null).length;
+
+            const W = 340, H = 190, L = 26, R = 12, T = 14, B = 26;
+            const hasNeg = shown.some(p => (p.room !== null && p.room < 0) || (p.zone !== null && p.zone < 0));
+            const yMin = hasNeg ? -5 : 0, yMax = 10;
+            const xAt = (i) => shown.length <= 1 ? (L + (W - L - R) / 2) : L + i * (W - L - R) / (shown.length - 1);
+            const yAt = (v) => T + (yMax - v) * (H - T - B) / (yMax - yMin);
+            const pointsOf = (key) => shown.map((p, i) => p[key] === null ? null : { x: xAt(i), y: yAt(p[key]), v: p[key], d: p.d }).filter(Boolean);
+            const pathOf = (arr) => arr.map((pt, k) => `${k ? 'L' : 'M'}${pt.x.toFixed(1)},${pt.y.toFixed(1)}`).join(' ');
+            const ticks = hasNeg ? [-5, 0, 5, 10] : [0, 5, 10];
+            const step = Math.max(1, Math.ceil(shown.length / 6));
+            const shortDate = (d) => { const [, m, dd] = d.split('-'); return `${parseInt(dd, 10)}/${parseInt(m, 10)}`; };
+            const showLabels = shown.length <= 10;
+            const series = [{ key: 'room', color: '#C8102E', name: 'ห้องเรียน' }].concat(hasZone ? [{ key: 'zone', color: '#a21caf', name: 'เขตพื้นที่' }] : []);
+
+            return (
+                <div className="fixed inset-0 z-[9998] bg-gray-900/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in" onClick={onClose}>
+                    <div className="bg-white w-full sm:max-w-md rounded-t-[2rem] sm:rounded-[2rem] p-5 shadow-2xl max-h-[92dvh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2 min-w-0">
+                                <div className="w-9 h-9 rounded-full bg-red-50 text-[#C8102E] flex items-center justify-center shrink-0"><i className="ph ph-chart-line-up text-lg"></i></div>
+                                <div className="min-w-0">
+                                    <p className="font-black text-gray-800 text-base leading-tight truncate">แนวโน้มคะแนน {room.name}</p>
+                                    <p className="text-[10px] font-bold text-gray-400">คะแนนต่อวันที่ตรวจ</p>
+                                </div>
+                            </div>
+                            <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center shrink-0 active:scale-95"><i className="ph ph-x"></i></button>
+                        </div>
+
+                        <div className="flex gap-1.5 bg-gray-100 p-1 rounded-xl mb-3">
+                            {[{ v: 14, l: '14 ครั้งล่าสุด' }, { v: 30, l: '30 ครั้ง' }, { v: 0, l: 'ทั้งหมด' }].map(o => (
+                                <button key={o.v} onClick={() => setRange(o.v)} className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold transition-all ${range === o.v ? 'bg-white text-[#C8102E] shadow-sm' : 'text-gray-500'}`}>{o.l}</button>
+                            ))}
+                        </div>
+
+                        {shown.length === 0 ? (
+                            <div className="py-12 text-center text-sm font-bold text-gray-400">ยังไม่มีข้อมูลการตรวจของห้องนี้</div>
+                        ) : (
+                            <>
+                                <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto select-none">
+                                    {ticks.map(t => (
+                                        <g key={t}>
+                                            <line x1={L} x2={W - R} y1={yAt(t)} y2={yAt(t)} stroke={t === 0 ? '#9ca3af' : '#e5e7eb'} strokeWidth="1" strokeDasharray={t === 0 ? '0' : '3 3'} />
+                                            <text x={L - 5} y={yAt(t) + 3} textAnchor="end" fontSize="9" fill="#9ca3af">{t}</text>
+                                        </g>
+                                    ))}
+                                    {shown.map((p, i) => (i % step === 0) ? (
+                                        <text key={p.d} x={xAt(i)} y={H - 8} textAnchor="middle" fontSize="9" fill="#9ca3af">{shortDate(p.d)}</text>
+                                    ) : null)}
+                                    {series.map(se => {
+                                        const pts = pointsOf(se.key);
+                                        return (
+                                            <g key={se.key}>
+                                                {pts.length > 1 && <path d={pathOf(pts)} fill="none" stroke={se.color} strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" />}
+                                                {pts.map(pt => (
+                                                    <g key={pt.d}>
+                                                        <circle cx={pt.x} cy={pt.y} r="3.5" fill="#fff" stroke={se.color} strokeWidth="2"><title>{`${shortDate(pt.d)}: ${pt.v} คะแนน (${se.name})`}</title></circle>
+                                                        {showLabels && <text x={pt.x} y={pt.y - 7} textAnchor="middle" fontSize="9" fontWeight="700" fill={se.color}>{pt.v}</text>}
+                                                    </g>
+                                                ))}
+                                            </g>
+                                        );
+                                    })}
+                                </svg>
+                                <div className="flex items-center justify-center gap-4 mb-3">
+                                    {series.map(se => (<span key={se.key} className="flex items-center gap-1.5 text-[11px] font-bold text-gray-600"><span className="w-3 h-1.5 rounded-full" style={{ background: se.color }}></span>{se.name}</span>))}
+                                </div>
+                                <div className={`grid ${hasZone ? 'grid-cols-3' : 'grid-cols-2'} gap-2`}>
+                                    <div className="bg-red-50 rounded-2xl p-2.5 text-center"><p className="text-[10px] font-bold text-red-400">เฉลี่ยห้องเรียน</p><p className="text-lg font-black text-[#C8102E] leading-tight">{avg('room')}</p><p className="text-[10px] text-red-300 font-bold">{countOf('room')} ครั้ง</p></div>
+                                    {hasZone && (<div className="bg-fuchsia-50 rounded-2xl p-2.5 text-center"><p className="text-[10px] font-bold text-fuchsia-400">เฉลี่ยเขตพื้นที่</p><p className="text-lg font-black text-fuchsia-700 leading-tight">{avg('zone')}</p><p className="text-[10px] text-fuchsia-300 font-bold">{countOf('zone')} ครั้ง</p></div>)}
+                                    <div className="bg-gray-50 rounded-2xl p-2.5 text-center"><p className="text-[10px] font-bold text-gray-400">ตรวจล่าสุด</p><p className="text-lg font-black text-gray-700 leading-tight">{shortDate(shown[shown.length - 1].d)}</p><p className="text-[10px] text-gray-300 font-bold">{shown.length} วันที่แสดง</p></div>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const BotMascotAvatar = ({ size = "md", isFloating = false }) => {
+            const dimClass = size === "lg" ? "w-14 h-14" : size === "sm" ? "w-8 h-8" : "w-10 h-10";
+            return (
+                <div className={`relative ${dimClass} rounded-full bg-gradient-to-b from-[#E11D48] to-[#9F1239] p-1 shadow-lg flex items-center justify-center select-none shrink-0 border-2 border-white ${isFloating ? 'animate-bot-float' : ''}`}>
+                    <svg viewBox="0 0 64 64" className="w-full h-full overflow-visible">
+                        <line x1="32" y1="2" x2="32" y2="11" stroke="#FFFFFF" strokeWidth="3.5" strokeLinecap="round" />
+                        <circle cx="32" cy="2" r="4" fill="#FBBF24" />
+                        <circle cx="7" cy="34" r="4.5" fill="#F43F5E" stroke="#FFFFFF" strokeWidth="2" />
+                        <circle cx="57" cy="34" r="4.5" fill="#F43F5E" stroke="#FFFFFF" strokeWidth="2" />
+                        <rect x="9" y="11" width="46" height="42" rx="21" fill="#FFFFFF" />
+                        <rect x="14" y="18" width="36" height="24" rx="12" fill="#0F172A" />
+                        <g className="animate-bot-blink">
+                            <circle cx="24" cy="29" r="4.2" fill="#38BDF8" />
+                            <circle cx="40" cy="29" r="4.2" fill="#38BDF8" />
+                            <circle cx="25.5" cy="27.5" r="1.4" fill="#FFFFFF" />
+                            <circle cx="41.5" cy="27.5" r="1.4" fill="#FFFFFF" />
+                        </g>
+                        <ellipse cx="19" cy="34.5" rx="2.5" ry="1.3" fill="#FB7185" opacity="0.85" />
+                        <ellipse cx="45" cy="34.5" rx="2.5" ry="1.3" fill="#FB7185" opacity="0.85" />
+                        <path d="M 27 35 Q 32 39 37 35" stroke="#38BDF8" strokeWidth="2.4" strokeLinecap="round" fill="none" />
+                    </svg>
+                </div>
+            );
+        };
+
+        function ZoneCheckApp() {
             const [appMode, setAppMode] = useState(() => getValidSessionState()?.mode || 'guest'); 
             const [currentRoute, setCurrentRoute] = useState(() => getValidSessionState()?.route || 'dashboard'); 
             const [showSplash, setShowSplash] = useState(true); 
@@ -94,8 +700,8 @@
             const [guestAdvancedFilter, setGuestAdvancedFilter] = useState('all');
             
             const [dateMode, setDateMode] = useState('today'); 
-            const [filterDate, setFilterDate] = useState(() => new Date().toISOString().split('T')[0]);
-            const [selectedMonth, setSelectedMonth] = useState(() => new Date().toISOString().slice(0, 7)); 
+            const [filterDate, setFilterDate] = useState(() => getThaiDateStr());
+            const [selectedMonth, setSelectedMonth] = useState(() => getThaiDateStr().slice(0, 7)); 
             
             const [leaderboardTab, setLeaderboardTab] = useState('all'); 
             const [exportSortOrder, setExportSortOrder] = useState('score'); 
@@ -122,12 +728,12 @@
             const [newPresetSignerIds, setNewPresetSignerIds] = useState([]);
 
             const [historyViewMode, setHistoryViewMode] = useState('table'); 
-            const [historyCalendarMonth, setHistoryCalendarMonth] = useState(() => new Date().toISOString().slice(0, 7));
+            const [historyCalendarMonth, setHistoryCalendarMonth] = useState(() => getThaiDateStr().slice(0, 7));
             const [calendarTypeFilter, setCalendarTypeFilter] = useState('room');
 
             // Inspection Modal State
             const [inspectSearchRoom, setInspectSearchRoom] = useState('');
-            const [inspectModal, setInspectModal] = useState({ isOpen: false, room: null, type: 'room', date: new Date().toISOString().split('T')[0] });
+            const [inspectModal, setInspectModal] = useState({ isOpen: false, room: null, type: 'room', date: getThaiDateStr() });
             const [roomScores, setRoomScores] = useState({ c1: 2, c2: 2, c3: 2, c4: 2, c5: 2, noDuty: false });
             const [zoneScore, setZoneScore] = useState(10); 
             const [evalComment, setEvalComment] = useState('');
@@ -147,6 +753,7 @@
 
             const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, message: '', onConfirm: null, isAlert: false });
             const [viewDetailModal, setViewDetailModal] = useState(null);
+            const [trendRoom, setTrendRoom] = useState(null);
             const [showInfoModal, setShowInfoModal] = useState(false);
             const [showAnnouncement, setShowAnnouncement] = useState(false);
             const [showZoneMap, setShowZoneMap] = useState(false); 
@@ -250,7 +857,7 @@
                 {
                     id: 'welcome_msg',
                     sender: 'bot',
-                    text: 'สวัสดีครับ! ผมชื่อ "น้องสภาฯ" ผู้ช่วยอัจฉริยะของสภานักเรียนโรงเรียนคำม่วง\n\nสามารถพิมพ์ถามเรื่องคะแนน ชื่อห้อง (เช่น ม.1/1, ม.4/2) วิธีคิดคำนวณคะแนน พิกัดเขตพื้นที่ หรือจะชวนคุยเล่น ถามความรู้ทั่วไปก็ได้หมดเลยนะครับ!',
+                    text: 'สวัสดีครับ! ผมชื่อ "น้องสภาฯ" ผู้ช่วยอัจฉริยะของสภานักเรียนโรงเรียนคำม่วง\n\nสามารถพิมพ์ถามเรื่องคะแนน ชื่อห้อง (เช่น ม.1/1, ม.4/2) วิธีคิดคำนวณคะแนน อันดับ ผู้ตรวจ ความคืบหน้า หรือพิกัดเขตพื้นที่ได้เลยนะครับ',
                     actions: []
                 }
             ]);
@@ -359,7 +966,7 @@
             }, [aiMessages, isAiChatOpen, isAiTyping]);
 
             const buildSystemContextForAi = () => {
-                const todayStr = filterDate || new Date().toISOString().split('T')[0];
+                const todayStr = filterDate || getThaiDateStr();
                 const validRooms = Array.isArray(rooms) ? rooms : [];
                 const validInspections = Array.isArray(inspections) ? inspections : [];
                 const todayInsps = validInspections.filter(i => i.date && String(i.date).startsWith(todayStr));
@@ -385,7 +992,7 @@ ${roomSummaryLines}`;
             const generateLocalSmartAiReply = (rawQuery) => {
                 const q = String(rawQuery || '').trim();
                 const qLower = q.toLowerCase();
-                const targetDateStr = filterDate || new Date().toISOString().split('T')[0];
+                const targetDateStr = filterDate || getThaiDateStr();
                 const validRooms = Array.isArray(rooms) ? rooms : [];
                 const validInspections = Array.isArray(inspections) ? inspections : [];
                 const dayInsps = validInspections.filter(i => i.date && String(i.date).startsWith(targetDateStr));
@@ -432,6 +1039,7 @@ ${roomSummaryLines}`;
                         }
 
                         const actions = [];
+                        actions.push({ label: `ดูกราฟคะแนน ${matchedRoom.name}`, type: 'open_trend', roomObj: matchedRoom });
                         actions.push({
                             label: `ดูพิกัดห้อง ${matchedRoom.name}`,
                             type: 'open_map',
@@ -508,6 +1116,42 @@ ${roomSummaryLines}`;
                         });
                         return { text: lines.join('\n'), actions: [] };
                     }
+                }
+
+                // เรื่องกติกา เวลา อันดับ ผู้ตรวจ ตอบจากข้อมูลในระบบโดยตรง ไม่ผ่าน AI เพื่อความแม่นยำ
+                if (/คำนวณ|คิดคะแนน|คิดยังไง|วิธีคิด|เกณฑ์|กติกา|หักคะแนน|เหรียญ|คะแนนเต็ม|ได้คะแนนยังไง/.test(q)) {
+                    return { text: SCORING_RULES_TEXT, actions: [{ label: 'ดูตารางอันดับคะแนน', type: 'route', route: 'leaderboard' }] };
+                }
+                if (/กี่โมง|เวลาเท่าไร|เวลาปัจจุบัน|วันนี้วันที่|วันนี้วันอะไร|วันที่เท่าไร/.test(q)) {
+                    const nowTxt = new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+                    return { text: `ตอนนี้ ${nowTxt} น. ครับ`, actions: [] };
+                }
+                const aiTop5Lines = () => {
+                    const usePctAi = appMode !== 'guest' && exportSortOrder !== 'raw_score';
+                    return top5AllTime.map(it => `${it.trueRank}. ${it.room?.name || '-'} : ${it.score} คะแนน (${it.percentage}%)${it.medal ? ' ' + it.medal : ''}`);
+                };
+                const aiDutyTeams = () => (dailyInspectorDutySummary?.teams || []).map((t, i) => `ทีม ${i + 1}: ${t.mainInspector}${t.coInspectors && t.coInspectors.length ? ' (ร่วมกับ ' + t.coInspectors.join(', ') + ')' : ''}`);
+                if (/ไลน์|line/i.test(q) && /สรุป|รายงาน/.test(q)) {
+                    const duty = aiDutyTeams();
+                    const top = aiTop5Lines();
+                    const lines = [
+                        `รายงานผลการตรวจความสะอาด ประจำวันที่ ${formatDateObj(targetDateStr)}`,
+                        `• ห้องเรียน ตรวจแล้ว ${inspectProgress.roomDone}/${inspectProgress.roomTotal} ห้อง (${inspectProgress.roomPct}%)`,
+                        `• เขตพื้นที่ ตรวจแล้ว ${inspectProgress.zoneDone}/${inspectProgress.zoneTotal} เขต (${inspectProgress.zonePct}%)`,
+                        `• ผู้ตรวจ: ${duty.length ? duty.join(' | ') : 'ยังไม่มีบันทึก'}`
+                    ];
+                    if (top.length) lines.push('', '5 อันดับคะแนนสะสมสูงสุด', ...top);
+                    return { text: lines.join('\n'), actions: [] };
+                }
+                if (/อันดับแรก|อันดับสูงสุด|5\s*อันดับ|top\s*5/i.test(q)) {
+                    const top = aiTop5Lines();
+                    if (top.length === 0) return { text: 'ยังไม่มีข้อมูลคะแนนสะสมให้จัดอันดับครับ', actions: [] };
+                    const usePctAi = appMode !== 'guest' && exportSortOrder !== 'raw_score';
+                    return { text: [`5 อันดับคะแนนสะสมสูงสุด (${usePctAi ? 'เรียงตามเปอร์เซ็นต์' : 'เรียงตามคะแนนรวม'})`, ...top].join('\n'), actions: [{ label: 'ดูตารางอันดับคะแนน', type: 'route', route: 'leaderboard' }] };
+                }
+                if (/ใครตรวจ|ผู้ตรวจ|คนตรวจ|ใครเป็นคนตรวจ/.test(q)) {
+                    const duty = aiDutyTeams();
+                    return { text: duty.length ? `ผู้ตรวจประจำวันที่ ${formatDateObj(targetDateStr)}\n` + duty.map(d => '• ' + d).join('\n') : `ยังไม่มีบันทึกผู้ตรวจของวันที่ ${formatDateObj(targetDateStr)} ครับ`, actions: [] };
                 }
 
                 // 3. ถามถึงห้องที่ยังไม่ได้ตรวจ / ความคืบหน้าวันนี้
@@ -657,7 +1301,24 @@ ${roomSummaryLines}`;
 
                 const botName = (settings?.ai_bot_name || 'น้องสภาฯ').trim() || 'น้องสภาฯ';
                 const activeApiKey = (settings?.gemini_api_key || DEFAULT_GEMINI_KEY).trim();
-                const systemPrompt = `คุณชื่อ "${botName}" เป็นผู้ช่วยอัจฉริยะที่น่ารัก สุภาพ เป็นกันเอง และฉลาดมากของสภานักเรียนโรงเรียนคำม่วง อำเภอคำม่วง จังหวัดกาฬสินธุ์ แทนตัวเองว่า "${botName}" หรือ "ผม" ห้ามใช้อิโมจิโดยเด็ดขาด สามารถชวนคุยเล่น ตอบคำถามความรู้ทั่วไป ช่วยคิดงานสภานักเรียน และตอบคำถามเกี่ยวกับข้อมูลการตรวจความสะอาดของโรงเรียนตามข้อมูลจริงด้านล่างนี้ได้อย่างเป็นธรรมชาติ:\n\n${buildSystemContextForAi()}`;
+                const nowThaiText = new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+                const systemPrompt = [
+                    `คุณคือ "${botName}" ผู้ช่วยประจำแอป ZoneCheck ของสภานักเรียนโรงเรียนคำม่วง อำเภอคำม่วง จังหวัดกาฬสินธุ์ แทนตัวเองว่า "${botName}" หรือ "ผม" พูดสุภาพ เป็นกันเอง ห้ามใช้อิโมจิ`,
+                    '',
+                    'ขอบเขต: ตอบได้เฉพาะเรื่องในแอป ZoneCheck เท่านั้น ได้แก่ ผลการตรวจความสะอาด คะแนน อันดับ ห้องเรียน เขตพื้นที่ ผู้ตรวจ ความคืบหน้า และวิธีคิดคะแนน',
+                    'กฎเหล็ก:',
+                    '1. ตอบจาก "กติกา" และ "ข้อมูลระบบ" ด้านล่างเท่านั้น',
+                    '2. ถ้าข้อมูลหรือกติกาที่ถามไม่มีด้านล่าง ให้ตอบว่า "ไม่มีข้อมูลนี้ในระบบ" ห้ามเดา ห้ามสร้างตัวเลข ชื่อห้อง ชื่อคน หรือกติกาขึ้นมาเอง',
+                    '3. ถ้าต้องบวกลบคะแนน ให้แสดงวิธีคิดสั้นๆ และห้ามสรุปเกินกว่าข้อมูลที่มี',
+                    '4. ถ้าถามนอกเรื่อง (ความรู้ทั่วไป การบ้าน ข่าว บันเทิง เรื่องส่วนตัว) ให้ปฏิเสธสุภาพสั้นๆ 1-2 ประโยค แล้วชวนถามเรื่องในแอป เช่น คะแนนห้อง อันดับ หรือความคืบหน้าวันนี้',
+                    '5. ตอบกระชับ ไม่เกิน 8 บรรทัด',
+                    '',
+                    `เวลาปัจจุบัน: ${nowThaiText} น. (เวลาประเทศไทย)`,
+                    '',
+                    SCORING_RULES_TEXT,
+                    '',
+                    buildSystemContextForAi()
+                ].join('\n');
 
                 let aiText = null;
 
@@ -677,7 +1338,8 @@ ${roomSummaryLines}`;
                             headers,
                             body: JSON.stringify({
                                 contents: [{ parts: [{ text: queryText }] }],
-                                systemInstruction: { parts: [{ text: systemPrompt }] }
+                                systemInstruction: { parts: [{ text: systemPrompt }] },
+                                generationConfig: { temperature: 0.2 }
                             })
                         });
                         if (res.ok) {
@@ -686,31 +1348,6 @@ ${roomSummaryLines}`;
                             if (candidateText) {
                                 aiText = candidateText.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F900}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
                                 break;
-                            }
-                        }
-                    } catch (e) {}
-                }
-
-                // 2. หากคีย์ติดข้อจำกัด ให้สลับมาใช้ Cloud AI สำรองอัตโนมัติ เพื่อให้คุยโต้ตอบได้ทุกเรื่อง 100%
-                if (!aiText) {
-                    try {
-                        const fallbackRes = await fetch('https://text.pollinations.ai/openai', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                model: 'openai',
-                                messages: [
-                                    { role: 'system', content: systemPrompt },
-                                    { role: 'user', content: queryText }
-                                ],
-                                temperature: 0.7
-                            })
-                        });
-                        if (fallbackRes.ok) {
-                            const fbData = await fallbackRes.json();
-                            const fbContent = fbData?.choices?.[0]?.message?.content;
-                            if (fbContent) {
-                                aiText = fbContent.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F900}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
                             }
                         }
                     } catch (e) {}
@@ -750,6 +1387,9 @@ ${roomSummaryLines}`;
                     setIsAiChatOpen(false);
                     setCurrentRoute('inspect');
                     setInspectSearchRoom(action.roomObj.name || '');
+                } else if (action.type === 'open_trend' && action.roomObj) {
+                    setIsAiChatOpen(false);
+                    setTrendRoom(action.roomObj);
                 } else if (action.type === 'route' && action.route) {
                     setIsAiChatOpen(false);
                     setCurrentRoute(action.route);
@@ -1161,7 +1801,7 @@ ${roomSummaryLines}`;
             const getSavedTodaySignatureForUser = (name) => {
                 if (!name) return '';
                 const cleanName = String(name).trim();
-                const todayStr = new Date().toISOString().split('T')[0];
+                const todayStr = getThaiDateStr();
 
                 try {
                     const rawMap = safeGetItem('zc26_daily_sig_map');
@@ -1189,7 +1829,7 @@ ${roomSummaryLines}`;
             const saveTodaySignatureForUser = (name, sigDataUrl) => {
                 if (!name || !sigDataUrl) return;
                 const cleanName = String(name).trim();
-                const todayStr = new Date().toISOString().split('T')[0];
+                const todayStr = getThaiDateStr();
                 try {
                     let sigs = {};
                     const rawMap = safeGetItem('zc26_daily_sig_map');
@@ -1498,7 +2138,7 @@ ${roomSummaryLines}`;
             };
 
             const handleOpenInspect = (room, type) => {
-                const targetDateStr = filterDate || new Date().toISOString().split('T')[0];
+                const targetDateStr = filterDate || getThaiDateStr();
                 const validInspections = Array.isArray(inspections) ? inspections : [];
                 const existInsp = validInspections.find(i => i.roomId === room.id && i.type === type && i.date && String(i.date).startsWith(targetDateStr));
                 
@@ -1637,7 +2277,7 @@ ${roomSummaryLines}`;
                     }
                 }
 
-                let finalDateISO = new Date().toISOString();
+                let finalDateISO = `${getThaiDateStr()}T${new Date().toISOString().split('T')[1]}`;
                 if (inspectModal.date) {
                     const timePart = finalDateISO.split('T')[1];
                     finalDateISO = `${inspectModal.date}T${timePart}`;
@@ -1684,7 +2324,7 @@ ${roomSummaryLines}`;
                     const validInspections = Array.isArray(inspections) ? inspections : [];
                     setInspections([...validInspections, newInsp]); 
                     showToast(`บันทึกผลของวันที่ ${formatDateObj(inspectModal.date)} สำเร็จ!`, 'success'); 
-                    setInspectModal({ isOpen: false, room: null, type: 'room', date: new Date().toISOString().split('T')[0] });
+                    setInspectModal({ isOpen: false, room: null, type: 'room', date: getThaiDateStr() });
                 } catch(e) { 
                     showToast('บันทึกไม่สำเร็จ กรุณาลองใหม่', 'error'); 
                 } finally { 
@@ -1697,7 +2337,7 @@ ${roomSummaryLines}`;
             };
 
             const remainingRoomsForBatch = useMemo(() => {
-                const targetDateStr = filterDate || new Date().toISOString().split('T')[0];
+                const targetDateStr = filterDate || getThaiDateStr();
                 const validRooms = Array.isArray(rooms) ? rooms : [];
                 const validInspections = Array.isArray(inspections) ? inspections : [];
 
@@ -1743,7 +2383,7 @@ ${roomSummaryLines}`;
                     return showToast('กรุณาระบุหมายเหตุสำหรับการข้ามการตรวจด้วยครับ', 'warning');
                 }
 
-                const targetDateStr = filterDate || new Date().toISOString().split('T')[0];
+                const targetDateStr = filterDate || getThaiDateStr();
                 const typeLabel = batchModal.type === 'room' ? 'ห้องเรียน' : 'เขตพื้นที่';
                 let scoreDesc = '';
                 if (batchModal.isSkipped) {
@@ -1846,7 +2486,7 @@ ${roomSummaryLines}`;
             };
 
             const handleResetTodayInspection = (roomId, roomName) => {
-                const targetDateStr = filterDate || new Date().toISOString().split('T')[0];
+                const targetDateStr = filterDate || getThaiDateStr();
                 const cleanRoom = (roomName || '').replace('ม.', '');
                 showConfirm(`ต้องการลบผลตรวจ [ทั้งหมด (ทั้งห้องเรียนและเขตพื้นที่)] ของห้อง ม.${cleanRoom}\nประจำวันที่ ${formatDateObj(targetDateStr)} ใช่หรือไม่?`, async () => {
                     const validInspections = Array.isArray(inspections) ? inspections : [];
@@ -1936,7 +2576,7 @@ ${roomSummaryLines}`;
             };
 
             const mergedHistoryData = useMemo(() => {
-                const todayStr = new Date().toISOString().split('T')[0];
+                const todayStr = getThaiDateStr();
                 const validInspections = Array.isArray(inspections) ? inspections : [];
                 const targetDate = dateMode === 'today' ? todayStr : filterDate;
 
@@ -2127,7 +2767,7 @@ ${roomSummaryLines}`;
             }, [currentLeaderboardView, appMode, exportSortOrder]);
 
             const inspectProgress = useMemo(() => {
-                const targetDateStr = filterDate || new Date().toISOString().split('T')[0];
+                const targetDateStr = filterDate || getThaiDateStr();
                 const validRooms = Array.isArray(rooms) ? rooms : [];
                 const validInspections = Array.isArray(inspections) ? inspections : [];
                 const roomTotal = validRooms.length;
@@ -2223,7 +2863,7 @@ ${roomSummaryLines}`;
                 
                 const validInspections = Array.isArray(inspections) ? inspections : [];
                 const days = [];
-                const todayISO = new Date().toISOString().split('T')[0];
+                const todayISO = getThaiDateStr();
 
                 for (let i = 0; i < firstDayIndex; i++) { days.push(null); }
 
@@ -2469,7 +3109,7 @@ ${roomSummaryLines}`;
             };
 
             const buildDailyInspectorsSignerList = () => {
-                const todayStr = new Date().toISOString().split('T')[0];
+                const todayStr = getThaiDateStr();
                 const targetDateStr = (currentRoute === 'history' && dateMode !== 'today') ? filterDate : todayStr;
                 const validInspections = Array.isArray(inspections) ? inspections : [];
                 const dayInsps = validInspections.filter(i => i.date && String(i.date).startsWith(targetDateStr));
@@ -2553,7 +3193,7 @@ ${roomSummaryLines}`;
             }, [activeSignatureMode, blankInspectorCount, customSelectedSignerIds, signaturePresets, signersList, inspections, currentRoute, dateMode, filterDate, currentUser, coInspectors, loginSignatureDataUrl]);
 
             const dailyInspectorDutySummary = useMemo(() => {
-                const todayStr = new Date().toISOString().split('T')[0];
+                const todayStr = getThaiDateStr();
                 const targetDateStr = (currentRoute === 'history' && dateMode !== 'today') ? filterDate : (filterDate || todayStr);
                 const validInspections = Array.isArray(inspections) ? inspections : [];
                 const validRooms = Array.isArray(rooms) ? rooms : [];
@@ -3040,7 +3680,7 @@ ${roomSummaryLines}`;
             };
 
             const handleSaveOmrScannedResults = () => {
-                const targetDateStr = filterDate || new Date().toISOString().split('T')[0];
+                const targetDateStr = filterDate || getThaiDateStr();
                 const recordsToSave = [];
                 const timePart = new Date().toISOString().split('T')[1];
                 const finalDateISO = `${targetDateStr}T${timePart}`;
@@ -3307,7 +3947,7 @@ ${roomSummaryLines}`;
                         let fileName = '';
                         const typeName = guestFilterType === 'all' ? 'รวมทุกหมวด' : guestFilterType === 'room' ? 'เฉพาะห้องเรียน' : 'เฉพาะเขตพื้นที่';
                         const showCombinedColumns = guestFilterType === 'all';
-                        const todayStrFile = formatThaiDateForFile(new Date().toISOString());
+                        const todayStrFile = formatThaiDateForFile(getThaiDateStr());
 
                         if (mode === 'leaderboard' && excelMode === 'months') {
                             const uniqueMonths = new Set();
@@ -3588,7 +4228,7 @@ ${roomSummaryLines}`;
                 let dateText = ''; let typeName = guestFilterType === 'all' ? 'รวมทุกหมวด' : guestFilterType === 'room' ? 'เฉพาะห้องเรียน' : 'เฉพาะเขตพื้นที่';
                 let groupName = guestFilterGroup === 'all' ? 'ทุกระดับชั้น' : guestFilterGroup === 'm_ton' ? 'มัธยมศึกษาตอนต้น' : guestFilterGroup === 'm_plai' ? 'มัธยมศึกษาตอนปลาย' : `ม.${guestFilterGroup}`;
 
-                const todayStrFile = formatThaiDateForFile(new Date().toISOString());
+                const todayStrFile = formatThaiDateForFile(getThaiDateStr());
                 let fileName = '';
 
                 if (mode === 'history') {
@@ -3606,12 +4246,12 @@ ${roomSummaryLines}`;
 
                 if (mode === 'leaderboard') { 
                     const mName = formatMonthYearShort(selectedMonth).replace(/ /g, '_');
-                    dateText = leaderboardTab === 'monthly' ? `เดือน ${formatMonthYearShort(selectedMonth)}` : `สะสมถึง ${formatDateObj(new Date().toISOString().split('T')[0])}`; 
+                    dateText = leaderboardTab === 'monthly' ? `เดือน ${formatMonthYearShort(selectedMonth)}` : `สะสมถึง ${formatDateObj(getThaiDateStr())}`; 
                     fileName = leaderboardTab === 'monthly' ? `สรุปอันดับคะแนน_เดือน_${mName}_${typeName}.${format}` : `สรุปอันดับคะแนนสะสมทั้งหมด_${typeName}.${format}`;
                 } 
                 else if (mode === 'history') { 
                     const fDateStrFile = dateMode === 'today' ? todayStrFile : formatThaiDateForFile(filterDate);
-                    dateText = dateMode === 'today' ? `${formatDateObj(new Date().toISOString().split('T')[0])}` : `${formatDateObj(filterDate)}`; 
+                    dateText = dateMode === 'today' ? `${formatDateObj(getThaiDateStr())}` : `${formatDateObj(filterDate)}`; 
                     fileName = `รายงานการตรวจ_${fDateStrFile}_${typeName}.${format}`;
                 }
 
@@ -3968,6 +4608,7 @@ ${roomSummaryLines}`;
                         </nav>
 
                         <div className="flex items-center gap-2 shrink-0">
+                            <LiveClock />
                             <button onClick={() => setIsAiChatOpen(true)} className="rounded-full hover:scale-105 active:scale-95 transition-transform" title="ผู้ช่วยอัจฉริยะ ZoneCheck AI">
                                 <BotMascotAvatar size="sm" />
                             </button>
@@ -3982,6 +4623,7 @@ ${roomSummaryLines}`;
 
                     {/* Header สำหรับ Mobile และ iPad แนวตั้ง */}
                     <header className="lg:hidden bg-white/95 backdrop-blur-xl sticky top-0 z-30 border-b border-gray-100/80 shrink-0 w-full">
+                        <div className="bg-gray-50/90 border-b border-gray-100 py-1"><LiveClock compact /></div>
                         <div className="max-w-3xl mx-auto px-3.5 h-[66px] flex justify-between items-center gap-2">
                             <div className="flex items-center gap-2.5 cursor-pointer no-select relative min-w-0 flex-1" onClick={handleLogoClick}>
                                 <div className="w-[40px] h-[40px] rounded-full flex items-center justify-center shadow-sm flex-shrink-0 overflow-hidden bg-white border border-gray-200">
@@ -4075,7 +4717,11 @@ ${roomSummaryLines}`;
                             </div>
                         )}
 
-                        {currentRoute === 'dashboard' && (
+                        {appMode !== 'guest' && (currentRoute === 'dashboard' || currentRoute === 'inspect') && (
+                        <UncheckedReminderBanner rooms={rooms} inspections={inspections} showGo={currentRoute !== 'inspect'} onGo={() => setCurrentRoute('inspect')} />
+                    )}
+
+                    {currentRoute === 'dashboard' && (
                             <div className="animate-in fade-in space-y-6">
                                 {settings?.main_banner_url && canViewBanner(settings?.visibility_main_banner) ? (
                                     <div className="w-full aspect-[16/9] md:h-[250px] lg:h-[350px] md:aspect-auto rounded-[2rem] overflow-hidden shadow-sm border border-gray-200 relative select-none bg-gray-100 flex items-center justify-center">
@@ -4248,7 +4894,7 @@ ${roomSummaryLines}`;
                                             {podiumWinners[1] && ( 
                                                 <div className="flex flex-col items-center flex-1 max-w-[110px] md:max-w-[140px]">
                                                     <div className="relative mb-2 flex flex-col items-center">
-                                                        <div className={`w-14 h-14 md:w-20 md:h-20 rounded-full flex items-center justify-center font-black bg-white text-gray-600 shadow-xl ring-4 ring-gray-300 z-10 ${getPodiumFontSize(podiumWinners[1].room?.name)}`}>{podiumWinners[1].room?.name || 'ไม่ทราบ'}</div>
+                                                        <div onClick={() => setTrendRoom(podiumWinners[1].room)} title="ดูกราฟแนวโน้มคะแนน" className={`w-14 h-14 md:w-20 md:h-20 rounded-full cursor-pointer flex items-center justify-center font-black bg-white text-gray-600 shadow-xl ring-4 ring-gray-300 z-10 ${getPodiumFontSize(podiumWinners[1].room?.name)}`}>{podiumWinners[1].room?.name || 'ไม่ทราบ'}</div>
                                                         <div className="bg-black/20 backdrop-blur-sm text-white px-3 py-1 rounded-2xl text-[10px] md:text-xs font-bold mt-2 shadow-sm whitespace-nowrap flex flex-col items-center">
                                                             <span>{podiumWinners[1].score} pts</span>
                                                             {appMode !== 'guest' && <span className="text-[9px] text-emerald-300 mt-0.5">{podiumWinners[1].percentage}% {podiumWinners[1].medal}</span>}
@@ -4261,7 +4907,7 @@ ${roomSummaryLines}`;
                                                 <div className="flex flex-col items-center flex-1 max-w-[120px] md:max-w-[160px] z-20">
                                                     <div className="relative mb-2 flex flex-col items-center">
                                                         <div className="absolute -top-7 md:-top-10 text-amber-300 text-3xl md:text-5xl drop-shadow-[0_0_10px_rgba(252,211,77,0.8)] z-20"><i className="ph ph-crown ph-fill"></i></div>
-                                                        <div className={`w-16 h-16 md:w-24 md:h-24 rounded-full flex items-center justify-center font-black bg-gradient-to-br from-amber-300 to-amber-500 text-white shadow-2xl ring-4 ring-amber-200 z-10 border-2 border-white/50 ${getPodiumFontSize(podiumWinners[0].room?.name, true)}`}>{podiumWinners[0].room?.name || 'ไม่ทราบ'}</div>
+                                                        <div onClick={() => setTrendRoom(podiumWinners[0].room)} title="ดูกราฟแนวโน้มคะแนน" className={`w-16 h-16 md:w-24 md:h-24 rounded-full cursor-pointer flex items-center justify-center font-black bg-gradient-to-br from-amber-300 to-amber-500 text-white shadow-2xl ring-4 ring-amber-200 z-10 border-2 border-white/50 ${getPodiumFontSize(podiumWinners[0].room?.name, true)}`}>{podiumWinners[0].room?.name || 'ไม่ทราบ'}</div>
                                                         <div className="bg-amber-400/20 backdrop-blur-sm text-amber-100 px-3 py-1 rounded-2xl text-[10px] md:text-xs font-bold mt-2 shadow-sm whitespace-nowrap flex flex-col items-center">
                                                             <span>{podiumWinners[0].score} pts</span>
                                                             {appMode !== 'guest' && <span className="text-[9px] text-emerald-100 mt-0.5">{podiumWinners[0].percentage}% {podiumWinners[0].medal}</span>}
@@ -4273,7 +4919,7 @@ ${roomSummaryLines}`;
                                             {podiumWinners[2] && ( 
                                                 <div className="flex flex-col items-center flex-1 max-w-[110px] md:max-w-[140px]">
                                                     <div className="relative mb-2 flex flex-col items-center">
-                                                        <div className={`w-14 h-14 md:w-20 md:h-20 rounded-full flex items-center justify-center font-black bg-white text-orange-500 shadow-xl ring-4 ring-orange-300 z-10 ${getPodiumFontSize(podiumWinners[2].room?.name)}`}>{podiumWinners[2].room?.name || 'ไม่ทราบ'}</div>
+                                                        <div onClick={() => setTrendRoom(podiumWinners[2].room)} title="ดูกราฟแนวโน้มคะแนน" className={`w-14 h-14 md:w-20 md:h-20 rounded-full cursor-pointer flex items-center justify-center font-black bg-white text-orange-500 shadow-xl ring-4 ring-orange-300 z-10 ${getPodiumFontSize(podiumWinners[2].room?.name)}`}>{podiumWinners[2].room?.name || 'ไม่ทราบ'}</div>
                                                         <div className="bg-black/20 backdrop-blur-sm text-white px-3 py-1 rounded-2xl text-[10px] md:text-xs font-bold mt-2 shadow-sm whitespace-nowrap flex flex-col items-center">
                                                             <span>{podiumWinners[2].score} pts</span>
                                                             {appMode !== 'guest' && <span className="text-[9px] text-emerald-300 mt-0.5">{podiumWinners[2].percentage}% {podiumWinners[2].medal}</span>}
@@ -4291,12 +4937,13 @@ ${roomSummaryLines}`;
                                                         if (exportSortOrder !== 'room' && idx < 3) return null; 
                                                         const realRank = exportSortOrder !== 'room' ? item.trueRank : (idx + 1);
                                                         return ( 
-                                                            <div key={item.key || idx} className="flex items-center gap-3 p-3 bg-gray-50 rounded-2xl border border-gray-100 shadow-sm">
+                                                            <div key={item.key || idx} onClick={() => setTrendRoom(item.room)} title="ดูกราฟแนวโน้มคะแนน" className="flex items-center gap-3 p-3 bg-gray-50 rounded-2xl border border-gray-100 shadow-sm cursor-pointer active:scale-[0.98] transition-transform">
                                                                 <div className="w-10 h-10 rounded-full flex items-center justify-center font-black text-gray-500 bg-white border border-gray-200">{realRank}</div>
                                                                 <div className="flex-1 flex flex-col">
                                                                     <p className="font-bold text-gray-800 text-base">{item.room?.name || 'ไม่ทราบ'}</p>
                                                                     {appMode !== 'guest' && ( <p className="text-[10px] font-bold text-emerald-600">{item.percentage}% {item.medal}</p> )}
                                                                 </div>
+                                                                <i className="ph ph-chart-line-up text-gray-300 text-lg"></i>
                                                                 <div className="text-right"><span className="font-black text-[#C8102E] bg-red-100/50 px-3 py-1.5 rounded-xl">{item.score} <span className="text-[10px]">pts</span></span></div>
                                                             </div> 
                                                         )
@@ -4374,7 +5021,7 @@ ${roomSummaryLines}`;
                                                 <div className="flex items-center justify-between mb-3">
                                                     <p className="text-[11px] font-bold text-gray-700 flex items-center gap-1"><i className="ph ph-calendar"></i> เลือกดูวันที่</p>
                                                     <div className="flex bg-gray-100 rounded-lg p-1">
-                                                        <button onClick={() => { setDateMode('today'); setFilterDate(new Date().toISOString().split('T')[0]); }} className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${dateMode==='today' ? 'bg-white text-[#C8102E] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>วันนี้</button>
+                                                        <button onClick={() => { setDateMode('today'); setFilterDate(getThaiDateStr()); }} className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${dateMode==='today' ? 'bg-white text-[#C8102E] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>วันนี้</button>
                                                         <button onClick={() => setDateMode('custom')} className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${dateMode==='custom' ? 'bg-white text-[#C8102E] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>เลือกวันอื่น</button>
                                                     </div>
                                                 </div>
@@ -4599,7 +5246,7 @@ ${roomSummaryLines}`;
                                         <h3 className="font-bold text-gray-400 text-sm mb-3 ml-2 uppercase tracking-wide">{group.grade}</h3>
                                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                                            {group.rooms.map(room => {
-                                              const targetDateStr = filterDate || new Date().toISOString().split('T')[0];
+                                              const targetDateStr = filterDate || getThaiDateStr();
                                               const validInspections = Array.isArray(inspections) ? inspections : [];
                                               const targetInsps = validInspections.filter(i => i?.roomId === room.id && i?.date && String(i.date).startsWith(targetDateStr));
                                               const hasRoom = targetInsps.some(i => i.type === 'room');
@@ -7044,6 +7691,7 @@ ${roomSummaryLines}`;
                     )}
 
                     {}
+                    {trendRoom && <RoomTrendModal room={trendRoom} inspections={inspections} onClose={() => setTrendRoom(null)} />}
                     {!isAiChatOpen && (
                         <button
                             onClick={() => setIsAiChatOpen(true)}
