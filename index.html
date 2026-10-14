@@ -453,7 +453,7 @@
             '• การจัดอันดับ: ผู้ใช้ที่เข้าสู่ระบบเรียงตามเปอร์เซ็นต์ก่อน (เท่ากันดูคะแนนรวม) ส่วนโหมดผู้เยี่ยมชมเรียงตามคะแนนรวมก่อน ถ้าเท่ากันได้อันดับเดียวกัน'
         ].join('\n');
 
-        const LiveClockInline = ({ chip = false }) => {
+        const HeaderClock = ({ size = 'sm' }) => {
             const [now, setNow] = useState(() => new Date());
             useEffect(() => {
                 const t = setInterval(() => setNow(new Date()), 1000);
@@ -462,18 +462,19 @@
             const tz = { timeZone: 'Asia/Bangkok' };
             const hm = now.toLocaleTimeString('th-TH', { ...tz, hour12: false, hour: '2-digit', minute: '2-digit' });
             const sec = now.toLocaleTimeString('th-TH', { ...tz, hour12: false, second: '2-digit' }).slice(-2);
-            if (chip) {
-                const shortDate = now.toLocaleDateString('th-TH', { ...tz, weekday: 'short', day: 'numeric', month: 'short' });
-                return <p className="text-xs font-bold tabular-nums no-select">{shortDate} · {hm}:{sec} น.</p>;
+            const dateShort = now.toLocaleDateString('th-TH', { ...tz, weekday: 'short', day: 'numeric', month: 'short' });
+            if (size === 'lg') {
+                return (
+                    <div className="hidden lg:flex flex-col items-center justify-center shrink-0 px-3.5 py-1.5 rounded-2xl bg-gray-50 border border-gray-200 leading-none no-select tabular-nums" title="เวลาประเทศไทย">
+                        <p className="text-[19px] font-black text-gray-800">{hm}<span className="text-[11px] text-[#C8102E] ml-1">{sec}</span></p>
+                        <p className="text-[10px] font-bold text-gray-400 mt-1 hidden xl:block">{dateShort}</p>
+                    </div>
+                );
             }
-            const dateStr = now.toLocaleDateString('th-TH', { ...tz, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
             return (
-                <div className="no-select">
-                    <p className="text-[10px] font-bold text-[#FFE4E6]/80 tracking-widest uppercase flex items-center gap-1.5"><i className="ph ph-clock text-sm"></i> เวลาประเทศไทย</p>
-                    <p className="font-black tabular-nums leading-none mt-1.5 text-[50px] md:text-6xl">
-                        {hm}<span className="text-[#FDA4AF] text-2xl md:text-3xl ml-1.5">{sec}</span>
-                    </p>
-                    <p className="text-[#FFE4E6] text-sm font-bold mt-2 flex items-center gap-1.5"><i className="ph ph-calendar-blank"></i> {dateStr}</p>
+                <div className="flex flex-col items-center justify-center shrink-0 px-2.5 py-1.5 rounded-xl bg-gray-50 border border-gray-200 leading-none no-select tabular-nums max-[359px]:hidden" title="เวลาประเทศไทย">
+                    <p className="text-[15px] font-black text-gray-800">{hm}<span className="text-[9px] text-[#C8102E] ml-0.5">{sec}</span></p>
+                    <p className="text-[9px] font-bold text-gray-400 mt-1">{dateShort}</p>
                 </div>
             );
         };
@@ -4648,6 +4649,7 @@ ${roomSummaryLines}`;
                                 <p className="text-[10px] text-gray-500 leading-tight truncate tracking-wider">{HARDCODED_NAME}</p>
                             </div>
                         </div>
+                        <HeaderClock size="lg" />
 
                         <nav className="flex items-center gap-1 xl:gap-2 shrink-0">
                             <button onClick={()=>setCurrentRoute('dashboard')} className={`px-3.5 py-2 rounded-xl text-[13px] font-medium nav-item flex items-center gap-1.5 whitespace-nowrap ${currentRoute === 'dashboard' ? 'bg-[#FFF5F6] text-[#C8102E] font-bold' : 'text-gray-600 hover:bg-gray-50'}`}><i className={`ph ${currentRoute === 'dashboard' ? 'ph-house ph-fill' : 'ph-house'} text-lg`}></i> หน้าแรก</button>
@@ -4690,9 +4692,10 @@ ${roomSummaryLines}`;
                                             </span>
                                         )}
                                     </div>
-                                    <span className="text-[9px] text-gray-400 font-bold leading-none truncate mt-0.5 tracking-wider">{HARDCODED_NAME}</span>
+                                    <span className="text-[9px] text-gray-400 font-bold leading-[1.15] break-words mt-0.5 tracking-wider">{HARDCODED_NAME}</span>
                                 </div>
                             </div>
+                            <HeaderClock />
                             
                             <div className="flex items-center gap-1.5 flex-shrink-0">
                                 <button onClick={() => setIsAiChatOpen(true)} className="rounded-full active:scale-95 transition-transform" title="ผู้ช่วย ZoneCheck AI">
@@ -4778,15 +4781,13 @@ ${roomSummaryLines}`;
                                 {settings?.main_banner_url && canViewBanner(settings?.visibility_main_banner) ? (
                                     <div className="w-full aspect-[16/9] md:h-[250px] lg:h-[350px] md:aspect-auto rounded-[2rem] overflow-hidden shadow-sm border border-gray-200 relative select-none bg-gray-100 flex items-center justify-center">
                                         <img src={settings.main_banner_url} alt="Main Banner" className="w-full h-full object-cover block absolute inset-0" />
-                            <div className="absolute left-3 bottom-3 z-10 bg-black/50 backdrop-blur-md text-white rounded-xl px-3 py-1.5"><LiveClockInline chip /></div>
                                     </div>
                                 ) : (
                                     <div className="bg-gradient-to-br from-[#E11D48] via-[#BE123C] to-[#881337] rounded-3xl p-6 md:p-10 text-white shadow-[0_8px_30px_rgb(200,16,46,0.3)] relative overflow-hidden">
                                         <div className="absolute -right-6 top-0 text-white/10 rotate-12 transform scale-110 pointer-events-none"><i className="ph ph-clipboard-text text-[140px]"></i></div>
                                         <div className="absolute left-16 -top-12 text-white/5 rotate-45 transform scale-110 pointer-events-none"><i className="ph ph-broom text-[150px]"></i></div>
                                         <div className="relative z-10">
-                                            <div className="mb-4 pb-4 border-b border-white/20"><LiveClockInline /></div>
-                                <span className="inline-block bg-white/15 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider mb-3 border border-white/20">STUDENT COUNCIL</span>
+                                            <span className="inline-block bg-white/15 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider mb-3 border border-white/20">STUDENT COUNCIL</span>
                                             <h2 className="text-2xl md:text-3xl font-black mb-2">เช็คคะแนนกันหน่อย!</h2>
                                             <p className="text-[#FFE4E6] text-xs md:text-sm max-w-lg leading-relaxed opacity-95">วันนี้ห้องเรารอด หรือห้องเราร่วง? ตรวจสอบและรายงานผลการดูแลรักษาเขตพื้นที่และห้องเรียน จัดทำโดยสภานักเรียนโรงเรียนคำม่วง</p>
                                         </div>
