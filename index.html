@@ -453,32 +453,6 @@
             '• การจัดอันดับ: ผู้ใช้ที่เข้าสู่ระบบเรียงตามเปอร์เซ็นต์ก่อน (เท่ากันดูคะแนนรวม) ส่วนโหมดผู้เยี่ยมชมเรียงตามคะแนนรวมก่อน ถ้าเท่ากันได้อันดับเดียวกัน'
         ].join('\n');
 
-        const HeaderClock = ({ size = 'sm' }) => {
-            const [now, setNow] = useState(() => new Date());
-            useEffect(() => {
-                const t = setInterval(() => setNow(new Date()), 1000);
-                return () => clearInterval(t);
-            }, []);
-            const tz = { timeZone: 'Asia/Bangkok' };
-            const hm = now.toLocaleTimeString('th-TH', { ...tz, hour12: false, hour: '2-digit', minute: '2-digit' });
-            const sec = now.toLocaleTimeString('th-TH', { ...tz, hour12: false, second: '2-digit' }).slice(-2);
-            const dateShort = now.toLocaleDateString('th-TH', { ...tz, weekday: 'short', day: 'numeric', month: 'short' });
-            if (size === 'lg') {
-                return (
-                    <div className="hidden lg:flex flex-col items-center justify-center shrink-0 px-3.5 py-1.5 rounded-2xl bg-gray-50 border border-gray-200 leading-none no-select tabular-nums" title="เวลาประเทศไทย">
-                        <p className="text-[19px] font-black text-gray-800">{hm}<span className="text-[11px] text-[#C8102E] ml-1">{sec}</span></p>
-                        <p className="text-[10px] font-bold text-gray-400 mt-1 hidden xl:block">{dateShort}</p>
-                    </div>
-                );
-            }
-            return (
-                <div className="flex flex-col items-center justify-center shrink-0 px-2.5 py-1.5 rounded-xl bg-gray-50 border border-gray-200 leading-none no-select tabular-nums max-[359px]:hidden" title="เวลาประเทศไทย">
-                    <p className="text-[15px] font-black text-gray-800">{hm}<span className="text-[9px] text-[#C8102E] ml-0.5">{sec}</span></p>
-                    <p className="text-[9px] font-bold text-gray-400 mt-1">{dateShort}</p>
-                </div>
-            );
-        };
-
         const AnnouncementNavButton = ({ title, msg, onOpen }) => {
             const key = `${title || ''}|${msg || ''}`;
             const [seen, setSeen] = useState(() => { try { return localStorage.getItem('zc_ann_seen') || ''; } catch (e) { return ''; } });
@@ -489,12 +463,12 @@
                 onOpen();
             };
             return (
-                <button onClick={handleClick} aria-label="ประกาศสภานักเรียน" className="flex flex-col items-center justify-center flex-1 py-1">
-                    <div className="relative w-11 h-11 rounded-full bg-[#C8102E] text-white flex items-center justify-center shadow-[0_3px_0_#9f0d25,0_6px_10px_rgba(200,16,46,0.35)] active:translate-y-[2px] active:shadow-[0_1px_0_#9f0d25] transition-all">
-                        <i className="ph ph-megaphone ph-fill text-[22px]"></i>
-                        {hasNew && <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-amber-400 border-2 border-white animate-pulse"></span>}
+                <button onClick={handleClick} aria-label="ประกาศสภานักเรียน" title="ประกาศสภานักเรียน" className="flex flex-col items-center justify-center flex-1 py-1">
+                    <div className="relative -mt-6 w-14 h-14 rounded-full bg-[#C8102E] text-white flex items-center justify-center ring-4 ring-white shadow-[0_4px_0_#9f0d25,0_10px_18px_rgba(200,16,46,0.4)] active:translate-y-[3px] active:shadow-[0_1px_0_#9f0d25,0_3px_6px_rgba(200,16,46,0.3)] transition-all">
+                        <i className="ph ph-megaphone ph-fill text-[26px]"></i>
+                        {hasNew && <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-amber-400 border-2 border-white animate-pulse"></span>}
                     </div>
-                    <span className="text-[10px] font-bold mt-0.5 text-gray-600">ประกาศ</span>
+                    <span aria-hidden="true" className="text-[10px] font-bold mt-0.5 invisible">.</span>
                 </button>
             );
         };
@@ -4649,8 +4623,6 @@ ${roomSummaryLines}`;
                                 <p className="text-[10px] text-gray-500 leading-tight truncate tracking-wider">{HARDCODED_NAME}</p>
                             </div>
                         </div>
-                        <HeaderClock size="lg" />
-
                         <nav className="flex items-center gap-1 xl:gap-2 shrink-0">
                             <button onClick={()=>setCurrentRoute('dashboard')} className={`px-3.5 py-2 rounded-xl text-[13px] font-medium nav-item flex items-center gap-1.5 whitespace-nowrap ${currentRoute === 'dashboard' ? 'bg-[#FFF5F6] text-[#C8102E] font-bold' : 'text-gray-600 hover:bg-gray-50'}`}><i className={`ph ${currentRoute === 'dashboard' ? 'ph-house ph-fill' : 'ph-house'} text-lg`}></i> หน้าแรก</button>
                             <button onClick={()=>setCurrentRoute('leaderboard')} className={`px-3.5 py-2 rounded-xl text-[13px] font-medium nav-item flex items-center gap-1.5 whitespace-nowrap ${currentRoute === 'leaderboard' ? 'bg-[#FFF5F6] text-[#C8102E] font-bold' : 'text-gray-600 hover:bg-gray-50'}`}><i className={`ph ${currentRoute === 'leaderboard' ? 'ph-trophy ph-fill' : 'ph-trophy'} text-lg`}></i> อันดับ</button>
@@ -4695,8 +4667,6 @@ ${roomSummaryLines}`;
                                     <span className="text-[9px] text-gray-400 font-bold leading-[1.15] break-words mt-0.5 tracking-wider">{HARDCODED_NAME}</span>
                                 </div>
                             </div>
-                            <HeaderClock />
-                            
                             <div className="flex items-center gap-1.5 flex-shrink-0">
                                 <button onClick={() => setIsAiChatOpen(true)} className="rounded-full active:scale-95 transition-transform" title="ผู้ช่วย ZoneCheck AI">
                                     <BotMascotAvatar size="sm" />
@@ -7897,8 +7867,8 @@ ${roomSummaryLines}`;
 
                             {(appMode === 'admin' || appMode === 'inspector') && (
                                 <button onClick={() => setCurrentRoute('inspect')} className="flex flex-col items-center justify-center flex-1 py-1">
-                                    <div className={`w-11 h-11 rounded-full flex items-center justify-center shadow-md transition-transform active:scale-95 ${currentRoute === 'inspect' ? 'bg-[#C8102E] text-white ring-4 ring-red-100' : 'bg-[#C8102E] text-white'}`}>
-                                        <i className="ph ph-clipboard-text ph-fill text-[22px]"></i>
+                                    <div className={`-mt-6 w-14 h-14 rounded-full flex items-center justify-center bg-[#C8102E] text-white ring-4 transition-all shadow-[0_4px_0_#9f0d25,0_10px_18px_rgba(200,16,46,0.4)] active:translate-y-[3px] active:shadow-[0_1px_0_#9f0d25,0_3px_6px_rgba(200,16,46,0.3)] ${currentRoute === 'inspect' ? 'ring-red-100' : 'ring-white'}`}>
+                                        <i className="ph ph-clipboard-text ph-fill text-[26px]"></i>
                                     </div>
                                     <span className={`text-[10px] font-bold mt-0.5 ${currentRoute === 'inspect' ? 'text-[#C8102E]' : 'text-gray-600'}`}>ประเมิน</span>
                                 </button>
