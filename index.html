@@ -453,28 +453,47 @@
             '• การจัดอันดับ: ผู้ใช้ที่เข้าสู่ระบบเรียงตามเปอร์เซ็นต์ก่อน (เท่ากันดูคะแนนรวม) ส่วนโหมดผู้เยี่ยมชมเรียงตามคะแนนรวมก่อน ถ้าเท่ากันได้อันดับเดียวกัน'
         ].join('\n');
 
-        const LiveClock = ({ compact = false }) => {
+        const LiveClockCard = ({ children }) => {
             const [now, setNow] = useState(() => new Date());
             useEffect(() => {
                 const t = setInterval(() => setNow(new Date()), 1000);
                 return () => clearInterval(t);
             }, []);
-            const timeStr = now.toLocaleTimeString('th-TH', { timeZone: 'Asia/Bangkok', hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-            const dateStr = now.toLocaleDateString('th-TH', { timeZone: 'Asia/Bangkok', weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
-            if (compact) {
-                return (
-                    <div className="flex items-center justify-center gap-2 text-[11px] font-bold text-gray-500 tabular-nums no-select">
-                        <i className="ph ph-clock text-[#C8102E]"></i>
-                        <span>{dateStr}</span>
-                        <span className="text-[#C8102E]">{timeStr} น.</span>
-                    </div>
-                );
-            }
+            const tz = { timeZone: 'Asia/Bangkok' };
+            const hm = now.toLocaleTimeString('th-TH', { ...tz, hour12: false, hour: '2-digit', minute: '2-digit' });
+            const sec = now.toLocaleTimeString('th-TH', { ...tz, hour12: false, second: '2-digit' }).slice(-2);
+            const dateStr = now.toLocaleDateString('th-TH', { ...tz, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
             return (
-                <div className="hidden lg:flex flex-col items-end leading-tight px-2 no-select tabular-nums" title="เวลาปัจจุบัน (ประเทศไทย)">
-                    <span className="text-[15px] font-black text-gray-800">{timeStr}</span>
-                    <span className="text-[10px] font-bold text-gray-400 hidden xl:block">{dateStr}</span>
+                <div className={`relative bg-white rounded-[2rem] shadow-sm border border-gray-100 px-5 pt-5 pb-5 text-center no-select ${children ? 'mb-5' : ''}`}>
+                    <p className="text-[10px] font-bold text-gray-400 tracking-widest uppercase flex items-center justify-center gap-1.5"><i className="ph ph-clock text-[#C8102E] text-sm"></i> เวลาประเทศไทย</p>
+                    <p className="font-black text-gray-800 tabular-nums leading-none mt-1.5 text-[52px] md:text-6xl">
+                        {hm}<span className="text-[#C8102E] text-2xl md:text-3xl ml-1.5 align-baseline">{sec}</span>
+                    </p>
+                    <p className="text-sm font-bold text-gray-500 mt-2">{dateStr}</p>
+                    {children}
                 </div>
+            );
+        };
+
+        const AnnouncementRaisedButton = ({ title, msg, onOpen }) => {
+            const key = `${title || ''}|${msg || ''}`;
+            const [seen, setSeen] = useState(() => { try { return localStorage.getItem('zc_ann_seen') || ''; } catch (e) { return ''; } });
+            const hasNew = Boolean(msg && String(msg).trim()) && seen !== key;
+            const handleClick = () => {
+                try { localStorage.setItem('zc_ann_seen', key); } catch (e) {}
+                setSeen(key);
+                onOpen();
+            };
+            return (
+                <button
+                    onClick={handleClick}
+                    title="ประกาศสภานักเรียน"
+                    aria-label="ประกาศสภานักเรียน"
+                    className="absolute left-1/2 -translate-x-1/2 -bottom-7 w-16 h-14 rounded-2xl bg-white border border-gray-200 flex items-center justify-center shadow-[0_5px_0_#d1d5db,0_10px_16px_rgba(0,0,0,0.12)] active:translate-y-[4px] active:shadow-[0_1px_0_#d1d5db,0_2px_4px_rgba(0,0,0,0.1)] transition-all"
+                >
+                    <i className="ph ph-megaphone text-[30px] text-[#C8102E]"></i>
+                    {hasNew && <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 border-2 border-white animate-pulse"></span>}
+                </button>
             );
         };
 
@@ -528,38 +547,60 @@
 
         const RoomTrendModal = ({ room, inspections, onClose }) => {
             const [range, setRange] = useState(14);
-            const data = useMemo(() => {
-                const byDate = {};
+            const hasZone = room.hasZone !== false;
+
+            // นับเฉพาะครั้งที่ตรวจจริง: ตัดวันที่ไม่ได้ตรวจ และ "ข้ามการตรวจ" (คะแนน null) ออก, วันเดียวกันนับครั้งเดียว
+            const records = useMemo(() => {
+                const map = { room: {}, zone: {} };
                 (Array.isArray(inspections) ? inspections : []).forEach(i => {
-                    if (!i || i.roomId !== room.id || !i.date || i.totalScore === null || i.totalScore === undefined) return;
-                    const d = String(i.date).slice(0, 10);
-                    if (!byDate[d]) byDate[d] = { d, room: null, zone: null };
-                    if (i.type === 'room') byDate[d].room = Number(i.totalScore);
-                    if (i.type === 'zone') byDate[d].zone = Number(i.totalScore);
+                    if (!i || i.roomId !== room.id || !i.date) return;
+                    if (i.totalScore === null || i.totalScore === undefined) return;
+                    if (i.type !== 'room' && i.type !== 'zone') return;
+                    map[i.type][String(i.date).slice(0, 10)] = Number(i.totalScore);
                 });
-                return Object.values(byDate).sort((a, b) => a.d.localeCompare(b.d));
+                const toList = (m) => Object.keys(m).sort().map(d => ({ d, v: m[d] }));
+                return { room: toList(map.room), zone: toList(map.zone) };
             }, [inspections, room.id]);
 
-            const hasZone = room.hasZone !== false;
-            const shown = range === 0 ? data : data.slice(-range);
-            const avg = (key) => {
-                const vals = shown.map(p => p[key]).filter(v => v !== null);
-                return vals.length ? (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1) : '-';
-            };
-            const countOf = (key) => shown.filter(p => p[key] !== null).length;
+            const pick = (list) => range === 0 ? list : list.slice(-range);
+            const lists = { room: pick(records.room), zone: hasZone ? pick(records.zone) : [] };
+            const dates = Array.from(new Set([...lists.room, ...lists.zone].map(p => p.d))).sort();
 
             const W = 340, H = 190, L = 26, R = 12, T = 14, B = 26;
-            const hasNeg = shown.some(p => (p.room !== null && p.room < 0) || (p.zone !== null && p.zone < 0));
+            const allVals = [...lists.room, ...lists.zone].map(p => p.v);
+            const hasNeg = allVals.some(v => v < 0);
             const yMin = hasNeg ? -5 : 0, yMax = 10;
-            const xAt = (i) => shown.length <= 1 ? (L + (W - L - R) / 2) : L + i * (W - L - R) / (shown.length - 1);
+            const xAt = (d) => { const i = dates.indexOf(d); return dates.length <= 1 ? (L + (W - L - R) / 2) : L + i * (W - L - R) / (dates.length - 1); };
             const yAt = (v) => T + (yMax - v) * (H - T - B) / (yMax - yMin);
-            const pointsOf = (key) => shown.map((p, i) => p[key] === null ? null : { x: xAt(i), y: yAt(p[key]), v: p[key], d: p.d }).filter(Boolean);
-            const pathOf = (arr) => arr.map((pt, k) => `${k ? 'L' : 'M'}${pt.x.toFixed(1)},${pt.y.toFixed(1)}`).join(' ');
+            const pathOf = (list) => list.map((p, k) => `${k ? 'L' : 'M'}${xAt(p.d).toFixed(1)},${yAt(p.v).toFixed(1)}`).join(' ');
             const ticks = hasNeg ? [-5, 0, 5, 10] : [0, 5, 10];
-            const step = Math.max(1, Math.ceil(shown.length / 6));
+            const step = Math.max(1, Math.ceil(dates.length / 6));
             const shortDate = (d) => { const [, m, dd] = d.split('-'); return `${parseInt(dd, 10)}/${parseInt(m, 10)}`; };
-            const showLabels = shown.length <= 10;
-            const series = [{ key: 'room', color: '#C8102E', name: 'ห้องเรียน' }].concat(hasZone ? [{ key: 'zone', color: '#a21caf', name: 'เขตพื้นที่' }] : []);
+            const showLabels = dates.length <= 10;
+
+            const statsOf = (list) => {
+                const n = list.length;
+                if (n === 0) return { n: 0 };
+                const vals = list.map(p => p.v);
+                const avg = vals.reduce((a, b) => a + b, 0) / n;
+                let trend = 'data_low';
+                if (n >= 4) {
+                    const half = Math.floor(n / 2);
+                    const early = vals.slice(0, half), recent = vals.slice(n - half);
+                    const diff = (recent.reduce((a, b) => a + b, 0) / recent.length) - (early.reduce((a, b) => a + b, 0) / early.length);
+                    trend = diff >= 0.5 ? 'up' : diff <= -0.5 ? 'down' : 'flat';
+                }
+                return { n, avg: avg.toFixed(1), max: Math.max(...vals), min: Math.min(...vals), last: list[n - 1].d, trend };
+            };
+            const trendView = {
+                up: { t: 'ดีขึ้น', icon: 'ph-trend-up', cls: 'text-emerald-600' },
+                down: { t: 'ลดลง', icon: 'ph-trend-down', cls: 'text-rose-600' },
+                flat: { t: 'ทรงตัว', icon: 'ph-minus', cls: 'text-gray-500' },
+                data_low: { t: 'ข้อมูลยังน้อย (ต้องตรวจ 4 ครั้งขึ้นไป)', icon: 'ph-hourglass', cls: 'text-gray-400' }
+            };
+            const series = [
+                { key: 'room', color: '#C8102E', name: 'ห้องเรียน', bg: 'bg-red-50', txt: 'text-[#C8102E]' }
+            ].concat(hasZone ? [{ key: 'zone', color: '#a21caf', name: 'เขตพื้นที่', bg: 'bg-fuchsia-50', txt: 'text-fuchsia-700' }] : []);
 
             return (
                 <div className="fixed inset-0 z-[9998] bg-gray-900/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in" onClick={onClose}>
@@ -569,19 +610,19 @@
                                 <div className="w-9 h-9 rounded-full bg-red-50 text-[#C8102E] flex items-center justify-center shrink-0"><i className="ph ph-chart-line-up text-lg"></i></div>
                                 <div className="min-w-0">
                                     <p className="font-black text-gray-800 text-base leading-tight truncate">แนวโน้มคะแนน {room.name}</p>
-                                    <p className="text-[10px] font-bold text-gray-400">คะแนนต่อวันที่ตรวจ</p>
+                                    <p className="text-[10px] font-bold text-gray-400">นับเฉพาะครั้งที่ตรวจจริง ไม่นับวันที่ไม่ได้ตรวจหรือข้ามการตรวจ</p>
                                 </div>
                             </div>
                             <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center shrink-0 active:scale-95"><i className="ph ph-x"></i></button>
                         </div>
 
                         <div className="flex gap-1.5 bg-gray-100 p-1 rounded-xl mb-3">
-                            {[{ v: 14, l: '14 ครั้งล่าสุด' }, { v: 30, l: '30 ครั้ง' }, { v: 0, l: 'ทั้งหมด' }].map(o => (
+                            {[{ v: 14, l: 'ล่าสุด 14 ครั้ง' }, { v: 30, l: 'ล่าสุด 30 ครั้ง' }, { v: 0, l: 'ทั้งหมด' }].map(o => (
                                 <button key={o.v} onClick={() => setRange(o.v)} className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold transition-all ${range === o.v ? 'bg-white text-[#C8102E] shadow-sm' : 'text-gray-500'}`}>{o.l}</button>
                             ))}
                         </div>
 
-                        {shown.length === 0 ? (
+                        {dates.length === 0 ? (
                             <div className="py-12 text-center text-sm font-bold text-gray-400">ยังไม่มีข้อมูลการตรวจของห้องนี้</div>
                         ) : (
                             <>
@@ -592,31 +633,43 @@
                                             <text x={L - 5} y={yAt(t) + 3} textAnchor="end" fontSize="9" fill="#9ca3af">{t}</text>
                                         </g>
                                     ))}
-                                    {shown.map((p, i) => (i % step === 0) ? (
-                                        <text key={p.d} x={xAt(i)} y={H - 8} textAnchor="middle" fontSize="9" fill="#9ca3af">{shortDate(p.d)}</text>
+                                    {dates.map((d, i) => (i % step === 0) ? (
+                                        <text key={d} x={xAt(d)} y={H - 8} textAnchor="middle" fontSize="9" fill="#9ca3af">{shortDate(d)}</text>
                                     ) : null)}
+                                    {series.map(se => (
+                                        <g key={se.key}>
+                                            {lists[se.key].length > 1 && <path d={pathOf(lists[se.key])} fill="none" stroke={se.color} strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" />}
+                                            {lists[se.key].map(p => (
+                                                <g key={p.d}>
+                                                    <circle cx={xAt(p.d)} cy={yAt(p.v)} r="3.5" fill="#fff" stroke={se.color} strokeWidth="2"><title>{`${shortDate(p.d)}: ${p.v} คะแนน (${se.name})`}</title></circle>
+                                                    {showLabels && <text x={xAt(p.d)} y={yAt(p.v) - 7} textAnchor="middle" fontSize="9" fontWeight="700" fill={se.color}>{p.v}</text>}
+                                                </g>
+                                            ))}
+                                        </g>
+                                    ))}
+                                </svg>
+
+                                <div className="space-y-2 mt-1">
                                     {series.map(se => {
-                                        const pts = pointsOf(se.key);
+                                        const st = statsOf(lists[se.key]);
+                                        if (st.n === 0) return (
+                                            <div key={se.key} className={`${se.bg} rounded-2xl p-3`}><p className={`text-xs font-black ${se.txt}`}>{se.name}</p><p className="text-[11px] font-bold text-gray-400 mt-0.5">ยังไม่มีครั้งที่ตรวจจริง</p></div>
+                                        );
+                                        const tv = trendView[st.trend];
                                         return (
-                                            <g key={se.key}>
-                                                {pts.length > 1 && <path d={pathOf(pts)} fill="none" stroke={se.color} strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" />}
-                                                {pts.map(pt => (
-                                                    <g key={pt.d}>
-                                                        <circle cx={pt.x} cy={pt.y} r="3.5" fill="#fff" stroke={se.color} strokeWidth="2"><title>{`${shortDate(pt.d)}: ${pt.v} คะแนน (${se.name})`}</title></circle>
-                                                        {showLabels && <text x={pt.x} y={pt.y - 7} textAnchor="middle" fontSize="9" fontWeight="700" fill={se.color}>{pt.v}</text>}
-                                                    </g>
-                                                ))}
-                                            </g>
+                                            <div key={se.key} className={`${se.bg} rounded-2xl p-3 flex items-center gap-3`}>
+                                                <div className="shrink-0 text-center w-16">
+                                                    <p className={`text-2xl font-black leading-none ${se.txt}`}>{st.avg}</p>
+                                                    <p className="text-[9px] font-bold text-gray-400 mt-1">คะแนนเฉลี่ย</p>
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className={`text-xs font-black ${se.txt}`}>{se.name} <span className="text-gray-500 font-bold">· ตรวจจริง {st.n} ครั้ง</span></p>
+                                                    <p className="text-[11px] font-bold text-gray-500 mt-0.5">สูงสุด {st.max} · ต่ำสุด {st.min} · ล่าสุด {shortDate(st.last)}</p>
+                                                    <p className={`text-[11px] font-black mt-0.5 flex items-center gap-1 ${tv.cls}`}><i className={`ph ${tv.icon}`}></i> {tv.t}</p>
+                                                </div>
+                                            </div>
                                         );
                                     })}
-                                </svg>
-                                <div className="flex items-center justify-center gap-4 mb-3">
-                                    {series.map(se => (<span key={se.key} className="flex items-center gap-1.5 text-[11px] font-bold text-gray-600"><span className="w-3 h-1.5 rounded-full" style={{ background: se.color }}></span>{se.name}</span>))}
-                                </div>
-                                <div className={`grid ${hasZone ? 'grid-cols-3' : 'grid-cols-2'} gap-2`}>
-                                    <div className="bg-red-50 rounded-2xl p-2.5 text-center"><p className="text-[10px] font-bold text-red-400">เฉลี่ยห้องเรียน</p><p className="text-lg font-black text-[#C8102E] leading-tight">{avg('room')}</p><p className="text-[10px] text-red-300 font-bold">{countOf('room')} ครั้ง</p></div>
-                                    {hasZone && (<div className="bg-fuchsia-50 rounded-2xl p-2.5 text-center"><p className="text-[10px] font-bold text-fuchsia-400">เฉลี่ยเขตพื้นที่</p><p className="text-lg font-black text-fuchsia-700 leading-tight">{avg('zone')}</p><p className="text-[10px] text-fuchsia-300 font-bold">{countOf('zone')} ครั้ง</p></div>)}
-                                    <div className="bg-gray-50 rounded-2xl p-2.5 text-center"><p className="text-[10px] font-bold text-gray-400">ตรวจล่าสุด</p><p className="text-lg font-black text-gray-700 leading-tight">{shortDate(shown[shown.length - 1].d)}</p><p className="text-[10px] text-gray-300 font-bold">{shown.length} วันที่แสดง</p></div>
                                 </div>
                             </>
                         )}
@@ -4608,11 +4661,10 @@ ${roomSummaryLines}`;
                         </nav>
 
                         <div className="flex items-center gap-2 shrink-0">
-                            <LiveClock />
                             <button onClick={() => setIsAiChatOpen(true)} className="rounded-full hover:scale-105 active:scale-95 transition-transform" title="ผู้ช่วยอัจฉริยะ ZoneCheck AI">
                                 <BotMascotAvatar size="sm" />
                             </button>
-                            <button onClick={()=>setShowAnnouncement(true)} className="w-9 h-9 rounded-full bg-red-50 text-[#C8102E] hover:bg-red-100 flex items-center justify-center transition-colors shadow-sm" title="ประกาศสภาฯ"><i className="ph ph-megaphone text-lg"></i></button>
+                            {appMode !== 'guest' && (<button onClick={()=>setShowAnnouncement(true)} className="w-9 h-9 rounded-full bg-red-50 text-[#C8102E] hover:bg-red-100 flex items-center justify-center transition-colors shadow-sm" title="ประกาศสภาฯ"><i className="ph ph-megaphone text-lg"></i></button>)}
                             <button onClick={handleSync} className="w-9 h-9 rounded-full bg-gray-50 border border-gray-200 text-gray-500 hover:bg-gray-100 flex items-center justify-center transition-colors shadow-sm" title="ซิงค์ข้อมูล"><i className={`ph ph-arrows-clockwise text-lg ${isSyncing ? "animate-spin text-[#C8102E]" : ""}`}></i></button>
                             <button onClick={()=>setShowInfoModal(true)} className="w-9 h-9 rounded-full bg-gray-50 text-gray-500 border border-gray-200 hover:bg-gray-100 flex items-center justify-center transition-colors shadow-sm" title="ช่วยเหลือ"><i className="ph ph-question text-lg"></i></button>
                             {appMode !== 'guest' && (
@@ -4623,7 +4675,6 @@ ${roomSummaryLines}`;
 
                     {/* Header สำหรับ Mobile และ iPad แนวตั้ง */}
                     <header className="lg:hidden bg-white/95 backdrop-blur-xl sticky top-0 z-30 border-b border-gray-100/80 shrink-0 w-full">
-                        <div className="bg-gray-50/90 border-b border-gray-100 py-1"><LiveClock compact /></div>
                         <div className="max-w-3xl mx-auto px-3.5 h-[66px] flex justify-between items-center gap-2">
                             <div className="flex items-center gap-2.5 cursor-pointer no-select relative min-w-0 flex-1" onClick={handleLogoClick}>
                                 <div className="w-[40px] h-[40px] rounded-full flex items-center justify-center shadow-sm flex-shrink-0 overflow-hidden bg-white border border-gray-200">
@@ -4646,7 +4697,7 @@ ${roomSummaryLines}`;
                                 <button onClick={() => setIsAiChatOpen(true)} className="rounded-full active:scale-95 transition-transform" title="ผู้ช่วย ZoneCheck AI">
                                     <BotMascotAvatar size="sm" />
                                 </button>
-                                <button onClick={() => setShowAnnouncement(true)} className="w-8 h-8 flex items-center justify-center rounded-full bg-red-50 text-[#C8102E] border border-red-100 shadow-sm active:scale-95 transition-colors" title="ประกาศ"><i className="ph ph-megaphone text-base"></i></button>
+                                {appMode !== 'guest' && (<button onClick={() => setShowAnnouncement(true)} className="w-8 h-8 flex items-center justify-center rounded-full bg-red-50 text-[#C8102E] border border-red-100 shadow-sm active:scale-95 transition-colors" title="ประกาศ"><i className="ph ph-megaphone text-base"></i></button>)}
                                 <button onClick={handleSync} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-50 text-gray-500 border border-gray-200 shadow-sm active:scale-95 transition-colors hover:text-[#C8102E]" title="ซิงค์ข้อมูล"><i className={`ph ph-arrows-clockwise text-base ${isSyncing ? "animate-spin text-[#C8102E]" : ""}`}></i></button>
                                 <button onClick={() => setShowInfoModal(true)} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-50 text-gray-500 border border-gray-200 shadow-sm active:scale-95 transition-colors" title="ช่วยเหลือ"><i className="ph ph-question text-base"></i></button>
                                 {appMode !== 'guest' && (
@@ -4739,7 +4790,11 @@ ${roomSummaryLines}`;
                                     </div>
                                 )}
 
-                                <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 flex flex-col md:flex-row md:items-center gap-6">
+                                <LiveClockCard>
+                            {appMode === 'guest' && (<AnnouncementRaisedButton title={settings?.announcement_title} msg={settings?.announcement_msg} onOpen={() => setShowAnnouncement(true)} />)}
+                        </LiveClockCard>
+
+                        <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 flex flex-col md:flex-row md:items-center gap-6">
                                     <div className="flex-shrink-0">
                                         <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2 mb-1"><i className="ph ph-check-square text-[#C8102E] text-lg"></i> ความคืบหน้าการตรวจ</h3>
                                         <p className="text-[10px] text-gray-400 font-medium">อัปเดตข้อมูลของวันนี้</p>
