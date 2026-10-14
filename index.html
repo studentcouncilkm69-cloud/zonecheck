@@ -473,54 +473,6 @@
             );
         };
 
-        const REMINDER_HOUR = 14; // เริ่มเตือนห้องที่ยังไม่ตรวจตั้งแต่เวลานี้ (ชั่วโมงเวลาไทย 0-23)
-
-        const UncheckedReminderBanner = ({ rooms, inspections, showGo, onGo }) => {
-            const [now, setNow] = useState(() => new Date());
-            const [dismissedDate, setDismissedDate] = useState(null);
-            useEffect(() => {
-                const t = setInterval(() => setNow(new Date()), 60000);
-                return () => clearInterval(t);
-            }, []);
-            const today = getThaiDateStr(now);
-            const hour = parseInt(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Bangkok', hour: '2-digit', hour12: false }).format(now), 10) % 24;
-            const weekday = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Bangkok', weekday: 'short' }).format(now);
-            const { uncheckedRooms, uncheckedZones } = useMemo(() => {
-                const validRooms = Array.isArray(rooms) ? rooms : [];
-                const dayInsps = (Array.isArray(inspections) ? inspections : []).filter(i => i && i.date && String(i.date).startsWith(today));
-                return {
-                    uncheckedRooms: validRooms.filter(r => !dayInsps.some(i => i.roomId === r.id && i.type === 'room')),
-                    uncheckedZones: validRooms.filter(r => r.hasZone !== false && !dayInsps.some(i => i.roomId === r.id && i.type === 'zone'))
-                };
-            }, [rooms, inspections, today]);
-
-            const isWeekend = weekday === 'Sat' || weekday === 'Sun';
-            if (isWeekend || hour < REMINDER_HOUR || dismissedDate === today) return null;
-            if (uncheckedRooms.length + uncheckedZones.length === 0) return null;
-
-            const chips = (list) => (
-                <div className="flex flex-wrap gap-1 mt-1">
-                    {list.slice(0, 14).map(r => <span key={r.id} className="px-2 py-0.5 rounded-full bg-white border border-amber-200 text-[11px] font-bold text-amber-800">{r.name}</span>)}
-                    {list.length > 14 && <span className="px-2 py-0.5 text-[11px] font-bold text-amber-700">และอีก {list.length - 14}</span>}
-                </div>
-            );
-
-            return (
-                <div className="bg-amber-50 border border-amber-200 rounded-[1.5rem] p-4 mb-5 shadow-sm animate-in fade-in">
-                    <div className="flex items-start gap-3">
-                        <div className="w-9 h-9 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center shrink-0"><i className="ph ph-bell-ringing text-xl"></i></div>
-                        <div className="flex-1 min-w-0">
-                            <p className="font-black text-sm text-amber-900">ยังตรวจไม่ครบ ({String(hour).padStart(2, '0')}:00 น. แล้ว)</p>
-                            {uncheckedRooms.length > 0 && (<div className="mt-1.5"><p className="text-[11px] font-bold text-amber-700">ห้องเรียนที่ยังไม่ตรวจ {uncheckedRooms.length} ห้อง</p>{chips(uncheckedRooms)}</div>)}
-                            {uncheckedZones.length > 0 && (<div className="mt-1.5"><p className="text-[11px] font-bold text-amber-700">เขตพื้นที่ที่ยังไม่ตรวจ {uncheckedZones.length} เขต</p>{chips(uncheckedZones)}</div>)}
-                            {showGo && (<button onClick={onGo} className="mt-3 px-4 py-2 rounded-xl bg-amber-500 text-white text-xs font-black shadow-sm active:scale-95 transition-transform">ไปหน้าตรวจ</button>)}
-                        </div>
-                        <button onClick={() => setDismissedDate(today)} className="w-7 h-7 rounded-full bg-white/70 text-amber-700 flex items-center justify-center shrink-0 active:scale-95" title="ปิดการแจ้งเตือนวันนี้"><i className="ph ph-x text-sm"></i></button>
-                    </div>
-                </div>
-            );
-        };
-
         const RoomTrendModal = ({ room, inspections, onClose }) => {
             const [range, setRange] = useState(14);
             const hasZone = room.hasZone !== false;
@@ -4636,9 +4588,6 @@ ${roomSummaryLines}`;
                         </nav>
 
                         <div className="flex items-center gap-2 shrink-0">
-                            <button onClick={() => setIsAiChatOpen(true)} className="rounded-full hover:scale-105 active:scale-95 transition-transform" title="ผู้ช่วยอัจฉริยะ ZoneCheck AI">
-                                <BotMascotAvatar size="sm" />
-                            </button>
                             <button onClick={()=>setShowAnnouncement(true)} className="w-9 h-9 rounded-full bg-red-50 text-[#C8102E] hover:bg-red-100 flex items-center justify-center transition-colors shadow-sm" title="ประกาศสภาฯ"><i className="ph ph-megaphone text-lg"></i></button>
                             <button onClick={handleSync} className="w-9 h-9 rounded-full bg-gray-50 border border-gray-200 text-gray-500 hover:bg-gray-100 flex items-center justify-center transition-colors shadow-sm" title="ซิงค์ข้อมูล"><i className={`ph ph-arrows-clockwise text-lg ${isSyncing ? "animate-spin text-[#C8102E]" : ""}`}></i></button>
                             <button onClick={()=>setShowInfoModal(true)} className="w-9 h-9 rounded-full bg-gray-50 text-gray-500 border border-gray-200 hover:bg-gray-100 flex items-center justify-center transition-colors shadow-sm" title="ช่วยเหลือ"><i className="ph ph-question text-lg"></i></button>
@@ -4668,9 +4617,6 @@ ${roomSummaryLines}`;
                                 </div>
                             </div>
                             <div className="flex items-center gap-1.5 flex-shrink-0">
-                                <button onClick={() => setIsAiChatOpen(true)} className="rounded-full active:scale-95 transition-transform" title="ผู้ช่วย ZoneCheck AI">
-                                    <BotMascotAvatar size="sm" />
-                                </button>
                                 {appMode !== 'guest' && (<button onClick={() => setShowAnnouncement(true)} className="w-8 h-8 flex items-center justify-center rounded-full bg-red-50 text-[#C8102E] border border-red-100 shadow-sm active:scale-95 transition-colors" title="ประกาศ"><i className="ph ph-megaphone text-base"></i></button>)}
                                 <button onClick={handleSync} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-50 text-gray-500 border border-gray-200 shadow-sm active:scale-95 transition-colors hover:text-[#C8102E]" title="ซิงค์ข้อมูล"><i className={`ph ph-arrows-clockwise text-base ${isSyncing ? "animate-spin text-[#C8102E]" : ""}`}></i></button>
                                 <button onClick={() => setShowInfoModal(true)} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-50 text-gray-500 border border-gray-200 shadow-sm active:scale-95 transition-colors" title="ช่วยเหลือ"><i className="ph ph-question text-base"></i></button>
@@ -4689,19 +4635,16 @@ ${roomSummaryLines}`;
                         {appMode !== 'guest' && currentUser && (
                             <div className="bg-white px-4 py-3.5 rounded-[1.75rem] shadow-sm border border-gray-100 mb-5 flex items-center justify-between gap-3 animate-in fade-in">
                                 <div className="flex items-center gap-3.5 min-w-0">
-                                    <div 
-                                        onClick={handleOpenSelfAvatarModal}
-                                        title="แตะเพื่อเปลี่ยนรูปโปรไฟล์"
-                                        className="relative flex-shrink-0 cursor-pointer group active:scale-95 transition-transform"
-                                    >
+                                    <div className="relative flex-shrink-0" title="ออนไลน์">
                                         <img 
                                             src={currentUser.avatar_url || getInspectorAvatar(currentUser.name)} 
                                             alt={currentUser.name}
-                                            className="w-12 h-12 rounded-full object-cover border-2 border-[#C8102E] shadow-sm bg-gray-50 group-hover:brightness-90 transition-all"
+                                            className="w-12 h-12 rounded-full object-cover border-2 border-[#C8102E] shadow-sm bg-gray-50"
                                             onError={(e) => { e.target.src = settings?.app_logo_url || HARDCODED_LOGO; }}
                                         />
-                                        <span className="absolute bottom-0 right-0 w-4 h-4 bg-[#C8102E] text-white border-2 border-white rounded-full flex items-center justify-center shadow-sm">
-                                            <i className="ph ph-camera text-[9px]"></i>
+                                        <span className="absolute bottom-0 right-0 flex w-4 h-4">
+                                            <span className="absolute inline-flex w-full h-full rounded-full bg-green-400 opacity-60 animate-ping"></span>
+                                            <span className="relative inline-flex w-4 h-4 rounded-full bg-green-500 border-2 border-white shadow-sm"></span>
                                         </span>
                                     </div>
                                     <div className="min-w-0">
@@ -4741,10 +4684,6 @@ ${roomSummaryLines}`;
                                 )}
                             </div>
                         )}
-
-                        {appMode !== 'guest' && (currentRoute === 'dashboard' || currentRoute === 'inspect') && (
-                        <UncheckedReminderBanner rooms={rooms} inspections={inspections} showGo={currentRoute !== 'inspect'} onGo={() => setCurrentRoute('inspect')} />
-                    )}
 
                     {currentRoute === 'dashboard' && (
                             <div className="animate-in fade-in space-y-6">
