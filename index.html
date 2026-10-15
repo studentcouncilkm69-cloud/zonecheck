@@ -4573,7 +4573,8 @@ ${roomSummaryLines}`;
                 const blankParenText = isCompact ? '(..............................................)' : '(........................................................)';
             const sigF = { sm: 1, md: 1.5, lg: 2 }[signatureSizeKey] || 1.5;
             const sigImgH = Math.round((isCompact ? 44 : 52) * sigF);
-            const sigBoxH = sigImgH + 6;
+            const sigLift = isCompact ? 11 : 13; // ยกลายเซ็นให้อยู่เหนือเส้นประ ไม่ทับเส้น
+            const sigBoxH = sigImgH + sigLift + 4;
 
                 return (
                     <div style={{
@@ -4623,7 +4624,7 @@ ${roomSummaryLines}`;
  maxWidth: '100%',
                                                     objectFit: 'contain',
                                                     position: 'absolute',
-                                                    bottom: '4px',
+                                                    bottom: `${sigLift}px`,
                                                     zIndex: 2
                                                 }}
                                             />
