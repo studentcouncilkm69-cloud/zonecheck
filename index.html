@@ -671,6 +671,21 @@
             return <img src={shown} {...rest} />;
         };
 
+        // ลายเซ็นที่ปรับขนาดให้พอดีกับช่องที่กำหนด (รักษาสัดส่วน ย่อ/ขยายให้เต็มช่อง) ไม่พึ่ง object-fit
+        const FitSigImg = ({ src, maxW, maxH, style, ...rest }) => {
+            const [nat, setNat] = useState(null);
+            const onLoad = (e) => {
+                const w = e.target.naturalWidth, h = e.target.naturalHeight;
+                if (w && h) setNat({ w, h });
+            };
+            let size = { maxWidth: `${maxW}px`, maxHeight: `${maxH}px` };
+            if (nat) {
+                const k = Math.min(maxW / nat.w, maxH / nat.h);
+                size = { width: `${Math.round(nat.w * k)}px`, height: `${Math.round(nat.h * k)}px` };
+            }
+            return <SigImg src={src} onLoad={onLoad} style={{ display: 'block', ...size, ...style }} {...rest} />;
+        };
+
         // แปลงเส้นลายเซ็นเป็น SVG (เวกเตอร์) ขยายกี่เท่าก็คม ข้อมูลเล็กกว่า PNG
         const strokesToSvgDataUrl = (strokes, strokeWidth = 3.2, pad = 8) => {
             const r = (n) => Math.round(n * 10) / 10;
@@ -932,7 +947,6 @@
             const [blankInspectorCount, setBlankInspectorCount] = useState(2);
             const [customSelectedSignerIds, setCustomSelectedSignerIds] = useState([]);
             const [showDigitalSignatureImg, setShowDigitalSignatureImg] = useState(true);
-            const [signatureSizeKey, setSignatureSizeKey] = useState('md');
             const [showSignerPad, setShowSignerPad] = useState(false);
             const [showCustomSignerPickerModal, setShowCustomSignerPickerModal] = useState(false);
             const [showDailyInspectorsModal, setShowDailyInspectorsModal] = useState(false);
@@ -4571,8 +4585,8 @@ ${roomSummaryLines}`;
                 const maxPerRowPct = totalSigners >= 4 ? '23%' : '30%';
                 const dotLineText = isCompact ? 'ลงชื่อ..............................................' : 'ลงชื่อ........................................................';
                 const blankParenText = isCompact ? '(..............................................)' : '(........................................................)';
-            const sigF = { sm: 1, md: 1.5, lg: 2 }[signatureSizeKey] || 1.5;
-            const sigImgH = Math.round((isCompact ? 44 : 52) * sigF);
+            const sigMaxH = isCompact ? 54 : 68;
+            const sigMaxW = isCompact ? 180 : 240;
             
                 return (
                     <div style={{
@@ -4606,7 +4620,7 @@ ${roomSummaryLines}`;
                                 }}>
                                     <div style={{
                                         width: '100%',
-                                        height: `${sigImgH + 26}px`,
+                                        height: `${sigMaxH + 26}px`,
                                         display: 'flex',
                                         flexDirection: 'column',
                                         alignItems: 'center',
@@ -4614,17 +4628,12 @@ ${roomSummaryLines}`;
                                         marginBottom: '4px'
                                     }}>
                                         {showDigitalSignatureImg && signer.signatureUrl && (
-                                            <SigImg 
-                                                src={signer.signatureUrl} 
+                                            <FitSigImg
+                                                src={signer.signatureUrl}
                                                 crossOrigin="anonymous"
-                                                style={{
-                                                    height: `${sigImgH}px`,
- maxWidth: '100%',
-                                                    objectFit: 'contain',
-                                                    marginBottom: '-3px',
-                                                    position: 'relative',
-                                                    zIndex: 2
-                                                }}
+                                                maxW={sigMaxW}
+                                                maxH={sigMaxH}
+                                                style={{ marginBottom: '-3px', position: 'relative', zIndex: 2 }}
                                             />
                                         )}
                                         <div style={{
@@ -5092,13 +5101,6 @@ ${roomSummaryLines}`;
                                                 {activeSignatureMode === 'custom' && (
                                                     <button onClick={() => setShowCustomSignerPickerModal(true)} className="px-2 py-0.5 bg-purple-600 text-white rounded text-[10px] font-bold">เลือก</button>
                                                 )}
-                                    {activeSignatureMode !== 'none' && (
-                                        <select value={signatureSizeKey} onChange={e => setSignatureSizeKey(e.target.value)} title="ขนาดลายเซ็น" className="bg-white border border-purple-200 text-purple-700 rounded px-1.5 py-0.5 text-[11px] font-bold outline-none">
-                                            <option value="sm">ลายเซ็นเล็ก</option>
-                                            <option value="md">ลายเซ็นกลาง</option>
-                                            <option value="lg">ลายเซ็นใหญ่</option>
-                                        </select>
-                                    )}
                                             </div>
                                             <select value={exportDestination} onChange={e => setExportDestination(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-lg p-2 text-xs font-bold text-gray-600 outline-none hidden md:block">
                                                 <option value="local">โหลดลงเครื่อง</option><option value="drive">บันทึกลง Drive</option>
@@ -5301,13 +5303,6 @@ ${roomSummaryLines}`;
                                                         {activeSignatureMode === 'custom' && (
                                                             <button onClick={() => setShowCustomSignerPickerModal(true)} className="px-2 py-0.5 bg-purple-600 text-white rounded text-[10px] font-bold">เลือก</button>
                                                         )}
-                                    {activeSignatureMode !== 'none' && (
-                                        <select value={signatureSizeKey} onChange={e => setSignatureSizeKey(e.target.value)} title="ขนาดลายเซ็น" className="bg-white border border-purple-200 text-purple-700 rounded px-1.5 py-0.5 text-[11px] font-bold outline-none">
-                                            <option value="sm">ลายเซ็นเล็ก</option>
-                                            <option value="md">ลายเซ็นกลาง</option>
-                                            <option value="lg">ลายเซ็นใหญ่</option>
-                                        </select>
-                                    )}
                                                     </div>
                                                     <select value={exportDestination} onChange={e => setExportDestination(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-lg p-2 text-xs font-bold text-gray-600 outline-none hidden md:block">
                                                         <option value="local">โหลดลงเครื่อง</option><option value="drive">บันทึกลง Drive</option>
