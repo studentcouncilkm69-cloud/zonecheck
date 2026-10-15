@@ -237,6 +237,9 @@
             app_version: "V3.0",
             map_pins_json: "{}",
             gemini_api_key: DEFAULT_GEMINI_KEY,
+ footer_dev_name: "คณะกรรมการสภานักเรียน โรงเรียนคำม่วง",
+ footer_facebook_url: "", footer_instagram_url: "", footer_tiktok_url: "", footer_website_url: "",
+ footer_copyright: "© สภานักเรียนโรงเรียนคำม่วง สงวนลิขสิทธิ์",
             ai_bot_name: "น้องสภาฯ"
         };
 
@@ -606,6 +609,220 @@
             );
         };
 
+        // ตัดขอบโปร่งใสรอบลายเซ็นให้พอดีเนื้อลายเซ็น (ลายเซ็นจะเต็มกล่องเมื่อแสดงผล)
+        const cropCanvasToDataUrl = (canvas, pad = 6) => {
+            try {
+                const { width, height } = canvas;
+                const data = canvas.getContext('2d').getImageData(0, 0, width, height).data;
+                let minX = width, minY = height, maxX = -1, maxY = -1;
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        if (data[(y * width + x) * 4 + 3] > 8) {
+                            if (x < minX) minX = x;
+                            if (x > maxX) maxX = x;
+                            if (y < minY) minY = y;
+                            if (y > maxY) maxY = y;
+                        }
+                    }
+                }
+                if (maxX < 0) return canvas.toDataURL('image/png');
+                minX = Math.max(0, minX - pad); minY = Math.max(0, minY - pad);
+                maxX = Math.min(width - 1, maxX + pad); maxY = Math.min(height - 1, maxY + pad);
+                const w = maxX - minX + 1, h = maxY - minY + 1;
+                const out = document.createElement('canvas');
+                out.width = w; out.height = h;
+                out.getContext('2d').drawImage(canvas, minX, minY, w, h, 0, 0, w, h);
+                return out.toDataURL('image/png');
+            } catch (e) {
+                return canvas.toDataURL('image/png');
+            }
+        };
+
+        const SIG_TRIM_CACHE = {};
+        const trimSignaturePng = (src) => new Promise((resolve) => {
+            if (SIG_TRIM_CACHE[src]) return resolve(SIG_TRIM_CACHE[src]);
+            const img = new Image();
+            img.onload = () => {
+                try {
+                    const c = document.createElement('canvas');
+                    c.width = img.naturalWidth; c.height = img.naturalHeight;
+                    c.getContext('2d').drawImage(img, 0, 0);
+                    const out = cropCanvasToDataUrl(c);
+                    SIG_TRIM_CACHE[src] = out;
+                    resolve(out);
+                } catch (e) { resolve(src); }
+            };
+            img.onerror = () => resolve(src);
+            img.src = src;
+        });
+
+        // รูปลายเซ็น: ถ้าเป็น PNG ที่วาดในแอป จะตัดขอบว่างออกก่อนแสดง (ลิงก์ภายนอกและ SVG แสดงตามเดิม)
+        const SigImg = ({ src, ...rest }) => {
+            const [shown, setShown] = useState(() => SIG_TRIM_CACHE[src] || src);
+            useEffect(() => {
+                let alive = true;
+                if (typeof src === 'string' && src.startsWith('data:image/png')) {
+                    trimSignaturePng(src).then(r => { if (alive) setShown(r); });
+                } else {
+                    setShown(src);
+                }
+                return () => { alive = false; };
+            }, [src]);
+            return <img src={shown} {...rest} />;
+        };
+
+        // แปลงเส้นลายเซ็นเป็น SVG (เวกเตอร์) ขยายกี่เท่าก็คม ข้อมูลเล็กกว่า PNG
+        const strokesToSvgDataUrl = (strokes, strokeWidth = 3.2, pad = 8) => {
+            const r = (n) => Math.round(n * 10) / 10;
+            const pts = strokes.flat();
+            const minX = Math.min(...pts.map(p => p.x)) - pad, minY = Math.min(...pts.map(p => p.y)) - pad;
+            const maxX = Math.max(...pts.map(p => p.x)) + pad, maxY = Math.max(...pts.map(p => p.y)) + pad;
+            const w = r(maxX - minX), h = r(maxY - minY);
+            const paths = strokes.map(st => {
+                if (st.length === 1) return `M${r(st[0].x)} ${r(st[0].y)}l0.1 0`;
+                if (st.length === 2) return `M${r(st[0].x)} ${r(st[0].y)}L${r(st[1].x)} ${r(st[1].y)}`;
+                let d = `M${r(st[0].x)} ${r(st[0].y)}`;
+                for (let i = 1; i < st.length - 1; i++) {
+                    d += `Q${r(st[i].x)} ${r(st[i].y)} ${r((st[i].x + st[i + 1].x) / 2)} ${r((st[i].y + st[i + 1].y) / 2)}`;
+                }
+                const last = st[st.length - 1];
+                return d + `L${r(last.x)} ${r(last.y)}`;
+            }).map(d => `<path d="${d}"/>`).join('');
+            const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="${r(minX)} ${r(minY)} ${w} ${h}"><g fill="none" stroke="#0f172a" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round">${paths}</g></svg>`;
+            return 'data:image/svg+xml;base64,' + btoa(svg);
+        };
+
+        const SignaturePadModal = ({ title, onSave, onClose }) => {
+            const canvasRef = useRef(null);
+            const strokesRef = useRef([]);
+            const drawingRef = useRef(false);
+            const [count, setCount] = useState(0);
+            const CW = 700, CH = 300;
+
+            const styleCtx = (ctx) => { ctx.strokeStyle = '#0f172a'; ctx.fillStyle = '#0f172a'; ctx.lineWidth = 3.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; };
+            const redraw = () => {
+                const ctx = canvasRef.current.getContext('2d');
+                ctx.clearRect(0, 0, CW, CH);
+                styleCtx(ctx);
+                strokesRef.current.forEach(st => {
+                    if (st.length === 1) { ctx.beginPath(); ctx.arc(st[0].x, st[0].y, 1.6, 0, Math.PI * 2); ctx.fill(); return; }
+                    ctx.beginPath(); ctx.moveTo(st[0].x, st[0].y);
+                    for (let i = 1; i < st.length; i++) ctx.lineTo(st[i].x, st[i].y);
+                    ctx.stroke();
+                });
+            };
+            const coords = (e) => {
+                const r = canvasRef.current.getBoundingClientRect();
+                return { x: (e.clientX - r.left) * CW / r.width, y: (e.clientY - r.top) * CH / r.height };
+            };
+            const down = (e) => {
+                e.preventDefault();
+                try { canvasRef.current.setPointerCapture(e.pointerId); } catch (err) {}
+                drawingRef.current = true;
+                const pt = coords(e);
+                strokesRef.current.push([pt]);
+                const ctx = canvasRef.current.getContext('2d');
+                styleCtx(ctx);
+                ctx.beginPath(); ctx.arc(pt.x, pt.y, 1.6, 0, Math.PI * 2); ctx.fill();
+                setCount(strokesRef.current.length);
+            };
+            const move = (e) => {
+                if (!drawingRef.current) return;
+                e.preventDefault();
+                const st = strokesRef.current[strokesRef.current.length - 1];
+                const pt = coords(e);
+                const prev = st[st.length - 1];
+                if (Math.hypot(pt.x - prev.x, pt.y - prev.y) < 1.5) return;
+                st.push(pt);
+                const ctx = canvasRef.current.getContext('2d');
+                styleCtx(ctx);
+                ctx.beginPath(); ctx.moveTo(prev.x, prev.y); ctx.lineTo(pt.x, pt.y); ctx.stroke();
+            };
+            const up = () => { drawingRef.current = false; };
+            const undo = () => { strokesRef.current.pop(); redraw(); setCount(strokesRef.current.length); };
+            const clearAll = () => { strokesRef.current = []; redraw(); setCount(0); };
+            const save = () => { if (strokesRef.current.length) onSave(strokesToSvgDataUrl(strokesRef.current)); };
+
+            return (
+                <div className="fixed inset-0 z-[99999] bg-gray-900/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in" onClick={onClose}>
+                    <div className="bg-white rounded-[2rem] w-full max-w-lg p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between mb-1">
+                            <h3 className="text-base font-black text-gray-800 flex items-center gap-2"><i className="ph ph-signature text-purple-600 text-xl"></i> {title || 'เซ็นลายเซ็น'}</h3>
+                            <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center"><i className="ph ph-x"></i></button>
+                        </div>
+                        <p className="text-[11px] font-bold text-gray-400 mb-3">เซ็นให้ใหญ่เต็มช่องได้เลย ระบบจะตัดขอบให้พอดีกับลายเซ็นเอง</p>
+                        <div className="relative bg-white border-2 border-dashed border-gray-300 rounded-2xl overflow-hidden" style={{ aspectRatio: `${CW} / ${CH}` }}>
+                            <canvas
+                                ref={canvasRef} width={CW} height={CH}
+                                onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onPointerLeave={up}
+                                className="w-full h-full block cursor-crosshair relative z-10"
+                                style={{ touchAction: 'none' }}
+                            />
+                            <div className="absolute bottom-10 left-8 right-8 border-b border-gray-200 pointer-events-none"></div>
+                            {count === 0 && (
+                                <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center text-gray-300 gap-1">
+                                    <i className="ph ph-signature text-4xl"></i>
+                                    <span className="text-xs font-bold">ใช้นิ้วหรือปากกาเซ็นในกรอบนี้</span>
+                                </div>
+                            )}
+                        </div>
+                        <div className="flex gap-2 mt-3">
+                            <button onClick={undo} disabled={count === 0} className="px-3 py-2.5 rounded-xl bg-gray-100 text-gray-600 font-bold text-xs flex items-center gap-1 disabled:opacity-40"><i className="ph ph-arrow-u-up-left"></i> ย้อนเส้น</button>
+                            <button onClick={clearAll} disabled={count === 0} className="px-3 py-2.5 rounded-xl bg-gray-100 text-gray-600 font-bold text-xs disabled:opacity-40">ล้างทั้งหมด</button>
+                            <button onClick={save} disabled={count === 0} className="flex-1 py-2.5 rounded-xl bg-purple-600 text-white font-black text-xs shadow-sm disabled:opacity-40">บันทึกลายเซ็น</button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // ค่าว่างที่ต้องการ "ลบ" จริงๆ: ส่งไปเก็บเป็นตัวหมายเฉพาะ (กันฝั่งเซิร์ฟเวอร์ข้ามค่าว่างแล้วค่าเก่ากลับมา) แล้วแปลงกลับเป็นค่าว่างตอนโหลด
+        const EMPTY_SETTING_SENTINEL = '__EMPTY__';
+        const normalizeSettingsFromServer = (obj) => Object.fromEntries(Object.entries(obj || {}).map(([k, v]) => [k, v === EMPTY_SETTING_SENTINEL ? '' : v]));
+        const safeExternalUrl = (u) => {
+            const t = String(u || '').trim();
+            if (!t) return '';
+            if (/^https?:\/\//i.test(t)) return t;
+            if (/^[a-z0-9-]+(\.[a-z0-9-]+)+(\/\S*)?$/i.test(t)) return 'https://' + t;
+            return '';
+        };
+
+        const AppFooter = ({ settings }) => {
+            const dev = String(settings?.footer_dev_name ?? '').trim();
+            const copy = String(settings?.footer_copyright ?? '').trim();
+            const links = [
+                { key: 'fb', url: safeExternalUrl(settings?.footer_facebook_url), icon: 'ph-facebook-logo', label: 'Facebook', cls: 'bg-blue-50 text-[#1877F2]' },
+                { key: 'ig', url: safeExternalUrl(settings?.footer_instagram_url), icon: 'ph-instagram-logo', label: 'Instagram', cls: 'bg-pink-50 text-[#E1306C]' },
+                { key: 'tt', url: safeExternalUrl(settings?.footer_tiktok_url), icon: 'ph-tiktok-logo', label: 'TikTok', cls: 'bg-gray-100 text-gray-900' },
+                { key: 'web', url: safeExternalUrl(settings?.footer_website_url), icon: 'ph-globe', label: 'เว็บไซต์', cls: 'bg-red-50 text-[#C8102E]' }
+            ].filter(l => l.url);
+            if (!dev && links.length === 0 && !copy) return null;
+            return (
+                <footer className="mt-auto pt-10 pb-2">
+                    {(dev || links.length > 0) && (
+                        <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm px-5 py-4 flex items-center justify-between gap-3">
+                            {dev && (
+                                <div className="min-w-0">
+                                    <p className="text-[10px] font-black text-[#C8102E] tracking-widest uppercase">พัฒนาโดย</p>
+                                    <p className="text-sm font-bold text-gray-800 leading-snug mt-0.5">{dev}</p>
+                                </div>
+                            )}
+                            {links.length > 0 && (
+                                <div className="flex items-center gap-2 shrink-0 ml-auto">
+                                    {links.map(l => (
+                                        <a key={l.key} href={l.url} target="_blank" rel="noopener noreferrer" aria-label={l.label} title={l.label} className={`w-10 h-10 rounded-full flex items-center justify-center active:scale-95 transition-transform ${l.cls}`}>
+                                            <i className={`ph-fill ${l.icon} text-xl`}></i>
+                                        </a>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                    {copy && <p className="text-center text-[11px] font-bold text-gray-400 mt-3">{copy}</p>}
+                </footer>
+            );
+        };
+
         const BotMascotAvatar = ({ size = "md", isFloating = false }) => {
             const dimClass = size === "lg" ? "w-14 h-14" : size === "sm" ? "w-8 h-8" : "w-10 h-10";
             return (
@@ -656,6 +873,7 @@
             const [loginSignatureDataUrl, setLoginSignatureDataUrl] = useState(() => getValidSessionState()?.user?.dailySignature || '');
             const loginSigCanvasRef = useRef(null);
             const isDrawingSigRef = useRef(false);
+            const loginSigDrawnRef = useRef(false);
 
             const [exportedFilePreview, setExportedFilePreview] = useState(null);
 
@@ -697,6 +915,8 @@
             const [blankInspectorCount, setBlankInspectorCount] = useState(2);
             const [customSelectedSignerIds, setCustomSelectedSignerIds] = useState([]);
             const [showDigitalSignatureImg, setShowDigitalSignatureImg] = useState(true);
+            const [signatureSizeKey, setSignatureSizeKey] = useState('md');
+            const [showSignerPad, setShowSignerPad] = useState(false);
             const [showCustomSignerPickerModal, setShowCustomSignerPickerModal] = useState(false);
             const [showDailyInspectorsModal, setShowDailyInspectorsModal] = useState(false);
 
@@ -811,7 +1031,13 @@
             const [schoolLogoInput, setSchoolLogoInput] = useState('');
             const [zoneMapInput, setZoneMapInput] = useState(''); 
             const [roomMapInput, setRoomMapInput] = useState(''); 
-            const [mainBannerInput, setMainBannerInput] = useState(''); 
+            const [mainBannerInput, setMainBannerInput] = useState('');
+            const [footerDevInput, setFooterDevInput] = useState('');
+            const [footerFbInput, setFooterFbInput] = useState('');
+            const [footerIgInput, setFooterIgInput] = useState('');
+            const [footerTtInput, setFooterTtInput] = useState('');
+            const [footerWebInput, setFooterWebInput] = useState('');
+            const [footerCopyInput, setFooterCopyInput] = useState(''); 
             const [popupBannerInput, setPopupBannerInput] = useState(''); 
             const [announceBannerInput, setAnnounceBannerInput] = useState(''); 
             const [announcementTitleInput, setAnnouncementTitleInput] = useState('');
@@ -887,13 +1113,13 @@
                     setRoomMapInput(settings.room_map_url || ''); 
                     setMainBannerInput(settings.main_banner_url || '');
                     setPopupBannerInput(settings.popup_banner_url || '');
-                    setAnnounceBannerInput(settings.announce_banner_url || settings.banner_url || '');
+                    setAnnounceBannerInput((settings.announce_banner_url ?? settings.banner_url) || '');
                     setAnnouncementTitleInput(settings.announcement_title || '');
                     setAnnouncementInput(settings.announcement_msg || '');
                     setVisMainBanner(settings.visibility_main_banner || 'public');
                     setVisPopupBanner(settings.visibility_popup_banner || 'public');
                     setVisAnnounceBanner(settings.visibility_announce_banner || 'public');
-                    setAdminAvatarInput(settings.admin_avatar_url || ADMIN_AVATAR_URL);
+                    setAdminAvatarInput(settings.admin_avatar_url ?? ADMIN_AVATAR_URL);
                     setAdminNameInput(settings.admin_name || 'นายภูธนากร หงษ์ทอง (พี่ภีม)');
                     setAdminRoleInput(settings.admin_role || 'เลขานุการสภานักเรียนโรงเรียนคำม่วง');
                     setAdminLineInput(settings.admin_line_url || 'https://line.me/ti/p/~470aijh');
@@ -901,6 +1127,12 @@
                     setAppVersionInput((settings.app_version ?? 'V3.0').trim());
                     setGeminiApiKeyInput(settings.gemini_api_key || DEFAULT_GEMINI_KEY);
                     setAiBotNameInput((settings.ai_bot_name || 'น้องสภาฯ').trim() || 'น้องสภาฯ');
+                setFooterDevInput(settings.footer_dev_name ?? initialSettings.footer_dev_name);
+                setFooterFbInput(settings.footer_facebook_url ?? '');
+                setFooterIgInput(settings.footer_instagram_url ?? '');
+                setFooterTtInput(settings.footer_tiktok_url ?? '');
+                setFooterWebInput(settings.footer_website_url ?? '');
+                setFooterCopyInput(settings.footer_copyright ?? initialSettings.footer_copyright);
                     setSysPasscode(settings.passcode || '1234');
                     setSysMasterPasscode(settings.master_passcode || '9999');
 
@@ -1692,6 +1924,7 @@ ${roomSummaryLines}`;
                         setCoInspectors([]);
                         setShowCoInspectorPicker(false);
                         setCoInspectorSearch('');
+                        loginSigDrawnRef.current = false;
                         setLoginSignatureDataUrl('');
                         return 0; 
                     }
@@ -1721,6 +1954,7 @@ ${roomSummaryLines}`;
                 const canvas = loginSigCanvasRef.current;
                 if (!canvas) return;
                 isDrawingSigRef.current = true;
+                    loginSigDrawnRef.current = true;
                 const ctx = canvas.getContext('2d');
                 ctx.strokeStyle = '#0f172a';
                 ctx.lineWidth = 2.6;
@@ -1747,7 +1981,7 @@ ${roomSummaryLines}`;
                 isDrawingSigRef.current = false;
                 const canvas = loginSigCanvasRef.current;
                 if (!canvas) return;
-                setLoginSignatureDataUrl(canvas.toDataURL('image/png'));
+                setLoginSignatureDataUrl(cropCanvasToDataUrl(canvas));
             };
 
             const clearLoginSigPad = () => {
@@ -1756,7 +1990,8 @@ ${roomSummaryLines}`;
                     const ctx = canvas.getContext('2d');
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
                 }
-                setLoginSignatureDataUrl('');
+                loginSigDrawnRef.current = false;
+                        setLoginSignatureDataUrl('');
             };
 
             const toggleCoInspector = (name) => {
@@ -1775,7 +2010,7 @@ ${roomSummaryLines}`;
                 const validInspectors = Array.isArray(inspectors) ? inspectors : [];
                 const found = validInspectors.find(u => String(u.name).trim() === cleanName);
                 if (found && found.avatar_url) return found.avatar_url;
-                if (appMode === 'admin' && currentUser?.name === cleanName) return settings?.admin_avatar_url || ADMIN_AVATAR_URL;
+                if (appMode === 'admin' && currentUser?.name === cleanName) return (settings?.admin_avatar_url ?? ADMIN_AVATAR_URL) || settings?.app_logo_url || HARDCODED_LOGO;
                 return settings?.app_logo_url || HARDCODED_LOGO;
             };
 
@@ -1872,6 +2107,7 @@ ${roomSummaryLines}`;
                     setLoginError('');
                     const existingSigToday = getSavedTodaySignatureForUser(finalName);
                     if (existingSigToday) {
+                        loginSigDrawnRef.current = false;
                         setLoginSignatureDataUrl(existingSigToday);
                     }
                     setLoginStep(2);
@@ -1938,7 +2174,7 @@ ${roomSummaryLines}`;
                     }
                     
                     if (json && json.status === 'Success') {
-                        const incomingSettings = json.settings ? { ...initialSettings, ...json.settings } : initialSettings;
+                        const incomingSettings = json.settings ? { ...initialSettings, ...normalizeSettingsFromServer(json.settings) } : initialSettings;
                         const rawInspectors = Array.isArray(json.inspectors) ? json.inspectors : [];
                         const loadedInspectors = rawInspectors.map(u => ({
                             ...u,
@@ -2945,13 +3181,20 @@ ${roomSummaryLines}`;
                     { key: 'admin_role', val: adminRoleInput },
                     { key: 'admin_line_url', val: adminLineInput },
                     { key: 'gemini_api_key', val: geminiApiKeyInput.trim() },
-                    { key: 'ai_bot_name', val: aiBotNameInput.trim() || 'น้องสภาฯ' }
+                    { key: 'ai_bot_name', val: aiBotNameInput.trim() || 'น้องสภาฯ' },
+ { key: 'footer_dev_name', val: footerDevInput.trim() },
+ { key: 'footer_facebook_url', val: footerFbInput.trim() },
+ { key: 'footer_instagram_url', val: footerIgInput.trim() },
+ { key: 'footer_tiktok_url', val: footerTtInput.trim() },
+ { key: 'footer_website_url', val: footerWebInput.trim() },
+ { key: 'footer_copyright', val: footerCopyInput.trim() }
                 ];
-                const newSettings = { ...settings };
+                if (!String(announceBannerInput || '').trim()) updates.push({ key: 'banner_url', val: '' });
+ const newSettings = { ...settings };
                 updates.forEach(u => { newSettings[u.key] = u.val; });
                 setSettings(newSettings);
                 try {
-                    await syncToGASAsync('updateMultipleSettings', updates);
+                    await syncToGASAsync('updateMultipleSettings', updates.map(u => ({ key: u.key, val: (u.val === '' || u.val === null || u.val === undefined) ? EMPTY_SETTING_SENTINEL : u.val })));
                     showToast('บันทึกข้อมูลรูปภาพ ประกาศ และเลขเวอร์ชันสำเร็จ!', 'success');
                 } catch (e) {
                     showToast('บันทึกลงเครื่องแล้ว (แต่ซิงค์ออนไลน์ไม่สำเร็จ)', 'warning');
@@ -4311,6 +4554,9 @@ ${roomSummaryLines}`;
                 const maxPerRowPct = totalSigners >= 4 ? '23%' : '30%';
                 const dotLineText = isCompact ? 'ลงชื่อ..............................................' : 'ลงชื่อ........................................................';
                 const blankParenText = isCompact ? '(..............................................)' : '(........................................................)';
+            const sigF = { sm: 1, md: 1.5, lg: 2 }[signatureSizeKey] || 1.5;
+            const sigImgH = Math.round((isCompact ? 44 : 52) * sigF);
+            const sigBoxH = sigImgH + 6;
 
                 return (
                     <div style={{
@@ -4345,19 +4591,19 @@ ${roomSummaryLines}`;
                                     <div style={{
                                         position: 'relative',
                                         width: '100%',
-                                        height: isCompact ? '46px' : '54px',
+                                        height: `${sigBoxH}px`,
                                         display: 'flex',
                                         alignItems: 'flex-end',
                                         justifyContent: 'center',
                                         marginBottom: '4px'
                                     }}>
                                         {showDigitalSignatureImg && signer.signatureUrl && (
-                                            <img 
+                                            <SigImg 
                                                 src={signer.signatureUrl} 
                                                 crossOrigin="anonymous"
                                                 style={{
-                                                    maxHeight: isCompact ? '44px' : '52px',
-                                                    maxWidth: isCompact ? '145px' : '170px',
+                                                    height: `${sigImgH}px`,
+ maxWidth: '100%',
                                                     objectFit: 'contain',
                                                     position: 'absolute',
                                                     bottom: '4px',
@@ -4590,7 +4836,7 @@ ${roomSummaryLines}`;
                         <div className="flex items-center gap-2 shrink-0">
                             <button onClick={()=>setShowAnnouncement(true)} className="w-9 h-9 rounded-full bg-red-50 text-[#C8102E] hover:bg-red-100 flex items-center justify-center transition-colors shadow-sm" title="ประกาศสภาฯ"><i className="ph ph-megaphone text-lg"></i></button>
                             <button onClick={handleSync} className="w-9 h-9 rounded-full bg-gray-50 border border-gray-200 text-gray-500 hover:bg-gray-100 flex items-center justify-center transition-colors shadow-sm" title="ซิงค์ข้อมูล"><i className={`ph ph-arrows-clockwise text-lg ${isSyncing ? "animate-spin text-[#C8102E]" : ""}`}></i></button>
-                            <button onClick={()=>setShowInfoModal(true)} className="w-9 h-9 rounded-full bg-gray-50 text-gray-500 border border-gray-200 hover:bg-gray-100 flex items-center justify-center transition-colors shadow-sm" title="ช่วยเหลือ"><i className="ph ph-question text-lg"></i></button>
+                            {appMode !== 'admin' && (<button onClick={()=>setShowInfoModal(true)} className="w-9 h-9 rounded-full bg-gray-50 text-gray-500 border border-gray-200 hover:bg-gray-100 flex items-center justify-center transition-colors shadow-sm" title="ช่วยเหลือ"><i className="ph ph-question text-lg"></i></button>)}
                             {appMode !== 'guest' && (
                                 <button onClick={() => showConfirm('ต้องการออกจากระบบใช่หรือไม่?', () => { safeSessionRemove('zc26_active_session'); setAppMode('guest'); setInputPasscode(''); setCurrentUser(null); setCurrentRoute('dashboard'); setCoInspectors([]); })} className="w-9 h-9 rounded-full bg-gray-900 text-white hover:bg-black flex items-center justify-center transition-colors shadow-sm" title="ออกจากระบบ"><i className="ph ph-sign-out text-lg"></i></button>
                             )}
@@ -4619,7 +4865,7 @@ ${roomSummaryLines}`;
                             <div className="flex items-center gap-1.5 flex-shrink-0">
                                 {appMode !== 'guest' && (<button onClick={() => setShowAnnouncement(true)} className="w-8 h-8 flex items-center justify-center rounded-full bg-red-50 text-[#C8102E] border border-red-100 shadow-sm active:scale-95 transition-colors" title="ประกาศ"><i className="ph ph-megaphone text-base"></i></button>)}
                                 <button onClick={handleSync} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-50 text-gray-500 border border-gray-200 shadow-sm active:scale-95 transition-colors hover:text-[#C8102E]" title="ซิงค์ข้อมูล"><i className={`ph ph-arrows-clockwise text-base ${isSyncing ? "animate-spin text-[#C8102E]" : ""}`}></i></button>
-                                <button onClick={() => setShowInfoModal(true)} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-50 text-gray-500 border border-gray-200 shadow-sm active:scale-95 transition-colors" title="ช่วยเหลือ"><i className="ph ph-question text-base"></i></button>
+                                {appMode === 'guest' && (<button onClick={() => setShowInfoModal(true)} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-50 text-gray-500 border border-gray-200 shadow-sm active:scale-95 transition-colors" title="ช่วยเหลือ"><i className="ph ph-question text-base"></i></button>)}
                                 {appMode !== 'guest' && (
                                     <button onClick={() => { showConfirm('ต้องการออกจากระบบใช่หรือไม่?', () => { safeSessionRemove('zc26_active_session'); setAppMode('guest'); setInputPasscode(''); setCurrentUser(null); setCurrentRoute('dashboard'); setCoInspectors([]); }); }} className="px-2.5 h-8 flex items-center justify-center gap-1 rounded-full bg-gray-900 text-white shadow-sm active:scale-95 transition-colors hover:bg-black text-[11px] font-bold" title="ออกจากระบบ">
                                         <i className="ph ph-sign-out text-sm"></i>
@@ -4829,6 +5075,13 @@ ${roomSummaryLines}`;
                                                 {activeSignatureMode === 'custom' && (
                                                     <button onClick={() => setShowCustomSignerPickerModal(true)} className="px-2 py-0.5 bg-purple-600 text-white rounded text-[10px] font-bold">เลือก</button>
                                                 )}
+                                    {activeSignatureMode !== 'none' && (
+                                        <select value={signatureSizeKey} onChange={e => setSignatureSizeKey(e.target.value)} title="ขนาดลายเซ็น" className="bg-white border border-purple-200 text-purple-700 rounded px-1.5 py-0.5 text-[11px] font-bold outline-none">
+                                            <option value="sm">ลายเซ็นเล็ก</option>
+                                            <option value="md">ลายเซ็นกลาง</option>
+                                            <option value="lg">ลายเซ็นใหญ่</option>
+                                        </select>
+                                    )}
                                             </div>
                                             <select value={exportDestination} onChange={e => setExportDestination(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-lg p-2 text-xs font-bold text-gray-600 outline-none hidden md:block">
                                                 <option value="local">โหลดลงเครื่อง</option><option value="drive">บันทึกลง Drive</option>
@@ -5031,6 +5284,13 @@ ${roomSummaryLines}`;
                                                         {activeSignatureMode === 'custom' && (
                                                             <button onClick={() => setShowCustomSignerPickerModal(true)} className="px-2 py-0.5 bg-purple-600 text-white rounded text-[10px] font-bold">เลือก</button>
                                                         )}
+                                    {activeSignatureMode !== 'none' && (
+                                        <select value={signatureSizeKey} onChange={e => setSignatureSizeKey(e.target.value)} title="ขนาดลายเซ็น" className="bg-white border border-purple-200 text-purple-700 rounded px-1.5 py-0.5 text-[11px] font-bold outline-none">
+                                            <option value="sm">ลายเซ็นเล็ก</option>
+                                            <option value="md">ลายเซ็นกลาง</option>
+                                            <option value="lg">ลายเซ็นใหญ่</option>
+                                        </select>
+                                    )}
                                                     </div>
                                                     <select value={exportDestination} onChange={e => setExportDestination(e.target.value)} className="bg-gray-50 border border-gray-200 rounded-lg p-2 text-xs font-bold text-gray-600 outline-none hidden md:block">
                                                         <option value="local">โหลดลงเครื่อง</option><option value="drive">บันทึกลง Drive</option>
@@ -5294,7 +5554,7 @@ ${roomSummaryLines}`;
                                          <div className="col-span-full border border-gray-200 p-3.5 rounded-xl bg-white space-y-3">
                                             <div className="flex items-center justify-between">
                                                 <label className="text-xs font-bold text-gray-700 flex items-center gap-1.5"><i className="ph ph-identification-card text-[#C8102E] text-base"></i> ตั้งค่ารูปโปรไฟล์แอดมินและนามบัตรศูนย์ช่วยเหลือ</label>
-                                                <img src={adminAvatarInput || ADMIN_AVATAR_URL} alt="Admin Preview" className="w-10 h-10 rounded-full object-cover border-2 border-[#C8102E] shadow-sm" onError={(e)=>{e.target.src=HARDCODED_LOGO}} />
+                                                <img src={adminAvatarInput || settings?.app_logo_url || HARDCODED_LOGO} alt="Admin Preview" className="w-10 h-10 rounded-full object-cover border-2 border-[#C8102E] shadow-sm" onError={(e)=>{e.target.src=HARDCODED_LOGO}} />
                                             </div>
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                                                 <div>
@@ -5315,7 +5575,37 @@ ${roomSummaryLines}`;
                                                 </div>
                                             </div>
                                          </div>
-                                         <div className="col-span-full border border-gray-200 p-3 rounded-xl bg-white space-y-2">
+                                         <div className="col-span-full border border-gray-200 p-3.5 rounded-xl bg-white space-y-3">
+                                <label className="text-xs font-bold text-gray-700 flex items-center gap-1.5"><i className="ph ph-link text-[#C8102E] text-base"></i> ตั้งค่าส่วนท้ายแอป (พัฒนาโดย / ลิงก์ติดตาม)</label>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                    <div className="sm:col-span-2">
+                                        <label className="text-[10px] font-bold text-gray-400 mb-1 block">พัฒนาโดย</label>
+                                        <input type="text" value={footerDevInput} onChange={e => setFooterDevInput(e.target.value)} placeholder="เช่น คณะกรรมการสภานักเรียน โรงเรียนคำม่วง" className="w-full p-2.5 rounded-lg border border-gray-200 text-xs font-bold outline-none focus:border-[#C8102E]" />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-bold text-gray-400 mb-1 block">ลิงก์ Facebook</label>
+                                        <input type="text" value={footerFbInput} onChange={e => setFooterFbInput(e.target.value)} placeholder="https://facebook.com/..." className="w-full p-2.5 rounded-lg border border-gray-200 text-xs font-medium outline-none focus:border-[#C8102E]" />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-bold text-gray-400 mb-1 block">ลิงก์ Instagram</label>
+                                        <input type="text" value={footerIgInput} onChange={e => setFooterIgInput(e.target.value)} placeholder="https://instagram.com/..." className="w-full p-2.5 rounded-lg border border-gray-200 text-xs font-medium outline-none focus:border-[#C8102E]" />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-bold text-gray-400 mb-1 block">ลิงก์ TikTok</label>
+                                        <input type="text" value={footerTtInput} onChange={e => setFooterTtInput(e.target.value)} placeholder="https://tiktok.com/@..." className="w-full p-2.5 rounded-lg border border-gray-200 text-xs font-medium outline-none focus:border-[#C8102E]" />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-bold text-gray-400 mb-1 block">ลิงก์เว็บไซต์</label>
+                                        <input type="text" value={footerWebInput} onChange={e => setFooterWebInput(e.target.value)} placeholder="https://..." className="w-full p-2.5 rounded-lg border border-gray-200 text-xs font-medium outline-none focus:border-[#C8102E]" />
+                                    </div>
+                                    <div className="sm:col-span-2">
+                                        <label className="text-[10px] font-bold text-gray-400 mb-1 block">ข้อความลิขสิทธิ์ (บรรทัดล่างสุด)</label>
+                                        <input type="text" value={footerCopyInput} onChange={e => setFooterCopyInput(e.target.value)} placeholder="© ..." className="w-full p-2.5 rounded-lg border border-gray-200 text-xs font-medium outline-none focus:border-[#C8102E]" />
+                                    </div>
+                                </div>
+                                <p className="text-[10px] font-medium text-gray-400">เว้นช่องลิงก์ว่าง = ไม่แสดงปุ่มนั้น · กด "บันทึกข้อมูลรูปภาพและประกาศ" ด้านล่างเพื่อบันทึก</p>
+                            </div>
+                            <div className="col-span-full border border-gray-200 p-3 rounded-xl bg-white space-y-2">
                                             <label className="text-[10px] font-bold text-gray-500 block uppercase">ข้อความประกาศสภานักเรียน</label>
                                             <input type="text" value={announcementTitleInput} onChange={e=>setAnnouncementTitleInput(e.target.value)} placeholder="หัวข้อประกาศ..." className="w-full p-2.5 rounded-lg border border-gray-200 text-xs font-bold outline-none focus:border-[#C8102E]" />
                                             <textarea value={announcementInput} onChange={e=>setAnnouncementInput(e.target.value)} rows="3" placeholder="รายละเอียดประกาศ..." className="w-full p-2.5 rounded-lg border border-gray-200 text-xs font-medium outline-none focus:border-[#C8102E]"></textarea>
@@ -5450,7 +5740,18 @@ ${roomSummaryLines}`;
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                                 <input type="text" value={newSignerName} onChange={e => setNewSignerName(e.target.value)} placeholder="ชื่อ-นามสกุล (เว้นว่างได้ถ้าไม่ระบุชื่อ)" className="p-2.5 rounded-xl border border-gray-200 bg-white text-xs font-bold outline-none focus:border-purple-500" />
                                                 <input type="text" value={newSignerRole} onChange={e => setNewSignerRole(e.target.value)} placeholder="ตำแหน่ง (เช่น ผู้ตรวจ 1 / ผู้แทนสภานักเรียน)" className="p-2.5 rounded-xl border border-gray-200 bg-white text-xs font-medium outline-none focus:border-purple-500" />
-                                                <input type="text" value={newSignerImgUrl} onChange={e => setNewSignerImgUrl(e.target.value)} placeholder="ลิงก์รูปลายเซ็นพื้นหลังใส URL (ถ้ามี - ไม่ใส่ก็ได้)" className="sm:col-span-2 p-2.5 rounded-xl border border-gray-200 bg-white text-xs font-medium outline-none focus:border-purple-500" />
+                                                <div className="sm:col-span-2 space-y-2">
+                                <input type="text" value={String(newSignerImgUrl).startsWith('data:') ? '' : newSignerImgUrl} onChange={e => setNewSignerImgUrl(e.target.value)} placeholder="ลิงก์รูปลายเซ็นพื้นหลังใส URL (ถ้ามี - หรือกดเซ็นในแอปด้านล่าง)" className="w-full p-2.5 rounded-xl border border-gray-200 bg-white text-xs font-medium outline-none focus:border-purple-500" />
+                                <div className="flex items-center gap-2">
+                                    <button type="button" onClick={() => setShowSignerPad(true)} className="px-3 py-2 rounded-xl bg-purple-100 text-purple-700 font-bold text-xs flex items-center gap-1.5 shrink-0"><i className="ph ph-pencil-simple-line"></i> {String(newSignerImgUrl).startsWith('data:') ? 'เซ็นใหม่' : 'เซ็นในแอป'}</button>
+                                    {newSignerImgUrl && (
+                                        <div className="flex-1 min-w-0 h-14 bg-white border border-gray-200 rounded-xl px-2 flex items-center justify-between gap-2">
+                                            <SigImg src={newSignerImgUrl} className="h-10 max-w-[70%] object-contain" />
+                                            <button type="button" onClick={() => setNewSignerImgUrl('')} className="text-[10px] font-bold text-red-400 shrink-0">ล้าง</button>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
                                             </div>
                                             <div className="flex gap-2">
                                                 {editingSignerId && (
@@ -5468,7 +5769,7 @@ ${roomSummaryLines}`;
                                                     <div key={s.id} className="py-2 px-2 flex items-center justify-between gap-2 text-xs">
                                                         <div className="min-w-0">
                                                             <div className="font-bold text-gray-800 truncate">{s.name || '(เว้นชื่อว่าง - เซ็นสด)'}</div>
-                                                            <div className="text-[10px] text-gray-500 truncate">{s.role || 'ไม่ได้ระบุตำแหน่ง'} {s.signatureUrl ? '• มีรูปลายเซ็น' : '• เซ็นสด'}</div>
+                                                            <div className="text-[10px] text-gray-500 truncate">{s.role || 'ไม่ได้ระบุตำแหน่ง'} {s.signatureUrl ? (String(s.signatureUrl).startsWith('data:image/svg') ? '• เซ็นในแอป' : '• มีรูปลายเซ็น') : '• เซ็นสด'}</div>
                                                         </div>
                                                         <div className="flex items-center gap-1 shrink-0">
                                                             <button onClick={() => { setEditingSignerId(s.id); setNewSignerName(s.name || ''); setNewSignerRole(s.role || ''); setNewSignerImgUrl(s.signatureUrl || ''); }} className="px-2 py-1 rounded-lg bg-blue-50 text-blue-600 font-bold text-[10px]">แก้ไข</button>
@@ -5591,7 +5892,8 @@ ${roomSummaryLines}`;
                                 </div>
                              </div>
                         )}
-                    </main>
+                    <AppFooter settings={settings} />
+                </main>
 
                     {}
                     {isLoginModalOpen && (
@@ -5845,7 +6147,7 @@ ${roomSummaryLines}`;
                                                     onTouchEnd={endDrawingLoginSig}
                                                     className="w-full h-full cursor-crosshair block relative z-10"
                                                 />
-                                                {loginSignatureDataUrl && !isDrawingSigRef.current && (
+                                                {loginSignatureDataUrl && !isDrawingSigRef.current && !loginSigDrawnRef.current && (
                                                     <img 
                                                         src={loginSignatureDataUrl} 
                                                         alt="Saved Signature" 
@@ -6033,7 +6335,7 @@ ${roomSummaryLines}`;
                                             {appMode !== 'guest' && viewDetailModal.roomInsp.inspectorSignature && (
                                                 <div className="mt-1.5 bg-white p-2 rounded-xl border border-blue-100 flex items-center justify-between gap-2">
                                                     <span className="text-[10px] font-bold text-gray-400">ลายมือชื่อผู้ตรวจหลัก ({viewDetailModal.roomInsp.mainInspector || String(viewDetailModal.roomInsp.inspector || '').split(',')[0]}):</span>
-                                                    <img src={viewDetailModal.roomInsp.inspectorSignature} className="h-8 object-contain" />
+                                                    <SigImg src={viewDetailModal.roomInsp.inspectorSignature} className="h-14 max-w-[180px] object-contain" />
                                                 </div>
                                             )}
                                             {viewDetailModal.roomInsp.photoUrl && (
@@ -6056,7 +6358,7 @@ ${roomSummaryLines}`;
                                             {appMode !== 'guest' && viewDetailModal.zoneInsp.inspectorSignature && (
                                                 <div className="mt-1.5 bg-white p-2 rounded-xl border border-fuchsia-100 flex items-center justify-between gap-2">
                                                     <span className="text-[10px] font-bold text-gray-400">ลายมือชื่อผู้ตรวจหลัก ({viewDetailModal.zoneInsp.mainInspector || String(viewDetailModal.zoneInsp.inspector || '').split(',')[0]}):</span>
-                                                    <img src={viewDetailModal.zoneInsp.inspectorSignature} className="h-8 object-contain" />
+                                                    <SigImg src={viewDetailModal.zoneInsp.inspectorSignature} className="h-14 max-w-[180px] object-contain" />
                                                 </div>
                                             )}
                                             {viewDetailModal.zoneInsp.photoUrl && (
@@ -6388,7 +6690,7 @@ ${roomSummaryLines}`;
                                                 </div>
                                                 {team.signatureUrl ? (
                                                     <div className="bg-gray-50 border border-dashed border-gray-300 rounded-xl px-3 py-1.5 flex flex-col items-center shrink-0">
-                                                        <img src={team.signatureUrl} className="h-9 max-w-[110px] object-contain" />
+                                                        <SigImg src={team.signatureUrl} className="h-12 max-w-[150px] object-contain" />
                                                         <span className="text-[8px] font-bold text-gray-400 mt-0.5">ลายมือชื่อยืนยันตัวตน</span>
                                                     </div>
                                                 ) : (
@@ -7574,8 +7876,8 @@ ${roomSummaryLines}`;
                             <div className="bg-white rounded-[2rem] w-full max-w-md p-6 shadow-2xl relative" onClick={e => e.stopPropagation()}>
                                 <button onClick={() => setShowAnnouncement(false)} className="absolute top-4 right-4 w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center"><i className="ph ph-x"></i></button>
                                 <div className="flex items-center gap-2 text-[#C8102E] font-black text-base mb-3"><i className="ph ph-megaphone text-xl"></i> ประกาศสภานักเรียน</div>
-                                {(settings?.announce_banner_url || settings?.banner_url) && (
-                                    <img src={settings.announce_banner_url || settings.banner_url} className="w-full rounded-xl mb-3 object-cover max-h-56" />
+                                {(settings?.announce_banner_url ?? settings?.banner_url) && (
+                                    <img src={settings.announce_banner_url ?? settings.banner_url} className="w-full rounded-xl mb-3 object-cover max-h-56" />
                                 )}
                                 <h4 className="font-bold text-gray-800 text-sm mb-1">{settings?.announcement_title || 'ประกาศแจ้งเตือน'}</h4>
                                 <p className="text-xs text-gray-600 whitespace-pre-line leading-relaxed">{settings?.announcement_msg || 'ยังไม่มีประกาศใหม่ในขณะนี้'}</p>
@@ -7619,7 +7921,7 @@ ${roomSummaryLines}`;
                                 <div className="bg-gradient-to-br from-white to-red-50/30 border border-gray-200/80 rounded-2xl p-4 mb-4 flex items-center gap-4 shadow-sm">
                                     <div className="relative shrink-0">
                                         <img 
-                                            src={settings?.admin_avatar_url || ADMIN_AVATAR_URL} 
+                                            src={(settings?.admin_avatar_url ?? ADMIN_AVATAR_URL) || settings?.app_logo_url || HARDCODED_LOGO} 
                                             className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover border-2 border-[#C8102E] shadow-sm bg-white" 
                                             onError={(e)=>{e.target.src=HARDCODED_LOGO}} 
                                         />
@@ -7655,6 +7957,7 @@ ${roomSummaryLines}`;
                     )}
 
                     {}
+                    {showSignerPad && <SignaturePadModal title="เซ็นลายเซ็นผู้ลงนาม" onSave={(url) => { setNewSignerImgUrl(url); setShowSignerPad(false); }} onClose={() => setShowSignerPad(false)} />}
                     {trendRoom && <RoomTrendModal room={trendRoom} inspections={inspections} onClose={() => setTrendRoom(null)} />}
                     {!isAiChatOpen && (
                         <button
@@ -7805,11 +8108,11 @@ ${roomSummaryLines}`;
                             )}
 
                             {(appMode === 'admin' || appMode === 'inspector') && (
-                                <button onClick={() => setCurrentRoute('inspect')} className="flex flex-col items-center justify-center flex-1 py-1">
+                                <button onClick={() => setCurrentRoute('inspect')} aria-label="ประเมิน" title="ประเมิน" className="flex flex-col items-center justify-center flex-1 py-1">
                                     <div className={`-mt-6 w-14 h-14 rounded-full flex items-center justify-center bg-[#C8102E] text-white ring-4 transition-all shadow-[0_4px_0_#9f0d25,0_10px_18px_rgba(200,16,46,0.4)] active:translate-y-[3px] active:shadow-[0_1px_0_#9f0d25,0_3px_6px_rgba(200,16,46,0.3)] ${currentRoute === 'inspect' ? 'ring-red-100' : 'ring-white'}`}>
                                         <i className="ph ph-clipboard-text ph-fill text-[26px]"></i>
                                     </div>
-                                    <span className={`text-[10px] font-bold mt-0.5 ${currentRoute === 'inspect' ? 'text-[#C8102E]' : 'text-gray-600'}`}>ประเมิน</span>
+                                    <span aria-hidden="true" className="text-[10px] font-bold mt-0.5 invisible">.</span>
                                 </button>
                             )}
 
