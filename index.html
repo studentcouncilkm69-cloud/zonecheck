@@ -787,14 +787,27 @@
             return '';
         };
 
+        const FooterSocialIcon = ({ kind }) => {
+            if (kind === 'fb') return <span className="text-white font-black text-[24px] leading-none" style={{ fontFamily: 'Arial, Helvetica, sans-serif', marginBottom: '-2px' }}>f</span>;
+            if (kind === 'ig') return (
+                <svg viewBox="0 0 24 24" className="w-[22px] h-[22px]" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="5.5" />
+                    <circle cx="12" cy="12" r="4.2" />
+                    <circle cx="17.3" cy="6.7" r="0.7" fill="#fff" />
+                </svg>
+            );
+            if (kind === 'tt') return <i className="ph-fill ph-tiktok-logo text-white text-[22px]"></i>;
+            return <i className="ph ph-globe text-white text-[23px]"></i>;
+        };
+
         const AppFooter = ({ settings }) => {
             const dev = String(settings?.footer_dev_name ?? '').trim();
             const copy = String(settings?.footer_copyright ?? '').trim();
             const links = [
-                { key: 'fb', url: safeExternalUrl(settings?.footer_facebook_url), icon: 'ph-facebook-logo', label: 'Facebook', cls: 'bg-blue-50 text-[#1877F2]' },
-                { key: 'ig', url: safeExternalUrl(settings?.footer_instagram_url), icon: 'ph-instagram-logo', label: 'Instagram', cls: 'bg-pink-50 text-[#E1306C]' },
-                { key: 'tt', url: safeExternalUrl(settings?.footer_tiktok_url), icon: 'ph-tiktok-logo', label: 'TikTok', cls: 'bg-gray-100 text-gray-900' },
-                { key: 'web', url: safeExternalUrl(settings?.footer_website_url), icon: 'ph-globe', label: 'เว็บไซต์', cls: 'bg-red-50 text-[#C8102E]' }
+                { key: 'fb', url: safeExternalUrl(settings?.footer_facebook_url), label: 'Facebook', bg: '#1877F2' },
+                { key: 'ig', url: safeExternalUrl(settings?.footer_instagram_url), label: 'Instagram', bg: 'linear-gradient(45deg,#FEDA75 0%,#FA7E1E 25%,#D62976 55%,#962FBF 80%,#4F5BD5 100%)' },
+                { key: 'tt', url: safeExternalUrl(settings?.footer_tiktok_url), label: 'TikTok', bg: '#111827' },
+                { key: 'web', url: safeExternalUrl(settings?.footer_website_url), label: 'เว็บไซต์', bg: '#C8102E' }
             ].filter(l => l.url);
             if (!dev && links.length === 0 && !copy) return null;
             return (
@@ -808,10 +821,10 @@
                                 </div>
                             )}
                             {links.length > 0 && (
-                                <div className="flex flex-wrap items-center gap-2">
+                                <div className="flex flex-wrap items-center gap-2.5">
                                     {links.map(l => (
-                                        <a key={l.key} href={l.url} target="_blank" rel="noopener noreferrer" aria-label={l.label} title={l.label} className={`w-10 h-10 rounded-full flex items-center justify-center active:scale-95 transition-transform ${l.cls}`}>
-                                            <i className={`ph-fill ${l.icon} text-xl`}></i>
+                                        <a key={l.key} href={l.url} target="_blank" rel="noopener noreferrer" aria-label={l.label} title={l.label} className="w-10 h-10 rounded-2xl flex items-center justify-center shadow-sm active:scale-95 transition-transform" style={{ background: l.bg }}>
+                                            <FooterSocialIcon kind={l.key} />
                                         </a>
                                     ))}
                                 </div>
