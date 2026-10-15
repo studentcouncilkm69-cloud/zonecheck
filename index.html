@@ -4573,9 +4573,7 @@ ${roomSummaryLines}`;
                 const blankParenText = isCompact ? '(..............................................)' : '(........................................................)';
             const sigF = { sm: 1, md: 1.5, lg: 2 }[signatureSizeKey] || 1.5;
             const sigImgH = Math.round((isCompact ? 44 : 52) * sigF);
-            const sigLift = isCompact ? 11 : 13; // ยกลายเซ็นให้อยู่เหนือเส้นประ ไม่ทับเส้น
-            const sigBoxH = sigImgH + sigLift + 4;
-
+            
                 return (
                     <div style={{
                         marginTop: isCompact ? '20px' : '28px',
@@ -4607,12 +4605,12 @@ ${roomSummaryLines}`;
                                     pageBreakInside: 'avoid'
                                 }}>
                                     <div style={{
-                                        position: 'relative',
                                         width: '100%',
-                                        height: `${sigBoxH}px`,
+                                        height: `${sigImgH + 26}px`,
                                         display: 'flex',
-                                        alignItems: 'flex-end',
-                                        justifyContent: 'center',
+                                        flexDirection: 'column',
+                                        alignItems: 'center',
+                                        justifyContent: 'flex-end',
                                         marginBottom: '4px'
                                     }}>
                                         {showDigitalSignatureImg && signer.signatureUrl && (
@@ -4623,8 +4621,8 @@ ${roomSummaryLines}`;
                                                     height: `${sigImgH}px`,
  maxWidth: '100%',
                                                     objectFit: 'contain',
-                                                    position: 'absolute',
-                                                    bottom: `${sigLift}px`,
+                                                    marginBottom: '-3px',
+                                                    position: 'relative',
                                                     zIndex: 2
                                                 }}
                                             />
@@ -4634,6 +4632,7 @@ ${roomSummaryLines}`;
                                             color: '#334155',
                                             fontWeight: '600',
                                             letterSpacing: '0.3px',
+                                            lineHeight: '20px',
                                             position: 'relative',
                                             zIndex: 1,
                                             whiteSpace: 'nowrap'
