@@ -671,35 +671,48 @@
             return <img src={shown} {...rest} />;
         };
 
-        // ลายเซ็นที่ปรับขนาดให้พอดีกับช่องที่กำหนด (รักษาสัดส่วน ย่อ/ขยายให้อยู่ในช่องเสมอ ไม่พึ่ง object-fit)
-        // โหลดรูป -> (ถ้าเป็น PNG ตัดขอบว่าง) -> วัดขนาดจริงของรูปที่จะแสดง -> คำนวณขนาดพิกเซลที่ล็อกไว้ ไม่ให้ล้นช่อง
-        const FitSigImg = ({ src, maxW, maxH, style, ...rest }) => {
+        // ลายเซ็นที่ปรับขนาดให้พอดีกับช่องที่กำหนด (รักษาสัดส่วน ไม่ล้นช่อง)
+        // วาดลงแคนวาสความละเอียด 3 เท่า พร้อมเว้นขอบโปร่งใสรอบด้าน (pad) เพื่อไม่ให้ปลายเส้นถูกตัดตอนส่งออกเป็น PDF/PNG
+        const FitSigImg = ({ src, maxW, maxH, pad = 4, style, ...rest }) => {
             const [info, setInfo] = useState(null);
             useEffect(() => {
                 let alive = true;
                 if (!src) return;
-                const measure = (finalSrc) => {
+                const build = (finalSrc) => {
                     const im = new Image();
+                    if (/^https?:/i.test(finalSrc)) im.crossOrigin = 'anonymous';
                     im.onload = () => {
                         if (!alive) return;
-                        let w = im.naturalWidth, h = im.naturalHeight;
-                        if (!w || !h) { w = maxW; h = maxH; }
-                        const k = Math.min(maxW / w, maxH / h);
-                        setInfo({ src: finalSrc, w: Math.max(1, Math.floor(w * k)), h: Math.max(1, Math.floor(h * k)) });
+                        let nw = im.naturalWidth, nh = im.naturalHeight;
+                        if (!nw || !nh) { nw = maxW; nh = maxH; }
+                        const k = Math.min(maxW / nw, maxH / nh);
+                        const w = Math.max(1, Math.round(nw * k)), h = Math.max(1, Math.round(nh * k));
+                        try {
+                            const S = 3;
+                            const c = document.createElement('canvas');
+                            c.width = (w + pad * 2) * S; c.height = (h + pad * 2) * S;
+                            const ctx = c.getContext('2d');
+                            ctx.imageSmoothingEnabled = true;
+                            ctx.imageSmoothingQuality = 'high';
+                            ctx.drawImage(im, pad * S, pad * S, w * S, h * S);
+                            setInfo({ forSrc: src, src: c.toDataURL('image/png'), w: w + pad * 2, h: h + pad * 2 });
+                        } catch (e) {
+                            setInfo({ forSrc: src, src: finalSrc, w, h });
+                        }
                     };
-                    im.onerror = () => { if (alive) setInfo({ src: finalSrc, w: maxW, h: maxH }); };
+                    im.onerror = () => { if (alive) setInfo({ forSrc: src, src: finalSrc, w: maxW, h: maxH }); };
                     im.src = finalSrc;
                 };
                 if (typeof src === 'string' && src.startsWith('data:image/png')) {
-                    trimSignaturePng(src).then(measure);
+                    trimSignaturePng(src).then(build);
                 } else {
-                    measure(src);
+                    build(src);
                 }
                 return () => { alive = false; };
-            }, [src, maxW, maxH]);
-            // ยังวัดขนาดไม่เสร็จ (หรือวัดไม่ได้): แสดงรูปจริงทันที โดยจำกัดด้วย max-width/max-height ให้ไม่ล้นช่อง
-            if (!info) return <img src={src} style={{ display: 'block', flex: 'none', width: 'auto', height: 'auto', maxWidth: `${maxW}px`, maxHeight: `${maxH}px`, ...style }} {...rest} />;
-            return <img src={info.src} style={{ display: 'block', flex: 'none', width: `${info.w}px`, height: `${info.h}px`, maxWidth: `${maxW}px`, maxHeight: `${maxH}px`, ...style }} {...rest} />;
+            }, [src, maxW, maxH, pad]);
+            // ยังประมวลผลไม่เสร็จ: แสดงรูปจริงไปก่อน โดยจำกัดขนาดไม่ให้ล้นช่อง
+            if (!info || info.forSrc !== src) return <img src={src} style={{ display: 'block', flex: 'none', width: 'auto', height: 'auto', maxWidth: `${maxW}px`, maxHeight: `${maxH}px`, ...style }} {...rest} />;
+            return <img src={info.src} style={{ display: 'block', flex: 'none', width: `${info.w}px`, height: `${info.h}px`, ...style }} {...rest} />;
         };
 
         // แปลงเส้นลายเซ็นเป็น SVG (เวกเตอร์) ขยายกี่เท่าก็คม ข้อมูลเล็กกว่า PNG
@@ -4600,9 +4613,9 @@ ${roomSummaryLines}`;
                 // กว้างคงที่เป็นพิกเซล (หน้ากระดาษส่งออกกว้างคงที่ 1123px) ลายเซ็นจะถูกจำกัดให้อยู่ในคอลัมน์เสมอ
                 const colW = totalSigners >= 7 ? 215 : (totalSigners >= 4 ? 225 : 285);
                 const colGap = isCompact ? 22 : 30;
-                const sigPad = 14;
+                const sigPad = 30;
                 const sigMaxW = colW - sigPad * 2;
-                const sigMaxH = isCompact ? 54 : 68;
+                const sigMaxH = isCompact ? 46 : 58;
                 const blankParenText = '(..............................................)';
 
                 return (
@@ -4642,15 +4655,17 @@ ${roomSummaryLines}`;
                                     {/* พื้นที่วางลายเซ็น: สูงคงที่ + กว้างเต็มคอลัมน์ ลายเซ็นอยู่กึ่งกลาง ชิดเส้นจุดด้านล่าง */}
                                     <div style={{
                                         width: '100%',
-                                        height: `${sigMaxH + 6}px`,
+                                        height: `${sigMaxH + 8}px`,
                                         padding: `0 ${sigPad}px`,
                                         boxSizing: 'border-box',
                                         display: 'flex',
                                         alignItems: 'flex-end',
                                         justifyContent: 'center',
-                                        marginBottom: '-5px',
+                                        marginBottom: '-22px',
                                         position: 'relative',
-                                        zIndex: 2
+                                        zIndex: 5,
+                                        overflow: 'visible',
+                                        pointerEvents: 'none'
                                     }}>
                                         {showDigitalSignatureImg && signer.signatureUrl && (
                                             <FitSigImg
