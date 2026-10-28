@@ -677,7 +677,6 @@
             const [info, setInfo] = useState(null);
             useEffect(() => {
                 let alive = true;
-                setInfo(null);
                 if (!src) return;
                 const measure = (finalSrc) => {
                     const im = new Image();
@@ -698,9 +697,9 @@
                 }
                 return () => { alive = false; };
             }, [src, maxW, maxH]);
-            // ระหว่างรอโหลด: จองพื้นที่ไว้เท่ากรอบสูงสุด (ซ่อนรูป) ไม่ให้เลย์เอาต์ขยับ
-            if (!info) return <div style={{ width: `${maxW}px`, height: `${maxH}px`, ...style }} />;
-            return <img src={info.src} width={info.w} height={info.h} style={{ display: 'block', flex: 'none', width: `${info.w}px`, height: `${info.h}px`, maxWidth: 'none', ...style }} {...rest} />;
+            // ยังวัดขนาดไม่เสร็จ (หรือวัดไม่ได้): แสดงรูปจริงทันที โดยจำกัดด้วย max-width/max-height ให้ไม่ล้นช่อง
+            if (!info) return <img src={src} style={{ display: 'block', flex: 'none', width: 'auto', height: 'auto', maxWidth: `${maxW}px`, maxHeight: `${maxH}px`, ...style }} {...rest} />;
+            return <img src={info.src} style={{ display: 'block', flex: 'none', width: `${info.w}px`, height: `${info.h}px`, maxWidth: `${maxW}px`, maxHeight: `${maxH}px`, ...style }} {...rest} />;
         };
 
         // แปลงเส้นลายเซ็นเป็น SVG (เวกเตอร์) ขยายกี่เท่าก็คม ข้อมูลเล็กกว่า PNG
