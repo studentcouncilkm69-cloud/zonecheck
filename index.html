@@ -4613,9 +4613,9 @@ ${roomSummaryLines}`;
                 // กว้างคงที่เป็นพิกเซล (หน้ากระดาษส่งออกกว้างคงที่ 1123px) ลายเซ็นจะถูกจำกัดให้อยู่ในคอลัมน์เสมอ
                 const colW = totalSigners >= 7 ? 215 : (totalSigners >= 4 ? 225 : 285);
                 const colGap = isCompact ? 22 : 30;
-                const sigPad = 30;
+                const sigPad = 24;
                 const sigMaxW = colW - sigPad * 2;
-                const sigMaxH = isCompact ? 46 : 58;
+                const sigMaxH = isCompact ? 60 : 74;
                 const blankParenText = '(..............................................)';
 
                 return (
