@@ -759,9 +759,21 @@
                 const r = canvasRef.current.getBoundingClientRect();
                 return { x: (e.clientX - r.left) * CW / r.width, y: (e.clientY - r.top) * CH / r.height };
             };
+            const ptrRef = useRef({ id: null, type: '', penAt: 0 });
             const down = (e) => {
                 e.preventDefault();
+                if (e.pointerType === 'mouse' && e.button !== 0) return;
+                const a = ptrRef.current;
+                if (e.pointerType === 'pen') {
+                    a.penAt = Date.now();
+                    // ถ้ามีเส้นจากฝ่ามือ/นิ้วที่กำลังลากอยู่ ให้ทิ้งเส้นนั้น แล้วใช้ปากกาแทน
+                    if (drawingRef.current && a.type !== 'pen') { strokesRef.current.pop(); drawingRef.current = false; redraw(); setCount(strokesRef.current.length); }
+                } else if (e.pointerType === 'touch' && Date.now() - a.penAt < 3000) {
+                    return; // กำลังใช้ปากกาอยู่ -> ไม่รับการแตะของมือ/ฝ่ามือ
+                }
+                if (drawingRef.current) return; // มีนิ้ว/จุดอื่นกำลังเขียนอยู่ ไม่รับจุดที่สอง
                 try { canvasRef.current.setPointerCapture(e.pointerId); } catch (err) {}
+                a.id = e.pointerId; a.type = e.pointerType;
                 drawingRef.current = true;
                 const pt = coords(e);
                 strokesRef.current.push([pt]);
@@ -771,18 +783,28 @@
                 setCount(strokesRef.current.length);
             };
             const move = (e) => {
-                if (!drawingRef.current) return;
+                const a = ptrRef.current;
+                if (!drawingRef.current || e.pointerId !== a.id) return;
                 e.preventDefault();
+                if (e.pointerType === 'pen') a.penAt = Date.now();
                 const st = strokesRef.current[strokesRef.current.length - 1];
-                const pt = coords(e);
-                const prev = st[st.length - 1];
-                if (Math.hypot(pt.x - prev.x, pt.y - prev.y) < 1.5) return;
-                st.push(pt);
                 const ctx = canvasRef.current.getContext('2d');
                 styleCtx(ctx);
-                ctx.beginPath(); ctx.moveTo(prev.x, prev.y); ctx.lineTo(pt.x, pt.y); ctx.stroke();
+                // ใช้จุดย่อยทั้งหมดที่เบราว์เซอร์เก็บไว้ (ปากกาให้จุดถี่กว่า) เส้นจึงไม่ขาดเป็นห้วงๆ
+                const evs = (typeof e.getCoalescedEvents === 'function' && e.getCoalescedEvents().length) ? e.getCoalescedEvents() : [e];
+                evs.forEach(ev => {
+                    const pt = coords(ev);
+                    const prev = st[st.length - 1];
+                    if (Math.hypot(pt.x - prev.x, pt.y - prev.y) < 0.6) return;
+                    st.push(pt);
+                    ctx.beginPath(); ctx.moveTo(prev.x, prev.y); ctx.lineTo(pt.x, pt.y); ctx.stroke();
+                });
             };
-            const up = () => { drawingRef.current = false; };
+            const up = (e) => {
+                const a = ptrRef.current;
+                if (e && e.pointerId !== undefined && e.pointerId !== a.id) return;
+                drawingRef.current = false; a.id = null;
+            };
             const undo = () => { strokesRef.current.pop(); redraw(); setCount(strokesRef.current.length); };
             const clearAll = () => { strokesRef.current = []; redraw(); setCount(0); };
             const save = () => { if (strokesRef.current.length) onSave(strokesToSvgDataUrl(strokesRef.current)); };
@@ -798,9 +820,9 @@
                         <div className="relative bg-white border-2 border-dashed border-gray-300 rounded-2xl overflow-hidden" style={{ aspectRatio: `${CW} / ${CH}` }}>
                             <canvas
                                 ref={canvasRef} width={CW} height={CH}
-                                onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onPointerLeave={up}
+                                onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onContextMenu={e => e.preventDefault()}
                                 className="w-full h-full block cursor-crosshair relative z-10"
-                                style={{ touchAction: 'none' }}
+                                style={{ touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}
                             />
                             <div className="absolute bottom-10 left-8 right-8 border-b border-gray-200 pointer-events-none"></div>
                             {count === 0 && (
@@ -933,6 +955,8 @@
             const [loginStep, setLoginStep] = useState(1);
             const [loginSignatureDataUrl, setLoginSignatureDataUrl] = useState(() => getValidSessionState()?.user?.dailySignature || '');
             const loginSigCanvasRef = useRef(null);
+            const loginStrokesRef = useRef([]);
+            const loginPtrRef = useRef({ id: null, type: '', penAt: 0 });
             const isDrawingSigRef = useRef(false);
             const loginSigDrawnRef = useRef(false);
 
@@ -2010,35 +2034,73 @@ ${roomSummaryLines}`;
                 };
             };
 
+            const loginRedraw = (canvas) => {
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.strokeStyle = '#0f172a'; ctx.fillStyle = '#0f172a';
+                ctx.lineWidth = 2.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+                loginStrokesRef.current.forEach(st => {
+                    if (st.length === 1) { ctx.beginPath(); ctx.arc(st[0].x, st[0].y, 1.5, 0, Math.PI * 2); ctx.fill(); return; }
+                    ctx.beginPath(); ctx.moveTo(st[0].x, st[0].y);
+                    for (let i = 1; i < st.length; i++) ctx.lineTo(st[i].x, st[i].y);
+                    ctx.stroke();
+                });
+            };
+
             const startDrawingLoginSig = (e) => {
                 const canvas = loginSigCanvasRef.current;
                 if (!canvas) return;
+                if (e.pointerType === 'mouse' && e.button !== 0) return;
+                if (e.cancelable) e.preventDefault();
+                const a = loginPtrRef.current;
+                if (e.pointerType === 'pen') {
+                    a.penAt = Date.now();
+                    // มีเส้นจากฝ่ามือ/นิ้วค้างอยู่ -> ทิ้งเส้นนั้น แล้วใช้ปากกาแทน
+                    if (isDrawingSigRef.current && a.type !== 'pen') { loginStrokesRef.current.pop(); isDrawingSigRef.current = false; loginRedraw(canvas); }
+                } else if (e.pointerType === 'touch' && Date.now() - a.penAt < 3000) {
+                    return; // กำลังใช้ปากกา -> ไม่รับการแตะของมือ/ฝ่ามือ
+                }
+                if (isDrawingSigRef.current) return; // ไม่รับจุดที่สอง
+                try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+                a.id = e.pointerId; a.type = e.pointerType;
                 isDrawingSigRef.current = true;
-                    loginSigDrawnRef.current = true;
+                loginSigDrawnRef.current = true;
                 const ctx = canvas.getContext('2d');
-                ctx.strokeStyle = '#0f172a';
-                ctx.lineWidth = 2.6;
-                ctx.lineCap = 'round';
-                ctx.lineJoin = 'round';
+                ctx.strokeStyle = '#0f172a'; ctx.fillStyle = '#0f172a';
+                ctx.lineWidth = 2.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
                 const pos = getSigPadCoords(e, canvas);
-                ctx.beginPath();
-                ctx.moveTo(pos.x, pos.y);
+                loginStrokesRef.current.push([pos]);
+                ctx.beginPath(); ctx.arc(pos.x, pos.y, 1.5, 0, Math.PI * 2); ctx.fill();
             };
 
             const moveDrawingLoginSig = (e) => {
-                if (!isDrawingSigRef.current) return;
+                const a = loginPtrRef.current;
+                if (!isDrawingSigRef.current || e.pointerId !== a.id) return;
                 const canvas = loginSigCanvasRef.current;
                 if (!canvas) return;
                 if (e.cancelable) e.preventDefault();
+                if (e.pointerType === 'pen') a.penAt = Date.now();
                 const ctx = canvas.getContext('2d');
-                const pos = getSigPadCoords(e, canvas);
-                ctx.lineTo(pos.x, pos.y);
-                ctx.stroke();
+                ctx.strokeStyle = '#0f172a'; ctx.lineWidth = 2.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+                const st = loginStrokesRef.current[loginStrokesRef.current.length - 1];
+                if (!st) return;
+                // ใช้จุดย่อยทั้งหมดที่เบราว์เซอร์เก็บไว้ เส้นจึงไม่ขาดเป็นห้วงๆ
+                const evs = (typeof e.getCoalescedEvents === 'function' && e.getCoalescedEvents().length) ? e.getCoalescedEvents() : [e];
+                evs.forEach(ev => {
+                    const pos = getSigPadCoords(ev, canvas);
+                    const prev = st[st.length - 1];
+                    if (Math.hypot(pos.x - prev.x, pos.y - prev.y) < 0.6) return;
+                    st.push(pos);
+                    ctx.beginPath(); ctx.moveTo(prev.x, prev.y); ctx.lineTo(pos.x, pos.y); ctx.stroke();
+                });
             };
 
-            const endDrawingLoginSig = () => {
+            const endDrawingLoginSig = (e) => {
                 if (!isDrawingSigRef.current) return;
+                const a = loginPtrRef.current;
+                if (e && e.pointerId !== undefined && e.pointerId !== a.id) return;
                 isDrawingSigRef.current = false;
+                a.id = null;
                 const canvas = loginSigCanvasRef.current;
                 if (!canvas) return;
                 setLoginSignatureDataUrl(cropCanvasToDataUrl(canvas));
@@ -2050,6 +2112,7 @@ ${roomSummaryLines}`;
                     const ctx = canvas.getContext('2d');
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
                 }
+                loginStrokesRef.current = [];
                 loginSigDrawnRef.current = false;
                         setLoginSignatureDataUrl('');
             };
@@ -6194,13 +6257,12 @@ ${roomSummaryLines}`;
                                                     ref={loginSigCanvasRef}
                                                     width={520}
                                                     height={220}
-                                                    onMouseDown={startDrawingLoginSig}
-                                                    onMouseMove={moveDrawingLoginSig}
-                                                    onMouseUp={endDrawingLoginSig}
-                                                    onMouseLeave={endDrawingLoginSig}
-                                                    onTouchStart={startDrawingLoginSig}
-                                                    onTouchMove={moveDrawingLoginSig}
-                                                    onTouchEnd={endDrawingLoginSig}
+                                                    onPointerDown={startDrawingLoginSig}
+                                                    onPointerMove={moveDrawingLoginSig}
+                                                    onPointerUp={endDrawingLoginSig}
+                                                    onPointerCancel={endDrawingLoginSig}
+                                                    onContextMenu={e => e.preventDefault()}
+                                                    style={{ touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}
                                                     className="w-full h-full cursor-crosshair block relative z-10"
                                                 />
                                                 {loginSignatureDataUrl && !isDrawingSigRef.current && !loginSigDrawnRef.current && (
