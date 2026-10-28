@@ -671,19 +671,36 @@
             return <img src={shown} {...rest} />;
         };
 
-        // ลายเซ็นที่ปรับขนาดให้พอดีกับช่องที่กำหนด (รักษาสัดส่วน ย่อ/ขยายให้เต็มช่อง) ไม่พึ่ง object-fit
+        // ลายเซ็นที่ปรับขนาดให้พอดีกับช่องที่กำหนด (รักษาสัดส่วน ย่อ/ขยายให้อยู่ในช่องเสมอ ไม่พึ่ง object-fit)
+        // โหลดรูป -> (ถ้าเป็น PNG ตัดขอบว่าง) -> วัดขนาดจริงของรูปที่จะแสดง -> คำนวณขนาดพิกเซลที่ล็อกไว้ ไม่ให้ล้นช่อง
         const FitSigImg = ({ src, maxW, maxH, style, ...rest }) => {
-            const [nat, setNat] = useState(null);
-            const onLoad = (e) => {
-                const w = e.target.naturalWidth, h = e.target.naturalHeight;
-                if (w && h) setNat({ w, h });
-            };
-            let size = { maxWidth: `${maxW}px`, maxHeight: `${maxH}px` };
-            if (nat) {
-                const k = Math.min(maxW / nat.w, maxH / nat.h);
-                size = { width: `${Math.round(nat.w * k)}px`, height: `${Math.round(nat.h * k)}px` };
-            }
-            return <SigImg src={src} onLoad={onLoad} style={{ display: 'block', ...size, ...style }} {...rest} />;
+            const [info, setInfo] = useState(null);
+            useEffect(() => {
+                let alive = true;
+                setInfo(null);
+                if (!src) return;
+                const measure = (finalSrc) => {
+                    const im = new Image();
+                    im.onload = () => {
+                        if (!alive) return;
+                        let w = im.naturalWidth, h = im.naturalHeight;
+                        if (!w || !h) { w = maxW; h = maxH; }
+                        const k = Math.min(maxW / w, maxH / h);
+                        setInfo({ src: finalSrc, w: Math.max(1, Math.floor(w * k)), h: Math.max(1, Math.floor(h * k)) });
+                    };
+                    im.onerror = () => { if (alive) setInfo({ src: finalSrc, w: maxW, h: maxH }); };
+                    im.src = finalSrc;
+                };
+                if (typeof src === 'string' && src.startsWith('data:image/png')) {
+                    trimSignaturePng(src).then(measure);
+                } else {
+                    measure(src);
+                }
+                return () => { alive = false; };
+            }, [src, maxW, maxH]);
+            // ระหว่างรอโหลด: จองพื้นที่ไว้เท่ากรอบสูงสุด (ซ่อนรูป) ไม่ให้เลย์เอาต์ขยับ
+            if (!info) return <div style={{ width: `${maxW}px`, height: `${maxH}px`, ...style }} />;
+            return <img src={info.src} width={info.w} height={info.h} style={{ display: 'block', flex: 'none', width: `${info.w}px`, height: `${info.h}px`, maxWidth: 'none', ...style }} {...rest} />;
         };
 
         // แปลงเส้นลายเซ็นเป็น SVG (เวกเตอร์) ขยายกี่เท่าก็คม ข้อมูลเล็กกว่า PNG
@@ -4540,7 +4557,7 @@ ${roomSummaryLines}`;
                                 image:        { type: 'jpeg', quality: 1.0 },
                                 html2canvas:  canvasOpts, 
                                 jsPDF:        { unit: 'mm', format: 'a4', orientation: 'landscape' }, 
-                                pagebreak:    { mode: ['css', 'legacy'], avoid: ['tr', '.pdf-row'] } 
+                                pagebreak:    { mode: ['css', 'legacy'], avoid: ['tr', '.pdf-row', '.pdf-sig-block'] } 
                             };
                             
                             if (exportDestination === 'drive') {
@@ -4581,25 +4598,29 @@ ${roomSummaryLines}`;
                 if (!activeSignersForExport || activeSignersForExport.length === 0) return null;
                 const totalSigners = activeSignersForExport.length;
                 const isCompact = totalSigners > 4;
-                const boxWidth = totalSigners >= 7 ? '215px' : (totalSigners >= 4 ? '245px' : '285px');
-                const maxPerRowPct = totalSigners >= 4 ? '23%' : '30%';
-                const dotLineText = isCompact ? 'ลงชื่อ..............................................' : 'ลงชื่อ........................................................';
-                const blankParenText = isCompact ? '(..............................................)' : '(........................................................)';
-            const sigMaxH = isCompact ? 54 : 68;
-            const sigMaxW = isCompact ? 180 : 240;
-            
+                // กว้างคงที่เป็นพิกเซล (หน้ากระดาษส่งออกกว้างคงที่ 1123px) ลายเซ็นจะถูกจำกัดให้อยู่ในคอลัมน์เสมอ
+                const colW = totalSigners >= 7 ? 215 : (totalSigners >= 4 ? 225 : 285);
+                const colGap = isCompact ? 22 : 30;
+                const sigPad = 14;
+                const sigMaxW = colW - sigPad * 2;
+                const sigMaxH = isCompact ? 54 : 68;
+                const blankParenText = '(..............................................)';
+
                 return (
-                    <div style={{
+                    <div className="pdf-sig-block" style={{
                         marginTop: isCompact ? '20px' : '28px',
                         paddingTop: '8px',
+                        paddingBottom: '10px',
                         display: 'flex',
                         flexWrap: 'wrap',
                         justifyContent: 'center',
                         alignItems: 'flex-end',
                         rowGap: isCompact ? '18px' : '26px',
-                        columnGap: isCompact ? '22px' : '36px',
+                        columnGap: `${colGap}px`,
                         width: '100%',
-                        pageBreakInside: 'avoid'
+                        boxSizing: 'border-box',
+                        pageBreakInside: 'avoid',
+                        breakInside: 'avoid'
                     }}>
                         {activeSignersForExport.map((signer, idx) => {
                             const cleanName = String(signer.name || '').trim();
@@ -4607,25 +4628,30 @@ ${roomSummaryLines}`;
                                 ? (cleanName.startsWith('(') && cleanName.endsWith(')') ? cleanName : `(${cleanName})`)
                                 : blankParenText;
                             return (
-                                <div key={signer.id || idx} style={{
-                                    width: boxWidth,
-                                    maxWidth: maxPerRowPct,
-                                    minWidth: isCompact ? '195px' : '220px',
+                                <div key={signer.id || idx} className="pdf-sig-block" style={{
+                                    width: `${colW}px`,
+                                    flex: '0 0 auto',
+                                    boxSizing: 'border-box',
                                     display: 'flex',
                                     flexDirection: 'column',
                                     alignItems: 'center',
                                     justifyContent: 'flex-end',
                                     textAlign: 'center',
-                                    pageBreakInside: 'avoid'
+                                    pageBreakInside: 'avoid',
+                                    breakInside: 'avoid'
                                 }}>
+                                    {/* พื้นที่วางลายเซ็น: สูงคงที่ + กว้างเต็มคอลัมน์ ลายเซ็นอยู่กึ่งกลาง ชิดเส้นจุดด้านล่าง */}
                                     <div style={{
                                         width: '100%',
-                                        height: `${sigMaxH + 26}px`,
+                                        height: `${sigMaxH + 6}px`,
+                                        padding: `0 ${sigPad}px`,
+                                        boxSizing: 'border-box',
                                         display: 'flex',
-                                        flexDirection: 'column',
-                                        alignItems: 'center',
-                                        justifyContent: 'flex-end',
-                                        marginBottom: '4px'
+                                        alignItems: 'flex-end',
+                                        justifyContent: 'center',
+                                        marginBottom: '-5px',
+                                        position: 'relative',
+                                        zIndex: 2
                                     }}>
                                         {showDigitalSignatureImg && signer.signatureUrl && (
                                             <FitSigImg
@@ -4633,34 +4659,38 @@ ${roomSummaryLines}`;
                                                 crossOrigin="anonymous"
                                                 maxW={sigMaxW}
                                                 maxH={sigMaxH}
-                                                style={{ marginBottom: '-3px', position: 'relative', zIndex: 2 }}
                                             />
                                         )}
-                                        <div style={{
-                                            fontSize: isCompact ? '12px' : '13px',
-                                            color: '#334155',
-                                            fontWeight: '600',
-                                            letterSpacing: '0.3px',
-                                            lineHeight: '20px',
-                                            position: 'relative',
-                                            zIndex: 1,
-                                            whiteSpace: 'nowrap'
-                                        }}>
-                                            {dotLineText}
-                                        </div>
+                                    </div>
+                                    {/* เส้น "ลงชื่อ ........" ยืดตามความกว้างคอลัมน์พอดี ไม่ล้นขอบ */}
+                                    <div style={{
+                                        width: '100%',
+                                        display: 'flex',
+                                        alignItems: 'flex-end',
+                                        fontSize: isCompact ? '12px' : '13px',
+                                        color: '#334155',
+                                        fontWeight: '600',
+                                        lineHeight: '20px',
+                                        position: 'relative',
+                                        zIndex: 1
+                                    }}>
+                                        <span style={{ whiteSpace: 'nowrap', flex: 'none', paddingRight: '4px' }}>ลงชื่อ</span>
+                                        <span style={{ flex: '1 1 auto', height: '15px', borderBottom: '1.5px dotted #475569' }}></span>
                                     </div>
                                     <div style={{
+                                        width: '100%',
                                         fontSize: isCompact ? '12.5px' : '13.5px',
                                         fontWeight: cleanName ? 'bold' : '600',
                                         color: cleanName ? '#0f172a' : '#475569',
                                         lineHeight: '1.35',
-                                        marginTop: '2px',
+                                        marginTop: '4px',
                                         whiteSpace: 'nowrap'
                                     }}>
                                         {displayParenName}
                                     </div>
                                     {signer.role && (
                                         <div style={{
+                                            width: '100%',
                                             fontSize: isCompact ? '11.5px' : '12.5px',
                                             fontWeight: '600',
                                             color: '#475569',
@@ -6145,7 +6175,7 @@ ${roomSummaryLines}`;
                                                 </button>
                                             </div>
 
-                                            <div className="relative bg-white border-2 border-dashed border-gray-300 rounded-2xl overflow-hidden h-48 sm:h-52 touch-none shadow-inner">
+                                            <div className="relative bg-white border-2 border-dashed border-gray-300 rounded-2xl overflow-hidden w-full touch-none shadow-inner" style={{ aspectRatio: '520 / 220' }}>
                                                 <canvas
                                                     ref={loginSigCanvasRef}
                                                     width={520}
@@ -6347,7 +6377,7 @@ ${roomSummaryLines}`;
                                             {appMode !== 'guest' && viewDetailModal.roomInsp.inspectorSignature && (
                                                 <div className="mt-1.5 bg-white p-2 rounded-xl border border-blue-100 flex items-center justify-between gap-2">
                                                     <span className="text-[10px] font-bold text-gray-400">ลายมือชื่อผู้ตรวจหลัก ({viewDetailModal.roomInsp.mainInspector || String(viewDetailModal.roomInsp.inspector || '').split(',')[0]}):</span>
-                                                    <SigImg src={viewDetailModal.roomInsp.inspectorSignature} className="h-14 max-w-[180px] object-contain" />
+                                                    <SigImg src={viewDetailModal.roomInsp.inspectorSignature} className="h-14 w-auto max-w-[180px] shrink-0 object-contain" />
                                                 </div>
                                             )}
                                             {viewDetailModal.roomInsp.photoUrl && (
@@ -6370,7 +6400,7 @@ ${roomSummaryLines}`;
                                             {appMode !== 'guest' && viewDetailModal.zoneInsp.inspectorSignature && (
                                                 <div className="mt-1.5 bg-white p-2 rounded-xl border border-fuchsia-100 flex items-center justify-between gap-2">
                                                     <span className="text-[10px] font-bold text-gray-400">ลายมือชื่อผู้ตรวจหลัก ({viewDetailModal.zoneInsp.mainInspector || String(viewDetailModal.zoneInsp.inspector || '').split(',')[0]}):</span>
-                                                    <SigImg src={viewDetailModal.zoneInsp.inspectorSignature} className="h-14 max-w-[180px] object-contain" />
+                                                    <SigImg src={viewDetailModal.zoneInsp.inspectorSignature} className="h-14 w-auto max-w-[180px] shrink-0 object-contain" />
                                                 </div>
                                             )}
                                             {viewDetailModal.zoneInsp.photoUrl && (
@@ -6702,7 +6732,7 @@ ${roomSummaryLines}`;
                                                 </div>
                                                 {team.signatureUrl ? (
                                                     <div className="bg-gray-50 border border-dashed border-gray-300 rounded-xl px-3 py-1.5 flex flex-col items-center shrink-0">
-                                                        <SigImg src={team.signatureUrl} className="h-12 max-w-[150px] object-contain" />
+                                                        <SigImg src={team.signatureUrl} className="h-12 w-auto max-w-[150px] object-contain" />
                                                         <span className="text-[8px] font-bold text-gray-400 mt-0.5">ลายมือชื่อยืนยันตัวตน</span>
                                                     </div>
                                                 ) : (
