@@ -70,6 +70,10 @@
         .checkbox-custom:checked + div { background-color: #C8102E; border-color: #C8102E; }
         .checkbox-custom:checked + div svg { display: block; }
 
+        /* ช่องเซ็นลายเซ็น: กันเลือกข้อความ / เมนูคัดลอก / การลากหน้าจอ ตอนยกหรือวางปากกา */
+        .sig-pad-surface, .sig-pad-surface * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: none; -webkit-tap-highlight-color: transparent; }
+        body.sig-drawing, body.sig-drawing * { -webkit-user-select: none !important; user-select: none !important; -webkit-touch-callout: none !important; }
+
         /* PDF Export Styles */
         .pdf-export-wrapper {
             font-family: 'Sarabun', sans-serif !important;
@@ -638,6 +642,36 @@
             }
         };
 
+        // ล็อกพื้นผิวลายเซ็น: ปิดการเลือกข้อความ/เมนูคัดลอก/ท่าทางระบบ ที่มักโผล่ตอนยกปากกา (ทำครั้งเดียวต่อแคนวาส)
+        const attachSigLock = (el) => {
+            if (!el || el.__sigLocked) return;
+            el.__sigLocked = true;
+            const stop = (e) => { if (e.cancelable) e.preventDefault(); };
+            ['touchstart', 'touchmove', 'touchend', 'selectstart', 'contextmenu', 'gesturestart', 'gesturechange', 'dragstart'].forEach(t => el.addEventListener(t, stop, { passive: false }));
+        };
+        const setSigDrawing = (on) => {
+            try {
+                document.body.classList.toggle('sig-drawing', !!on);
+                if (on) { const sel = window.getSelection && window.getSelection(); if (sel && sel.removeAllRanges) sel.removeAllRanges(); }
+            } catch (e) {}
+        };
+
+        // ผู้ลงนามหนึ่งคน (หนึ่งลายเซ็น) มีได้หลายตำแหน่ง: roles = [..] (ตำแหน่งแรก = role เดิม เพื่อให้ข้อมูลเก่ายังใช้ได้)
+        // ตัวเลือกในเซต/ตัวเลือกเอง เก็บเป็น token: ตำแหน่งแรก = id, ตำแหน่งที่ n = `${id}#${n}`
+        const getSignerRoles = (sg) => {
+            const arr = Array.isArray(sg && sg.roles) ? sg.roles.map(r => String(r || '').trim()).filter(Boolean) : [];
+            if (arr.length) return arr;
+            const r = String((sg && sg.role) || '').trim();
+            return [r];
+        };
+        const roleTokenFor = (id, idx) => idx === 0 ? id : `${id}#${idx}`;
+        const parseSignerToken = (t) => {
+            const str = String(t);
+            const i = str.lastIndexOf('#');
+            if (i > 0 && /^\d+$/.test(str.slice(i + 1))) return { id: str.slice(0, i), idx: Number(str.slice(i + 1)) };
+            return { id: str, idx: 0 };
+        };
+
         const SIG_TRIM_CACHE = {};
         const trimSignaturePng = (src) => new Promise((resolve) => {
             if (SIG_TRIM_CACHE[src]) return resolve(SIG_TRIM_CACHE[src]);
@@ -760,6 +794,7 @@
                 return { x: (e.clientX - r.left) * CW / r.width, y: (e.clientY - r.top) * CH / r.height };
             };
             const ptrRef = useRef({ id: null, type: '', penAt: 0 });
+            useEffect(() => () => setSigDrawing(false), []);
             const down = (e) => {
                 e.preventDefault();
                 if (e.pointerType === 'mouse' && e.button !== 0) return;
@@ -775,6 +810,7 @@
                 try { canvasRef.current.setPointerCapture(e.pointerId); } catch (err) {}
                 a.id = e.pointerId; a.type = e.pointerType;
                 drawingRef.current = true;
+                setSigDrawing(true);
                 const pt = coords(e);
                 strokesRef.current.push([pt]);
                 const ctx = canvasRef.current.getContext('2d');
@@ -804,6 +840,7 @@
                 const a = ptrRef.current;
                 if (e && e.pointerId !== undefined && e.pointerId !== a.id) return;
                 drawingRef.current = false; a.id = null;
+                setSigDrawing(false);
             };
             const undo = () => { strokesRef.current.pop(); redraw(); setCount(strokesRef.current.length); };
             const clearAll = () => { strokesRef.current = []; redraw(); setCount(0); };
@@ -819,9 +856,9 @@
                         <p className="text-[11px] font-bold text-gray-400 mb-3">เซ็นให้ใหญ่เต็มช่องได้เลย ระบบจะตัดขอบให้พอดีกับลายเซ็นเอง</p>
                         <div className="relative bg-white border-2 border-dashed border-gray-300 rounded-2xl overflow-hidden" style={{ aspectRatio: `${CW} / ${CH}` }}>
                             <canvas
-                                ref={canvasRef} width={CW} height={CH}
+                                ref={(el) => { canvasRef.current = el; if (el) attachSigLock(el); }} width={CW} height={CH}
                                 onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onContextMenu={e => e.preventDefault()}
-                                className="w-full h-full block cursor-crosshair relative z-10"
+                                className="w-full h-full block cursor-crosshair relative z-10 sig-pad-surface"
                                 style={{ touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}
                             />
                             <div className="absolute bottom-10 left-8 right-8 border-b border-gray-200 pointer-events-none"></div>
@@ -1007,6 +1044,7 @@
             // States สำหรับหน้าตั้งค่าคลังผู้ลงนามและเซตลายเซ็น (แอดมิน)
             const [newSignerName, setNewSignerName] = useState('');
             const [newSignerRole, setNewSignerRole] = useState('');
+            const [newSignerRoles, setNewSignerRoles] = useState([]);
             const [newSignerImgUrl, setNewSignerImgUrl] = useState('');
             const [editingSignerId, setEditingSignerId] = useState(null);
             const [newPresetName, setNewPresetName] = useState('');
@@ -2064,6 +2102,7 @@ ${roomSummaryLines}`;
                 try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
                 a.id = e.pointerId; a.type = e.pointerType;
                 isDrawingSigRef.current = true;
+                setSigDrawing(true);
                 loginSigDrawnRef.current = true;
                 const ctx = canvas.getContext('2d');
                 ctx.strokeStyle = '#0f172a'; ctx.fillStyle = '#0f172a';
@@ -2101,6 +2140,7 @@ ${roomSummaryLines}`;
                 if (e && e.pointerId !== undefined && e.pointerId !== a.id) return;
                 isDrawingSigRef.current = false;
                 a.id = null;
+                setSigDrawing(false);
                 const canvas = loginSigCanvasRef.current;
                 if (!canvas) return;
                 setLoginSignatureDataUrl(cropCanvasToDataUrl(canvas));
@@ -3367,41 +3407,144 @@ ${roomSummaryLines}`;
                 }
             };
 
+            const addSignerRoleChip = () => {
+                const t = newSignerRole.trim();
+                if (!t) return;
+                setNewSignerRoles(prev => prev.includes(t) ? prev : [...prev, t]);
+                setNewSignerRole('');
+            };
+
             const handleAddOrUpdateSigner = async () => {
-                if (!newSignerName.trim() && !newSignerRole.trim()) return showToast('กรุณากรอกชื่อผู้ลงนาม หรือ ตำแหน่ง อย่างน้อย 1 ช่อง', 'warning');
+                const pendingRole = newSignerRole.trim();
+                const finalRoles = [...newSignerRoles];
+                if (pendingRole && !finalRoles.includes(pendingRole)) finalRoles.push(pendingRole);
+                const cleanName = newSignerName.trim();
+                if (!cleanName && finalRoles.length === 0) return showToast('กรุณากรอกชื่อผู้ลงนาม หรือ ตำแหน่ง อย่างน้อย 1 ช่อง', 'warning');
+                const normName = (n) => String(n || '').trim().replace(/\s+/g, ' ');
                 let updated = [...signersList];
                 if (editingSignerId) {
-                    updated = updated.map(s => s.id === editingSignerId ? {
-                        ...s,
-                        name: newSignerName.trim(),
-                        role: newSignerRole.trim(),
+                    updated = updated.map(sg => sg.id === editingSignerId ? {
+                        ...sg,
+                        name: cleanName,
+                        role: finalRoles[0] || '',
+                        roles: finalRoles,
                         signatureUrl: newSignerImgUrl.trim()
-                    } : s);
+                    } : sg);
                 } else {
-                    updated.push({
-                        id: generateId('sig'),
-                        name: newSignerName.trim(),
-                        role: newSignerRole.trim(),
-                        signatureUrl: newSignerImgUrl.trim()
-                    });
+                    // ชื่อซ้ำกับคนที่มีอยู่แล้ว -> เพิ่มเป็น "อีกตำแหน่ง" ของคนเดิม ใช้ลายเซ็นเดียวกัน ไม่ต้องสร้างซ้ำ
+                    const existing = cleanName ? updated.find(sg => normName(sg.name) === normName(cleanName)) : null;
+                    if (existing) {
+                        const mergedRoles = [...getSignerRoles(existing).filter(Boolean)];
+                        finalRoles.forEach(r => { if (!mergedRoles.includes(r)) mergedRoles.push(r); });
+                        updated = updated.map(sg => sg.id === existing.id ? {
+                            ...sg,
+                            role: mergedRoles[0] || '',
+                            roles: mergedRoles,
+                            signatureUrl: newSignerImgUrl.trim() || sg.signatureUrl || ''
+                        } : sg);
+                        showToast('ชื่อนี้มีอยู่แล้ว เพิ่มตำแหน่งให้รายการเดิมเรียบร้อย (ใช้ลายเซ็นเดียวกัน)', 'info');
+                    } else {
+                        updated.push({
+                            id: generateId('sig'),
+                            name: cleanName,
+                            role: finalRoles[0] || '',
+                            roles: finalRoles,
+                            signatureUrl: newSignerImgUrl.trim()
+                        });
+                    }
                 }
                 setNewSignerName('');
                 setNewSignerRole('');
+                setNewSignerRoles([]);
                 setNewSignerImgUrl('');
                 setEditingSignerId(null);
                 await saveSignatureSettingsToCloud(updated, signaturePresets, defaultSignaturePreset);
             };
 
+            // รวมรายการที่ชื่อซ้ำกัน (เช่น คนเดียวกันที่เคยสร้างแยกตามตำแหน่ง) ให้เป็นรายการเดียวหลายตำแหน่ง และแก้เซตเดิมให้ชี้ตำแหน่งที่ถูกต้อง
+            const handleMergeDuplicateSigners = () => {
+                const normName = (n) => String(n || '').trim().replace(/\s+/g, ' ');
+                const byName = new Map();
+                const kept = [];
+                const tokenMap = {};
+                let mergedCount = 0;
+                signersList.forEach(sg => {
+                    const key = normName(sg.name);
+                    const roles = getSignerRoles(sg);
+                    if (!key) { kept.push(sg); return; }
+                    if (!byName.has(key)) {
+                        const base = { ...sg, roles: [...roles] };
+                        byName.set(key, base);
+                        kept.push(base);
+                        roles.forEach((r, i) => { tokenMap[roleTokenFor(sg.id, i)] = roleTokenFor(sg.id, i); });
+                        return;
+                    }
+                    const base = byName.get(key);
+                    mergedCount++;
+                    roles.forEach((r, i) => {
+                        let idx = r ? base.roles.indexOf(r) : 0;
+                        if (idx === -1) { base.roles.push(r); idx = base.roles.length - 1; }
+                        tokenMap[roleTokenFor(sg.id, i)] = roleTokenFor(base.id, idx);
+                    });
+                    if (!base.signatureUrl && sg.signatureUrl) base.signatureUrl = sg.signatureUrl;
+                });
+                if (mergedCount === 0) return showToast('ไม่พบรายชื่อที่ซ้ำกัน', 'info');
+                kept.forEach(sg => { const rs = (sg.roles || []).filter((r, i, arr) => r || arr.length === 1); sg.role = (sg.roles && sg.roles[0]) || ''; });
+                showConfirm(`พบชื่อซ้ำ ${mergedCount} รายการ ต้องการรวมเป็นรายการเดียว (หลายตำแหน่ง) ใช่หรือไม่?`, async () => {
+                    const remapIds = (ids) => {
+                        const out = [];
+                        (ids || []).forEach(t => { const m = tokenMap[t] || t; if (!out.includes(m)) out.push(m); });
+                        return out;
+                    };
+                    const updatedPresets = signaturePresets.map(pr => ({ ...pr, signerIds: remapIds(pr.signerIds) }));
+                    setCustomSelectedSignerIds(prev => remapIds(prev));
+                    await saveSignatureSettingsToCloud(kept, updatedPresets, defaultSignaturePreset);
+                });
+            };
+
             const handleDeleteSigner = (id) => {
                 showConfirm('ต้องการลบรายชื่อผู้ลงนามนี้ใช่หรือไม่?', async () => {
-                    const updatedSigners = signersList.filter(s => s.id !== id);
-                    const updatedPresets = signaturePresets.map(p => ({
-                        ...p,
-                        signerIds: (p.signerIds || []).filter(sid => sid !== id)
+                    const updatedSigners = signersList.filter(sg => sg.id !== id);
+                    const updatedPresets = signaturePresets.map(pr => ({
+                        ...pr,
+                        signerIds: (pr.signerIds || []).filter(sid => parseSignerToken(sid).id !== id)
                     }));
+                    setCustomSelectedSignerIds(prev => prev.filter(sid => parseSignerToken(sid).id !== id));
                     await saveSignatureSettingsToCloud(updatedSigners, updatedPresets, defaultSignaturePreset);
                 });
             };
+
+            // แถวเลือกผู้ลงนาม: ถ้าคนนั้นมีหลายตำแหน่ง จะแสดงเป็นกลุ่มเดียว แล้วเลือกย่อยว่าจะเอาตำแหน่งไหน (เลือกหลายตำแหน่งก็ได้)
+            const renderSignerChoiceRows = (selectedIds, onToggle, big) => signersList.map(sg => {
+                const roles = getSignerRoles(sg);
+                const rowPad = big ? 'p-3' : 'px-3 py-2';
+                const badge = big ? 'w-7 h-7' : 'w-6 h-6';
+                const row = (token, title, subtitle, key, indent) => {
+                    const orderIdx = selectedIds.indexOf(token);
+                    const isChecked = orderIdx !== -1;
+                    return (
+                        <div key={key} onClick={() => onToggle(token)} className={`${rowPad} ${indent ? 'pl-6 ' : ''}flex items-center justify-between cursor-pointer select-none transition-colors ${isChecked ? 'bg-purple-50/70' : 'hover:bg-gray-50'}`}>
+                            <div className="min-w-0 pr-2">
+                                <div className={`text-xs truncate ${isChecked ? 'font-black text-purple-700' : 'font-bold text-gray-700'}`}>{title}</div>
+                                {subtitle ? <div className="text-[10px] text-gray-400 truncate">{subtitle}</div> : null}
+                            </div>
+                            <div className={`${badge} rounded-full flex items-center justify-center text-xs font-black shrink-0 ${isChecked ? 'bg-purple-600 text-white shadow-sm' : 'border border-gray-300 bg-white text-transparent'}`}>
+                                {isChecked ? (orderIdx + 1) : ''}
+                            </div>
+                        </div>
+                    );
+                };
+                if (roles.length <= 1) return row(sg.id, sg.name || '(เว้นชื่อว่าง - เซ็นสด)', roles[0] || 'ไม่ได้ระบุตำแหน่ง', sg.id, false);
+                return (
+                    <div key={sg.id}>
+                        <div className="px-3 pt-2 pb-1 bg-gray-100/70 text-[11px] font-black text-gray-700 flex items-center justify-between gap-2">
+                            <span className="truncate">{sg.name || '(เว้นชื่อว่าง)'}</span>
+                            <span className="text-[9px] font-bold text-gray-400 shrink-0">ลายเซ็นเดียว • {roles.length} ตำแหน่ง (เลือกตำแหน่งที่ต้องการ)</span>
+                        </div>
+                        {roles.map((r, i) => row(roleTokenFor(sg.id, i), r || 'ไม่ระบุตำแหน่ง', '', `${sg.id}#${i}`, true))}
+                    </div>
+                );
+            });
 
             const toggleSignerInNewPreset = (id) => {
                 setNewPresetSignerIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
@@ -3532,8 +3675,14 @@ ${roomSummaryLines}`;
                         const dailyList = buildDailyInspectorsSignerList();
                         resolvedSigners.push(...dailyList);
                     } else {
-                        const found = signersList.find(s => s.id === id);
-                        if (found) resolvedSigners.push(found);
+                        const tk = parseSignerToken(id);
+                        const found = signersList.find(sg => sg.id === tk.id);
+                        if (found) {
+                            const roles = getSignerRoles(found);
+                            if (tk.idx === 0 || roles[tk.idx] !== undefined) {
+                                resolvedSigners.push({ ...found, id, role: roles[tk.idx] !== undefined ? roles[tk.idx] : (roles[0] || '') });
+                            }
+                        }
                     }
                 });
                 return resolvedSigners;
@@ -5858,7 +6007,20 @@ ${roomSummaryLines}`;
                                             </h4>
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                                 <input type="text" value={newSignerName} onChange={e => setNewSignerName(e.target.value)} placeholder="ชื่อ-นามสกุล (เว้นว่างได้ถ้าไม่ระบุชื่อ)" className="p-2.5 rounded-xl border border-gray-200 bg-white text-xs font-bold outline-none focus:border-purple-500" />
-                                                <input type="text" value={newSignerRole} onChange={e => setNewSignerRole(e.target.value)} placeholder="ตำแหน่ง (เช่น ผู้ตรวจ 1 / ผู้แทนสภานักเรียน)" className="p-2.5 rounded-xl border border-gray-200 bg-white text-xs font-medium outline-none focus:border-purple-500" />
+                                                <div className="flex gap-1.5">
+                                                    <input type="text" value={newSignerRole} onChange={e => setNewSignerRole(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSignerRoleChip(); } }} placeholder="ตำแหน่ง (กด + เพื่อเพิ่มได้หลายตำแหน่ง)" className="flex-1 min-w-0 p-2.5 rounded-xl border border-gray-200 bg-white text-xs font-medium outline-none focus:border-purple-500" />
+                                                    <button type="button" onClick={addSignerRoleChip} className="px-3.5 rounded-xl bg-purple-100 text-purple-700 font-black text-base shrink-0">+</button>
+                                                </div>
+                                                {newSignerRoles.length > 0 && (
+                                                    <div className="sm:col-span-2 flex flex-wrap gap-1.5">
+                                                        {newSignerRoles.map((r, i) => (
+                                                            <span key={`${r}_${i}`} className="inline-flex items-center gap-1 text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-100 rounded-full pl-2.5 pr-1.5 py-1">
+                                                                {r}
+                                                                <button type="button" onClick={() => setNewSignerRoles(prev => prev.filter((_, j) => j !== i))} className="text-purple-400 hover:text-red-500"><i className="ph ph-x"></i></button>
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                )}
                                                 <div className="sm:col-span-2 space-y-2">
                                 <input type="text" value={String(newSignerImgUrl).startsWith('data:') ? '' : newSignerImgUrl} onChange={e => setNewSignerImgUrl(e.target.value)} placeholder="ลิงก์รูปลายเซ็นพื้นหลังใส URL (ถ้ามี - หรือกดเซ็นในแอปด้านล่าง)" className="w-full p-2.5 rounded-xl border border-gray-200 bg-white text-xs font-medium outline-none focus:border-purple-500" />
                                 <div className="flex items-center gap-2">
@@ -5874,13 +6036,14 @@ ${roomSummaryLines}`;
                                             </div>
                                             <div className="flex gap-2">
                                                 {editingSignerId && (
-                                                    <button onClick={() => { setEditingSignerId(null); setNewSignerName(''); setNewSignerRole(''); setNewSignerImgUrl(''); }} className="px-4 py-2 rounded-xl bg-gray-200 text-gray-600 font-bold text-xs">ยกเลิกแก้ไข</button>
+                                                    <button onClick={() => { setEditingSignerId(null); setNewSignerName(''); setNewSignerRole(''); setNewSignerRoles([]); setNewSignerImgUrl(''); }} className="px-4 py-2 rounded-xl bg-gray-200 text-gray-600 font-bold text-xs">ยกเลิกแก้ไข</button>
                                                 )}
                                                 <button onClick={handleAddOrUpdateSigner} className="flex-1 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold text-xs shadow-sm transition-colors">
                                                     {editingSignerId ? 'บันทึกการแก้ไขผู้ลงนาม' : '+ เพิ่มรายการเข้าคลังผู้ลงนาม'}
                                                 </button>
                                             </div>
 
+                                            <button type="button" onClick={handleMergeDuplicateSigners} className="w-full py-2 rounded-xl bg-white border border-dashed border-purple-300 text-purple-700 font-bold text-[11px] hover:bg-purple-50 transition-colors"><i className="ph ph-git-merge"></i> รวมรายชื่อที่ชื่อซ้ำกันให้เป็นรายการเดียว (หลายตำแหน่ง ใช้ลายเซ็นเดียว)</button>
                                             <div className="max-h-52 overflow-y-auto custom-scrollbar divide-y divide-gray-100 bg-white rounded-xl border border-gray-200 p-2">
                                                 {signersList.length === 0 ? (
                                                     <p className="text-center text-gray-400 text-xs py-6 font-medium">ยังไม่มีรายชื่อผู้ลงนามในคลัง</p>
@@ -5888,10 +6051,10 @@ ${roomSummaryLines}`;
                                                     <div key={s.id} className="py-2 px-2 flex items-center justify-between gap-2 text-xs">
                                                         <div className="min-w-0">
                                                             <div className="font-bold text-gray-800 truncate">{s.name || '(เว้นชื่อว่าง - เซ็นสด)'}</div>
-                                                            <div className="text-[10px] text-gray-500 truncate">{s.role || 'ไม่ได้ระบุตำแหน่ง'} {s.signatureUrl ? (String(s.signatureUrl).startsWith('data:image/svg') ? '• เซ็นในแอป' : '• มีรูปลายเซ็น') : '• เซ็นสด'}</div>
+                                                            <div className="text-[10px] text-gray-500 truncate">{getSignerRoles(s).filter(Boolean).join(' / ') || 'ไม่ได้ระบุตำแหน่ง'} {s.signatureUrl ? (String(s.signatureUrl).startsWith('data:image/svg') ? '• เซ็นในแอป' : '• มีรูปลายเซ็น') : '• เซ็นสด'}</div>
                                                         </div>
                                                         <div className="flex items-center gap-1 shrink-0">
-                                                            <button onClick={() => { setEditingSignerId(s.id); setNewSignerName(s.name || ''); setNewSignerRole(s.role || ''); setNewSignerImgUrl(s.signatureUrl || ''); }} className="px-2 py-1 rounded-lg bg-blue-50 text-blue-600 font-bold text-[10px]">แก้ไข</button>
+                                                            <button onClick={() => { setEditingSignerId(s.id); setNewSignerName(s.name || ''); setNewSignerRoles(getSignerRoles(s).filter(Boolean)); setNewSignerRole(''); setNewSignerImgUrl(s.signatureUrl || ''); }} className="px-2 py-1 rounded-lg bg-blue-50 text-blue-600 font-bold text-[10px]">แก้ไข</button>
                                                             <button onClick={() => handleDeleteSigner(s.id)} className="p-1.5 text-red-400 hover:text-red-600"><i className="ph ph-trash"></i></button>
                                                         </div>
                                                     </div>
@@ -5924,21 +6087,7 @@ ${roomSummaryLines}`;
                                                             </div>
                                                         );
                                                     })()}
-                                                    {signersList.map(s => {
-                                                        const orderIdx = newPresetSignerIds.indexOf(s.id);
-                                                        const isChecked = orderIdx !== -1;
-                                                        return (
-                                                            <div key={s.id} onClick={() => toggleSignerInNewPreset(s.id)} className={`flex items-center justify-between px-3 py-2 cursor-pointer select-none transition-colors ${isChecked ? 'bg-purple-50/70' : 'hover:bg-gray-50'}`}>
-                                                                <div className="min-w-0">
-                                                                    <span className={`text-xs block truncate ${isChecked ? 'font-black text-purple-700' : 'font-bold text-gray-700'}`}>{s.name || '(เว้นชื่อว่าง)'}</span>
-                                                                    <span className="text-[10px] text-gray-400 block truncate">{s.role}</span>
-                                                                </div>
-                                                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black shrink-0 ${isChecked ? 'bg-purple-600 text-white shadow-sm' : 'border border-gray-300 bg-white text-transparent'}`}>
-                                                                    {isChecked ? (orderIdx + 1) : ''}
-                                                                </div>
-                                                            </div>
-                                                        );
-                                                    })}
+                                                    {renderSignerChoiceRows(newPresetSignerIds, toggleSignerInNewPreset, false)}
                                                 </div>
                                             </div>
 
@@ -5957,8 +6106,11 @@ ${roomSummaryLines}`;
                                                 ) : signaturePresets.map(p => {
                                                     const namesInPreset = (p.signerIds || []).map((id, i) => {
                                                         if (id === '__DAILY_INSPECTORS__') return `${i + 1}.ผู้ตรวจประจำวัน`;
-                                                        const found = signersList.find(s => s.id === id);
-                                                        return found ? `${i + 1}.${found.name || found.role || 'เว้นว่าง'}` : null;
+                                                        const tk = parseSignerToken(id);
+                                                        const found = signersList.find(sg => sg.id === tk.id);
+                                                        if (!found) return null;
+                                                        const fr = getSignerRoles(found);
+                                                        return `${i + 1}.${found.name || fr[tk.idx] || 'เว้นว่าง'}${fr.length > 1 ? ` (${fr[tk.idx] || fr[0]})` : ''}`;
                                                     }).filter(Boolean).join(' + ');
                                                     const isDefault = defaultSignaturePreset === p.id;
                                                     return (
@@ -6254,7 +6406,7 @@ ${roomSummaryLines}`;
 
                                             <div className="relative bg-white border-2 border-dashed border-gray-300 rounded-2xl overflow-hidden w-full touch-none shadow-inner" style={{ aspectRatio: '520 / 220' }}>
                                                 <canvas
-                                                    ref={loginSigCanvasRef}
+                                                    ref={(el) => { loginSigCanvasRef.current = el; if (el) attachSigLock(el); }}
                                                     width={520}
                                                     height={220}
                                                     onPointerDown={startDrawingLoginSig}
@@ -6263,7 +6415,7 @@ ${roomSummaryLines}`;
                                                     onPointerCancel={endDrawingLoginSig}
                                                     onContextMenu={e => e.preventDefault()}
                                                     style={{ touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}
-                                                    className="w-full h-full cursor-crosshair block relative z-10"
+                                                    className="w-full h-full cursor-crosshair block relative z-10 sig-pad-surface"
                                                 />
                                                 {loginSignatureDataUrl && !isDrawingSigRef.current && !loginSigDrawnRef.current && (
                                                     <img 
@@ -6744,21 +6896,7 @@ ${roomSummaryLines}`;
                                                 <button onClick={() => { setShowCustomSignerPickerModal(false); setCurrentRoute('settings'); }} className="px-3 py-1.5 bg-purple-600 text-white rounded-xl text-xs font-bold">ไปหน้าตั้งค่าเพื่อเพิ่มรายชื่อ</button>
                                             )}
                                         </div>
-                                    ) : signersList.map(s => {
-                                        const orderIdx = customSelectedSignerIds.indexOf(s.id);
-                                        const isChecked = orderIdx !== -1;
-                                        return (
-                                            <div key={s.id} onClick={() => toggleCustomSignerId(s.id)} className={`p-3 flex items-center justify-between cursor-pointer select-none transition-colors ${isChecked ? 'bg-white' : 'hover:bg-white/60'}`}>
-                                                <div className="min-w-0 pr-2">
-                                                    <div className={`text-xs truncate ${isChecked ? 'font-black text-purple-700' : 'font-bold text-gray-700'}`}>{s.name || '(เว้นชื่อว่าง - เซ็นสด)'}</div>
-                                                    <div className="text-[10px] text-gray-400 truncate">{s.role || 'ไม่ได้ระบุตำแหน่ง'}</div>
-                                                </div>
-                                                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black shrink-0 transition-all ${isChecked ? 'bg-purple-600 text-white shadow-sm' : 'border border-gray-300 bg-white text-transparent'}`}>
-                                                    {isChecked ? `${orderIdx + 1}` : ''}
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
+                                    ) : renderSignerChoiceRows(customSelectedSignerIds, toggleCustomSignerId, true)}
                                 </div>
 
                                 <div className="flex gap-2 pt-4 mt-2 border-t border-gray-100">
