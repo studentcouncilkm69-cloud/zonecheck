@@ -4825,9 +4825,9 @@ ${roomSummaryLines}`;
                 // กว้างคงที่เป็นพิกเซล (หน้ากระดาษส่งออกกว้างคงที่ 1123px) ลายเซ็นจะถูกจำกัดให้อยู่ในคอลัมน์เสมอ
                 const colW = totalSigners >= 7 ? 215 : (totalSigners >= 4 ? 225 : 285);
                 const colGap = isCompact ? 22 : 30;
-                const sigPad = 24;
-                const sigMaxW = colW - sigPad * 2;
-                const sigMaxH = isCompact ? 60 : 74;
+                // ขนาดลายเซ็นแยกตามที่มา: เซ็นในแอป (data:) ปรับเล็กลง / รูปจากลิงก์ (http) ขยายให้ใหญ่ขึ้น
+                const SIG_SIZE_INAPP = { h: isCompact ? 50 : 62, pad: 24 };
+                const SIG_SIZE_LINK = { h: isCompact ? 70 : 88, pad: 14 };
                 const blankParenText = '(..............................................)';
 
                 return (
@@ -4851,6 +4851,11 @@ ${roomSummaryLines}`;
                             const displayParenName = cleanName
                                 ? (cleanName.startsWith('(') && cleanName.endsWith(')') ? cleanName : `(${cleanName})`)
                                 : blankParenText;
+                            const isInAppSig = String(signer.signatureUrl || '').startsWith('data:');
+                            const sz = isInAppSig ? SIG_SIZE_INAPP : SIG_SIZE_LINK;
+                            const sigPad = sz.pad;
+                            const sigMaxH = sz.h;
+                            const sigMaxW = colW - sigPad * 2;
                             return (
                                 <div key={signer.id || idx} className="pdf-sig-block" style={{
                                     width: `${colW}px`,
@@ -6177,7 +6182,7 @@ ${roomSummaryLines}`;
                                         <div className="w-20 h-20 bg-white rounded-full mx-auto flex items-center justify-center mb-3 shadow-md border border-gray-100 overflow-hidden p-1">
                                             <img src={settings?.app_logo_url || HARDCODED_LOGO} alt="Login Logo" className="w-full h-full object-contain rounded-full" crossOrigin="anonymous"/>
                                         </div>
-                                        <h2 className="text-2xl font-black text-center text-gray-800 tracking-tight">ระบบเจ้าหน้าที่</h2>
+                                        <h2 className="text-2xl font-black text-center text-gray-800 tracking-tight">ระบบผู้ตรวจ</h2>
                                         <p className="text-[11px] font-bold text-gray-400 text-center mt-0.5">เลือกชื่อผู้ตรวจและระบุรหัสผ่านเพื่อเข้าใช้งาน</p>
 
                                         <form onSubmit={handleLoginSubmit} autoComplete="off">
@@ -6348,11 +6353,11 @@ ${roomSummaryLines}`;
                                                         autoCorrect="off"
                                                         autoCapitalize="off"
                                                         spellCheck="false"
-                                                        placeholder="รหัสผ่าน (PIN)..." 
+                                                        placeholder="••••••••" 
                                                         value={inputPasscode} 
                                                         onChange={(e) => setInputPasscode(e.target.value)} 
                                                         style={!showPasscode && inputPasscode ? { WebkitTextSecurity: 'disc', textSecurity: 'disc' } : {}}
-                                                        className={`w-full py-3.5 px-11 rounded-2xl border border-gray-200 bg-gray-50/80 focus:bg-white focus:outline-none focus:border-[#C8102E] text-center font-bold text-gray-800 placeholder:text-gray-400 placeholder:text-sm placeholder:font-medium placeholder:tracking-normal transition-all ${showPasscode ? 'text-base tracking-wide' : (inputPasscode ? 'masked-pin-input text-lg tracking-[0.18em]' : 'text-sm tracking-normal')}`} 
+                                                        className={`w-full py-3.5 px-11 rounded-2xl border border-gray-200 bg-gray-50/80 focus:bg-white focus:outline-none focus:border-[#C8102E] text-center font-bold text-gray-800 placeholder:text-gray-400 placeholder:text-lg placeholder:font-medium placeholder:tracking-[0.18em] transition-all ${showPasscode ? 'text-base tracking-wide' : (inputPasscode ? 'masked-pin-input text-lg tracking-[0.18em]' : 'text-sm tracking-normal')}`} 
                                                     />
                                                     <button 
                                                         type="button" 
