@@ -160,7 +160,7 @@
         const { useState, useEffect, useMemo, useRef } = React;
 
         // ⚠️ ลิงก์ Google Apps Script Backend
-        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxp7RJqJIajrEx8J9IVnJC75saIt_FeiQDUxNgxnP7vrYOy7xcYy77RqXljRUXv_xHm/exec";
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzWYgez8YH8IRNtPLJebdJMvVuuOGwUUHUzZ-Ujf9TGUO_rUkXNs1kRBYjRKvauwHIj/exec";
 
         const HARDCODED_LOGO = "https://i.postimg.cc/wBN5btrp/rong-re-yn-kham-wng.png";
         const HARDCODED_NAME = "STUDENT COUNCIL • KHAMMUANG SCHOOL";
@@ -2365,7 +2365,8 @@ ${roomSummaryLines}`;
                             showToast(`ซิงค์ข้อมูลสำเร็จ`, 'success');
                         }
                     } else if (json && json.status === 'Error') {
-                        if (!showSplash && !silent) showToast(`หลังบ้านแจ้งเตือน: ${json.message}`, 'error');
+                        // แสดงข้อความจากหลังบ้านเสมอ (เดิมเงียบตอนเปิดแอป ทำให้ไม่รู้ว่าทำไมข้อมูลไม่ขึ้น)
+                        setTimeout(() => showToast(`หลังบ้านแจ้งเตือน: ${json.message}`, 'error'), 1600);
                     }
                 } catch (err) {
                     if (!showSplash && !silent) showToast('เชื่อมต่อฐานข้อมูลล้มเหลว กรุณาตรวจสอบลิงก์หรืออินเทอร์เน็ต', 'error');
