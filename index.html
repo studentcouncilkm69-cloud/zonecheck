@@ -170,6 +170,12 @@
         const safeGetItem = (key) => { try { return localStorage.getItem(key); } catch(e) { return null; } };
         const safeSetItem = (key, val) => { try { localStorage.setItem(key, val); } catch(e) {} };
         const safeRemoveItem = (key) => { try { localStorage.removeItem(key); } catch(e) {} };
+        // เปลี่ยนค่านี้ทุกครั้งที่ย้ายชีต/รีเซ็ตข้อมูล เครื่องผู้ใช้จะล้างสำเนาเก่า (คะแนน/ห้อง/ตั้งค่า) ทิ้งหนึ่งครั้ง
+        const LOCAL_CACHE_VERSION = '2026-10-30-a';
+        if (safeGetItem('zc26_cache_ver') !== LOCAL_CACHE_VERSION) {
+            ['zc26_rooms', 'zc26_inspectors', 'zc26_inspections', 'zc26_settings'].forEach(safeRemoveItem);
+            safeSetItem('zc26_cache_ver', LOCAL_CACHE_VERSION);
+        }
         const safeSessionGet = (key) => { try { return sessionStorage.getItem(key); } catch(e) { return null; } };
         const safeSessionSet = (key, val) => { try { sessionStorage.setItem(key, val); } catch(e) {} };
         const safeSessionRemove = (key) => { try { sessionStorage.removeItem(key); } catch(e) {} };
@@ -2363,6 +2369,7 @@ ${roomSummaryLines}`;
                     }
                 } catch (err) {
                     if (!showSplash && !silent) showToast('เชื่อมต่อฐานข้อมูลล้มเหลว กรุณาตรวจสอบลิงก์หรืออินเทอร์เน็ต', 'error');
+                    else setTimeout(() => showToast('ดึงข้อมูลล่าสุดไม่สำเร็จ ข้อมูลที่เห็นอาจเป็นของเก่า (ถ้าเปิดจาก LINE ให้กด “เปิดในเบราว์เซอร์”)', 'error'), 1600);
                 } finally {
                     clearTimeout(timeoutId);
                     setIsSyncing(false);
