@@ -251,45 +251,50 @@
             im.src = url;
         });
         const buildListPdfHtml = (c) => {
+            // สไตล์เดียวกับรายงานการตรวจความเรียบร้อย (ม่วง #7c3aed, แถวสลับสี #faf5ff)
             const W = c.landscape ? 1075 : 730;
-            const line = '1px solid #94a3b8';
-            const bd = c.style === 'box' ? line : 'none';
-            const bb = c.style === 'dotted' ? '1.5px dotted #64748b' : line;
-            const base = `border:${bd};border-bottom:${bb};padding:3px 6px;height:${c.rowH}px;vertical-align:middle;font-size:13px;overflow:hidden;`;
-            const fixed = [{ h: 'ลำดับ', w: 38, a: 'center', k: 'no' }];
+            const bd = c.style === 'box' ? '1px solid #ede9fe' : 'none';
+            const bb = c.style === 'dotted' ? '1.5px dotted #a78bfa' : (c.style === 'line' ? '1px solid #ddd6fe' : '1px solid #ede9fe');
+            const base = `border:${bd};border-bottom:${bb};padding:4px 6px;height:${c.rowH}px;vertical-align:middle;font-size:13px;overflow:hidden;text-align:center;`;
+            const fixed = [{ h: 'ที่', w: 38, a: 'center', k: 'no' }];
             if (c.kind === 'inspectors') {
                 if (c.showPhoto) fixed.push({ h: 'รูป', w: 50, a: 'center', k: 'photo' });
-                fixed.push({ h: 'ชื่อ-สกุล', w: 215, a: 'left', k: 'name' }, { h: 'ตำแหน่ง', w: 105, a: 'left', k: 'role' }, { h: 'ฝ่าย', w: 110, a: 'left', k: 'dept' });
+                fixed.push({ h: 'ชื่อ-สกุล', w: 215, a: 'left', k: 'name' }, { h: 'ตำแหน่ง', w: 105, a: 'center', k: 'role' }, { h: 'ฝ่าย', w: 110, a: 'center', k: 'dept' });
             } else {
                 fixed.push({ h: 'ห้องเรียน', w: 120, a: 'left', k: 'name' });
                 if (c.showZone) fixed.push({ h: 'เขตพื้นที่', w: 85, a: 'center', k: 'zone' });
             }
             const total = fixed.length + c.extra;
             const cg = fixed.map(f => `<col style="width:${f.w}px">`).join('') + Array.from({ length: c.extra }).map(() => '<col>').join('');
-            const th = 'background:#C8102E;color:#fff;font-weight:700;font-size:12.5px;padding:7px 6px;border:1px solid #C8102E;text-align:center;';
+            const th = 'background:#7c3aed;color:#fff;font-weight:bold;font-size:13px;padding:9px 6px;border:1px solid #6d28d9;text-align:center;';
             const head = fixed.map(f => `<th style="${th}">${f.h}</th>`).join('') + Array.from({ length: c.extra }).map((_, i) => `<th style="${th}">${escH(c.headers[i] || '')}</th>`).join('');
-            let prev = null, rows = '';
+            const grp = (t) => `<tr><td colspan="${total}" style="background:#ede9fe;font-weight:bold;font-size:13px;padding:6px 10px;border:1px solid #ddd6fe;color:#6d28d9;text-align:left">${escH(t)}</td></tr>`;
+            let prev = null, rows = '', n = 0;
             c.items.forEach((it, idx) => {
                 if (c.kind === 'inspectors' && c.groupDept) {
                     const d = it.dept || '';
-                    if (d !== (prev === null ? '' : prev) && (d || prev)) rows += `<tr><td colspan="${total}" style="background:#f1f5f9;font-weight:800;font-size:12.5px;padding:5px 8px;border:1px solid #cbd5e1;color:#C8102E">${escH(d || 'อื่นๆ')}</td></tr>`;
+                    if (d !== (prev === null ? '' : prev) && (d || prev)) { rows += grp(d || 'อื่นๆ'); n = 0; }
                     prev = d;
                 } else if (c.kind === 'rooms') {
                     const lv = it.name.includes('/') ? it.name.split('/')[0].trim() : '';
-                    if (lv && lv !== prev) rows += `<tr><td colspan="${total}" style="background:#f1f5f9;font-weight:800;font-size:12.5px;padding:5px 8px;border:1px solid #cbd5e1;color:#C8102E">ระดับชั้น ${escH(lv)}</td></tr>`;
+                    if (lv && lv !== prev) { rows += grp('ระดับชั้น ' + lv); n = 0; }
                     prev = lv;
                 }
+                const bg = (n % 2 === 1) ? 'background:#faf5ff;' : '';
+                n++;
                 const cells = fixed.map(f => {
                     let v = '';
-                    if (f.k === 'no') v = idx + 1;
-                    else if (f.k === 'photo') { const ph = c.photos[it.id]; const ini = escH(it.name.replace(/^(นางสาว|นาย|นาง|เด็กชาย|เด็กหญิง)/, '').trim().charAt(0)); v = ph ? `<img src="${ph}" style="width:34px;height:34px;border-radius:50%;object-fit:cover;display:block;margin:0 auto">` : `<div style="width:34px;height:34px;border-radius:50%;background:#fee2e2;color:#C8102E;font-weight:800;line-height:34px;text-align:center;margin:0 auto">${ini}</div>`; }
-                    else if (f.k === 'zone') v = it.zone ? 'มีเขต' : '-';
+                    if (f.k === 'no') v = `<b>${idx + 1}</b>`;
+                    else if (f.k === 'photo') { const ph = c.photos[it.id]; const ini = escH(it.name.replace(/^(นางสาว|นาย|นาง|เด็กชาย|เด็กหญิง)/, '').trim().charAt(0)); v = ph ? `<img src="${ph}" style="width:34px;height:34px;border-radius:50%;object-fit:cover;display:block;margin:0 auto">` : `<div style="width:34px;height:34px;border-radius:50%;background:#ede9fe;color:#7c3aed;font-weight:bold;line-height:34px;text-align:center;margin:0 auto">${ini}</div>`; }
+                    else if (f.k === 'zone') v = it.zone ? 'มีเขต' : '<span style="color:#94a3b8">ไม่มีเขต</span>';
+                    else if (f.k === 'name') v = `<b>${escH(it.name)}</b>`;
                     else v = escH(it[f.k]);
-                    return `<td style="${base}text-align:${f.a};${f.k === 'name' ? 'font-weight:700;' : ''}">${v}</td>`;
-                }).join('') + Array.from({ length: c.extra }).map(() => `<td style="${base}"></td>`).join('');
+                    return `<td style="${base}${bg}${f.a === 'left' ? 'text-align:left;padding-left:10px;' : ''}">${v}</td>`;
+                }).join('') + Array.from({ length: c.extra }).map(() => `<td style="${base}${bg}"></td>`).join('');
                 rows += `<tr>${cells}</tr>`;
             });
-            return `<div style="width:${W}px;background:#fff;color:#1e293b;padding:2px"><div style="display:flex;align-items:center;gap:12px;border-bottom:2px solid #C8102E;padding-bottom:8px;margin-bottom:10px">${c.logo ? `<img src="${c.logo}" style="width:52px;height:52px;object-fit:contain">` : ''}<div><div style="font-size:20px;font-weight:800;color:#C8102E;line-height:1.3">${escH(c.title)}</div><div style="font-size:12.5px;color:#64748b;font-weight:600">${escH(c.sub)}</div></div></div><table style="width:100%;border-collapse:collapse;table-layout:fixed"><colgroup>${cg}</colgroup><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
+            const info = (c.info || []).map(t => `<div>${escH(t)}</div>`).join('');
+            return `<div style="width:${W}px;background:#fff;color:#1e293b;padding:2px"><div style="display:flex;align-items:center;border-bottom:1.5px solid #e2e8f0;padding-bottom:14px;margin-bottom:12px">${c.logo ? `<img src="${c.logo}" style="width:56px;height:56px;object-fit:contain;margin-right:14px">` : ''}<div><h1 style="color:#6d28d9;font-size:22px;font-weight:bold;margin:0 0 3px 0;line-height:1.25">${escH(c.title)}</h1><p style="color:#64748b;font-size:13.5px;font-weight:600;margin:0;line-height:1.25">${escH(c.sub)}</p></div></div><div style="display:flex;gap:28px;font-size:13.5px;font-weight:bold;margin-bottom:14px">${info}</div><table style="width:100%;border-collapse:collapse;table-layout:fixed;border:1px solid #ddd6fe"><colgroup>${cg}</colgroup><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
         };
 
         const settingOn = (v) => String(v === undefined || v === null || v === '' ? 'true' : v).toLowerCase() !== 'false';
@@ -4473,7 +4478,7 @@ ${roomSummaryLines}`;
                     if (c.kind === 'inspectors' && c.photo) await Promise.all(items.map(async it => { photos[it.id] = await toDataUrl(it.avatar); }));
                     const logo = await toDataUrl(settings?.school_logo_url || settings?.app_logo_url || HARDCODED_LOGO);
                     const dateText = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
-                    const html = buildListPdfHtml({ kind: c.kind, title: c.title || 'รายชื่อ', sub: `สภานักเรียนโรงเรียนคำม่วง • ${items.length} รายการ • พิมพ์เมื่อ ${dateText}`, landscape: c.landscape, style: c.style, extra: c.extra, headers: String(c.headers || '').split(',').map(x => x.trim()), rowH: c.rowH, showPhoto: c.photo, showZone: c.zone, groupDept: c.groupDept, items, photos, logo });
+                    const html = buildListPdfHtml({ kind: c.kind, title: c.title || 'รายชื่อ', sub: 'สภานักเรียนโรงเรียนคำม่วง อำเภอคำม่วง จังหวัดกาฬสินธุ์', info: [`วันที่: ${dateText}`, `จำนวน: ${items.length} ${c.kind === 'inspectors' ? 'คน' : 'ห้อง'}`], landscape: c.landscape, style: c.style, extra: c.extra, headers: String(c.headers || '').split(',').map(x => x.trim()), rowH: c.rowH, showPhoto: c.photo, showZone: c.zone, groupDept: c.groupDept, items, photos, logo });
                     const host = document.createElement('div');
                     host.style.cssText = 'position:fixed;left:-20000px;top:0;background:#fff;';
                     host.innerHTML = html; document.body.appendChild(host);
