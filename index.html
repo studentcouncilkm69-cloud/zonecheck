@@ -243,6 +243,9 @@
             const rk = (u) => posRank(pos(u));
             return list.map((u, i) => ({ u, i })).sort((a, b) => (rk(a.u) - rk(b.u)) || (rk(a.u) >= 3 ? dIdx(a.u) - dIdx(b.u) : 0) || (a.i - b.i)).map(x => x.u);
         };
+        const parseIdList = (v) => { try { const a = JSON.parse(v || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } };
+        // แถวผี: ในชีตชื่อว่าง (หลังบ้านเอารหัสมาแทนชื่อ) จึงเห็นชื่อเป็น u_xxxx
+        const isGhostInspector = (u) => { const n = String((u && u.name) || '').trim(); return !n || n === String((u && u.id) || '').trim(); };
         const readTextFile = (e, cb) => { const f = e.target.files && e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => cb(String(r.result || '').replace(/^\ufeff/, '')); r.readAsText(f, 'utf-8'); e.target.value = ''; };
         const loadXlsx = () => new Promise((res, rej) => {
             if (window.XLSX) return res(window.XLSX);
@@ -1229,6 +1232,7 @@
             // Admin Settings Inputs
             const [bulkRooms, setBulkRooms] = useState('');
             const [bulkInspectors, setBulkInspectors] = useState('');
+            const [bulkInspectorPos, setBulkInspectorPos] = useState('');
             const [editingRoomId, setEditingRoomId] = useState(null);
             const [editingRoomNameInput, setEditingRoomNameInput] = useState('');
             const [editingInspectorId, setEditingInspectorId] = useState(null);
@@ -2443,10 +2447,19 @@ ${roomSummaryLines}`;
                     if (json && json.status === 'Success') {
                         const incomingSettings = json.settings ? { ...initialSettings, ...normalizeSettingsFromServer(json.settings) } : initialSettings;
                         const rawInspectors = Array.isArray(json.inspectors) ? json.inspectors : [];
-                        const loadedInspectors = rawInspectors.map(u => ({
+                        const hiddenSet = new Set(parseIdList(incomingSettings.inspector_hidden_json));
+                        const mappedInspectors = rawInspectors.map(u => ({
                             ...u,
                             avatar_url: u.avatar_url ? String(u.avatar_url).trim() : ''
                         }));
+                        const ghostN = mappedInspectors.filter(u => isGhostInspector(u) && !hiddenSet.has(u.id)).length;
+                        let loadedInspectors = mappedInspectors.filter(u => !hiddenSet.has(u.id) && !isGhostInspector(u));
+                        const savedOrder = parseIdList(incomingSettings.inspector_order_json);
+                        if (savedOrder.length) {
+                            const oi = new Map(savedOrder.map((id, i) => [id, i]));
+                            loadedInspectors = loadedInspectors.map((u, i) => ({ u, i })).sort((a, b) => ((oi.has(a.u.id) ? oi.get(a.u.id) : 1e6) - (oi.has(b.u.id) ? oi.get(b.u.id) : 1e6)) || (a.i - b.i)).map(x => x.u);
+                        }
+                        if (ghostN > 0) setTimeout(() => showToast(`ซ่อนรายการที่ชื่อว่างในชีต ${ghostN} รายการแล้ว (ลบแถวนั้นในชีตได้ถ้าต้องการ)`, 'info'), 1500);
 
                         setRooms(sortRoomsNaturally(Array.isArray(json.rooms) ? json.rooms : []));
                         setInspectors(loadedInspectors);
@@ -4405,6 +4418,8 @@ ${roomSummaryLines}`;
                 if (!bulkInspectors.trim()) return;
                 const rowsIn = bulkInspectors.split('\n').map(l => l.replace(/\r/g, '').trim()).filter(Boolean).map(l => { const parts = l.split(/[,\t]/).map(x => x.trim().replace(/^"|"$/g, '')); return { name: parts[0] || '', pos: parts.slice(1).join(' ').trim() }; }).filter(r => r.name && !/^ชื่อ(-?สกุล)?$/.test(r.name));
                 if (!rowsIn.length) return;
+                const posLines = bulkInspectorPos.split('\n').map(l => l.replace(/\r/g, '').trim());
+                rowsIn.forEach((r, i) => { if (!r.pos && posLines[i]) r.pos = posLines[i]; });
                 const validInspectors = Array.isArray(inspectors) ? inspectors : [];
                 const newInspecs = [...validInspectors]; const metaAdd = {};
                 rowsIn.forEach(r => {
@@ -4415,7 +4430,7 @@ ${roomSummaryLines}`;
                 setInspectors(newInspecs);
                 try {
                     await syncToGASAsync('updateInspectors', newInspecs);
-                    setBulkInspectors('');
+                    setBulkInspectors(''); setBulkInspectorPos('');
                     if (Object.keys(metaAdd).length) await persistMeta({ ...getInspMeta(), ...metaAdd });
                     showToast('เพิ่มรายชื่อสำเร็จ', 'success');
                 } catch (e) { showToast('เพิ่มรายชื่อล้มเหลว', 'error'); }
@@ -4453,6 +4468,8 @@ ${roomSummaryLines}`;
                     const newInspecs = validInspectors.filter(u => u.id !== id); 
                     setInspectors(newInspecs); 
                     try {
+                        // จำรหัสที่ลบไว้ในตั้งค่าด้วย เผื่อหลังบ้านไม่ลบแถวในชีตให้ (กันกลับมาโผล่อีก)
+                        await persistKV('inspector_hidden_json', [...parseIdList(settings?.inspector_hidden_json), id]);
                         await syncToGASAsync('updateInspectors', newInspecs); 
                         showToast('ลบรายชื่อสำเร็จ', 'success'); 
                     } catch(e) { showToast('ลบล้มเหลว', 'error'); }
@@ -4460,6 +4477,13 @@ ${roomSummaryLines}`;
             };
 
             const getInspMeta = () => { try { const m = JSON.parse(settings?.inspector_meta_json || '{}'); return (m && typeof m === 'object') ? m : {}; } catch (e) { return {}; } };
+
+            const persistKV = async (key, arr) => {
+                const json = JSON.stringify(arr);
+                setSettings(prev => ({ ...prev, [key]: json }));
+                try { await syncToGASAsync('updateMultipleSettings', [{ key, val: arr.length ? json : EMPTY_SETTING_SENTINEL }]); return true; }
+                catch (e) { return false; }
+            };
 
             const persistMeta = async (map) => {
                 const clean = {};
@@ -4493,7 +4517,7 @@ ${roomSummaryLines}`;
             const arrangeInspectorsByRole = async (metaOverride) => {
                 const sorted = sortInspectorsByRole(Array.isArray(inspectors) ? inspectors : [], metaOverride || getInspMeta());
                 setInspectors(sorted);
-                try { await syncToGASAsync('updateInspectors', sorted); showToast('จัดเรียงรายชื่อตามตำแหน่งเรียบร้อย', 'success'); }
+                try { await persistKV('inspector_order_json', sorted.map(u => u.id)); await syncToGASAsync('updateInspectors', sorted); showToast('จัดเรียงรายชื่อตามตำแหน่งเรียบร้อย', 'success'); }
                 catch (e) { showToast('จัดเรียงในเครื่องแล้ว แต่ซิงค์ออนไลน์ไม่สำเร็จ', 'warning'); }
             };
 
@@ -6210,6 +6234,7 @@ ${roomSummaryLines}`;
                                    <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2 text-sm"><i className="ph ph-users text-emerald-600"></i> จัดการรายชื่อผู้ตรวจและรูปโปรไฟล์ ({inspectors.length})</h3>
                                    <div className="space-y-3 mb-4">
                                       <textarea value={bulkInspectors} onChange={e=>setBulkInspectors(e.target.value)} rows="3" placeholder="เพิ่มรายชื่อผู้ตรวจ บรรทัดละ 1 คน (พิมพ์ชื่อ หรือ ชื่อ,ตำแหน่ง)..." className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-xs font-medium outline-none focus:border-[#C8102E]"></textarea>
+                                      <textarea value={bulkInspectorPos} onChange={e => setBulkInspectorPos(e.target.value)} rows="3" placeholder={'ตำแหน่ง (ไม่บังคับ) บรรทัดละ 1 ตำแหน่ง เรียงตรงกับชื่อด้านบน\nบรรทัดที่ 1 = คนที่ 1'} className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-xs font-medium outline-none focus:border-amber-500"></textarea>
                                       <button onClick={handleAddBulkInspectors} className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow-sm">เพิ่มรายชื่อผู้ตรวจ</button>
                                       <label className="w-full py-2.5 bg-white border-2 border-dashed border-emerald-300 text-emerald-700 hover:bg-emerald-50 rounded-xl font-bold text-xs text-center cursor-pointer block">นำเข้าจากไฟล์ CSV (ชื่อ หรือ ชื่อ,ตำแหน่ง)<input type="file" accept=".csv,.txt,text/csv,text/plain" className="hidden" onChange={e => readTextFile(e, t => { setBulkInspectors(t); showToast('โหลดไฟล์แล้ว ตรวจรายชื่อในช่องด้านบน แล้วกด “เพิ่มรายชื่อผู้ตรวจ”', 'success'); })} /></label>
                                       <div className="grid grid-cols-3 gap-2">
