@@ -10,7 +10,11 @@
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <link rel="icon" type="image/png" href="icon-192.png">
-    <script>window.addEventListener('load', function () { if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {}); });</script>
+    <script>
+    window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); window.__zcDeferredPrompt = e; window.dispatchEvent(new Event('zc-install-ready')); });
+    window.addEventListener('appinstalled', function () { window.__zcDeferredPrompt = null; });
+    window.addEventListener('load', function () { if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {}); });
+    </script>
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     
     <title>ZoneCheck | สภานักเรียนโรงเรียนคำม่วง</title>
@@ -295,20 +299,22 @@
             const ua = navigator.userAgent || '';
             const isIOS = /iphone|ipad|ipod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
             const isLine = /Line\//i.test(ua);
+            const isAndroid = /android/i.test(ua);
             const standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
             useEffect(() => {
                 if (standalone) return;
                 let last = 0; try { last = Number(localStorage.getItem('zc26_install_dismiss') || 0); } catch (e) {}
                 if (Date.now() - last < 7 * 86400000) return;
-                const onBip = (e) => { e.preventDefault(); setDeferred(e); setShow(true); };
-                window.addEventListener('beforeinstallprompt', onBip);
-                const t = setTimeout(() => { if (isIOS || isLine) setShow(true); }, 2500);
-                return () => { window.removeEventListener('beforeinstallprompt', onBip); clearTimeout(t); };
+                const take = () => { if (window.__zcDeferredPrompt) { setDeferred(window.__zcDeferredPrompt); setShow(true); } };
+                take();
+                window.addEventListener('zc-install-ready', take);
+                const t = setTimeout(() => { if (window.__zcDeferredPrompt) return; if (isIOS || isLine || isAndroid) setShow(true); }, 3000);
+                return () => { window.removeEventListener('zc-install-ready', take); clearTimeout(t); };
             }, []);
             if (!show || standalone || hidden) return null;
             const close = () => { try { localStorage.setItem('zc26_install_dismiss', String(Date.now())); } catch (e) {} setShow(false); };
-            const install = async () => { if (!deferred) return; deferred.prompt(); try { await deferred.userChoice; } catch (e) {} setDeferred(null); setShow(false); };
-            const sub = deferred ? 'เปิดใช้งานได้สะดวกจากหน้าจอหลัก' : (isLine ? 'เพื่อให้ใช้งานได้ครบและเสถียรขึ้น กดไอคอนเข็มทิศหรือจุดสามจุดที่มุมจอ แล้วเลือก “เปิดในเบราว์เซอร์”' : 'แตะปุ่มแชร์ของ Safari แล้วเลือก “เพิ่มลงในหน้าจอโฮม”');
+            const install = async () => { if (!deferred) return; deferred.prompt(); try { await deferred.userChoice; } catch (e) {} window.__zcDeferredPrompt = null; setDeferred(null); setShow(false); };
+            const sub = deferred ? 'เปิดใช้งานได้สะดวกจากหน้าจอหลัก' : (isLine ? 'เพื่อให้ใช้งานได้ครบและเสถียรขึ้น กดไอคอนเข็มทิศหรือจุดสามจุดที่มุมจอ แล้วเลือก “เปิดในเบราว์เซอร์”' : (isIOS ? 'แตะปุ่มแชร์ของ Safari แล้วเลือก “เพิ่มลงในหน้าจอโฮม”' : 'กดจุดสามจุดมุมขวาบนของเบราว์เซอร์ แล้วเลือก “ติดตั้งแอป” หรือ “เพิ่มไปยังหน้าจอหลัก”'));
             return (
                 <div className="fixed left-3 right-3 z-[600] max-w-md mx-auto bg-white rounded-[1.5rem] shadow-[0_12px_40px_rgba(0,0,0,0.22)] border border-gray-100 p-3 flex items-center gap-3 animate-in slide-in-from-bottom" style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 96px)' }}>
                     <img src={logo} className="w-11 h-11 object-contain shrink-0" />
@@ -867,7 +873,9 @@
         });
 
         // รูปลายเซ็น: ถ้าเป็น PNG ที่วาดในแอป จะตัดขอบว่างออกก่อนแสดง (ลิงก์ภายนอกและ SVG แสดงตามเดิม)
-        const SigImg = ({ src, ...rest }) => {
+        const normSigSrc = (u) => { const t = String(u || ''); if (t.startsWith('data:')) return t; const m = t.match(/^https?:\/\/(?:drive|docs)\.google\.com\/.*?(?:[?&]id=|\/d\/)([\w-]{10,})/); return m ? `https://lh3.googleusercontent.com/d/${m[1]}=w600` : t; };
+        const SigImg = ({ src: srcRaw, ...rest }) => {
+            const src = normSigSrc(srcRaw);
             const [shown, setShown] = useState(() => SIG_TRIM_CACHE[src] || src);
             useEffect(() => {
                 let alive = true;
@@ -883,7 +891,8 @@
 
         // ลายเซ็นที่ปรับขนาดให้พอดีกับช่องที่กำหนด (รักษาสัดส่วน ไม่ล้นช่อง)
         // วาดลงแคนวาสความละเอียด 3 เท่า พร้อมเว้นขอบโปร่งใสรอบด้าน (pad) เพื่อไม่ให้ปลายเส้นถูกตัดตอนส่งออกเป็น PDF/PNG
-        const FitSigImg = ({ src, maxW, maxH, pad = 4, style, ...rest }) => {
+        const FitSigImg = ({ src: srcRaw, maxW, maxH, pad = 4, style, ...rest }) => {
+            const src = normSigSrc(srcRaw);
             const [info, setInfo] = useState(null);
             useEffect(() => {
                 let alive = true;
@@ -2440,7 +2449,22 @@ ${roomSummaryLines}`;
                 setInspectorAvatarUrlInput(targetObj.avatar_url || '');
             };
 
-            const handleLoginSubmit = (e) => {
+            // อัปโหลดลายเซ็นของวันนี้เข้า Google Drive ครั้งเดียว แล้วใช้ "ลิงก์สั้น" บันทึกกับผลตรวจแทนรูปยาวๆ (ถ้าอัปโหลดไม่สำเร็จ ใช้รูปเดิมเป็นตัวสำรอง)
+            const uploadDailySignature = async (name, dataUrl) => {
+                const m = String(dataUrl).match(/^data:(image\/[a-z+.-]+);base64,(.+)$/i);
+                if (!m) return dataUrl;
+                const d = getThaiDateStr();
+                const safe = String(name).replace(/[\\/:*?"<>|]/g, '-');
+                try {
+                    const res = await Promise.race([
+                        syncToGASAsync('saveImageToDrive', { fileName: `ลายเซ็น_${safe}_${d}.png`, base64: m[2], mimeType: m[1], monthYear: `ลายเซ็นผู้ตรวจ ${formatMonthYearThai(d)}` }),
+                        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 15000))
+                    ]);
+                    return (res && res.url) ? res.url : dataUrl;
+                } catch (err) { return dataUrl; }
+            };
+
+            const handleLoginSubmit = async (e) => {
                 e.preventDefault(); 
                 const finalName = (selectedLoginName || loginInspector || '').trim();
                 if (!finalName) { setLoginError('กรุณาเลือกหรือพิมพ์ชื่อผู้ตรวจ'); return; }
@@ -2489,15 +2513,23 @@ ${roomSummaryLines}`;
                     return;
                 }
 
-                saveTodaySignatureForUser(finalName, loginSignatureDataUrl);
+                if (window.__zcSigBusy) return;
+                let sigFinal = loginSignatureDataUrl;
+                if (String(sigFinal).startsWith('data:image/')) {
+                    window.__zcSigBusy = true;
+                    showToast('กำลังบันทึกลายเซ็นของวันนี้...', 'info');
+                    try { sigFinal = await uploadDailySignature(finalName, sigFinal); } finally { window.__zcSigBusy = false; }
+                    setLoginSignatureDataUrl(sigFinal);
+                }
+                saveTodaySignatureForUser(finalName, sigFinal);
                 
                 const validInspectors = Array.isArray(inspectors) ? inspectors : [];
                 let userObj = validInspectors.find(u => u.name === finalName);
                 const resolvedAvatar = getInspectorAvatar(finalName);
                 if (!userObj) { 
-                    userObj = { id: generateId('u'), name: finalName, avatar_url: resolvedAvatar, dailySignature: loginSignatureDataUrl || '' }; 
+                    userObj = { id: generateId('u'), name: finalName, avatar_url: resolvedAvatar, dailySignature: sigFinal || '' }; 
                 } else {
-                    userObj = { ...userObj, avatar_url: userObj.avatar_url || resolvedAvatar, dailySignature: loginSignatureDataUrl || '' };
+                    userObj = { ...userObj, avatar_url: userObj.avatar_url || resolvedAvatar, dailySignature: sigFinal || '' };
                 }
 
                 setLoginError(''); 
