@@ -229,29 +229,42 @@
             }
         }
 
-        // ===== รายชื่อผู้ตรวจ: ตำแหน่ง/ฝ่าย + จัดเรียง + พิมพ์ PDF =====
-        const ROLE_OPTS = ['ประธาน', 'เลขานุการ', 'รองประธาน', 'หัวหน้าฝ่าย', 'สมาชิก'];
-        const roleRank = (r) => { const t = String(r || '').trim(); if (!t) return 4; const i = ROLE_OPTS.indexOf(t); return i === -1 ? 2.5 : i; };
+        // ===== รายชื่อผู้ตรวจ: ตำแหน่ง (ช่องเดียว) + จัดเรียง + พิมพ์ PDF/Excel =====
+        const ROLE_OPTS = ['ประธานนักเรียน', 'รองประธาน', 'เลขานุการ', 'หัวหน้าฝ่าย', 'สมาชิก'];
+        const getPosText = (m) => { if (!m) return ''; if (typeof m === 'string') return m.trim(); return [m.r, m.d].filter(Boolean).join(' ').trim(); };
+        const posRank = (t) => { t = String(t || ''); if (!t.trim()) return 4; if (/รองประธาน/.test(t)) return 2; if (/ประธาน/.test(t)) return 0; if (/เลขา/.test(t)) return 1; if (/หัวหน้า/.test(t)) return 3; if (/สมาชิก/.test(t)) return 4; return 2.5; };
+        const posDept = (t) => { const m = String(t || '').match(/ฝ่าย\s*(\S+)/); return m ? 'ฝ่าย' + m[1] : ''; };
         const sortInspectorsByRole = (list, meta) => {
+            const pos = (u) => getPosText(meta[u.id]);
             const depts = [];
-            list.forEach(u => { const m = meta[u.id] || {}; if (m.r === 'หัวหน้าฝ่าย' && m.d && !depts.includes(m.d)) depts.push(m.d); });
-            list.forEach(u => { const m = meta[u.id] || {}; if (m.d && !depts.includes(m.d)) depts.push(m.d); });
-            const dIdx = (u) => { const i = depts.indexOf((meta[u.id] || {}).d); return i === -1 ? 999 : i; };
-            const rk = (u) => roleRank((meta[u.id] || {}).r);
+            list.forEach(u => { const t = pos(u); if (/หัวหน้า/.test(t)) { const d = posDept(t); if (d && !depts.includes(d)) depts.push(d); } });
+            list.forEach(u => { const d = posDept(pos(u)); if (d && !depts.includes(d)) depts.push(d); });
+            const dIdx = (u) => { const i = depts.indexOf(posDept(pos(u))); return i === -1 ? 999 : i; };
+            const rk = (u) => posRank(pos(u));
             return list.map((u, i) => ({ u, i })).sort((a, b) => (rk(a.u) - rk(b.u)) || (rk(a.u) >= 3 ? dIdx(a.u) - dIdx(b.u) : 0) || (a.i - b.i)).map(x => x.u);
         };
+        const readTextFile = (e, cb) => { const f = e.target.files && e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => cb(String(r.result || '').replace(/^\ufeff/, '')); r.readAsText(f, 'utf-8'); e.target.value = ''; };
+        const loadXlsx = () => new Promise((res, rej) => {
+            if (window.XLSX) return res(window.XLSX);
+            const sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+            const t = setTimeout(() => rej(new Error('timeout')), 9000);
+            sc.onload = () => { clearTimeout(t); window.XLSX ? res(window.XLSX) : rej(new Error('xlsx')); };
+            sc.onerror = () => { clearTimeout(t); rej(new Error('xlsx')); };
+            document.head.appendChild(sc);
+        });
         const escH = (t) => String(t == null ? '' : t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-        const toDataUrl = (url) => new Promise(res => {
+        // แปลงรูปเป็น data URL: png = คงความโปร่งใส (โลโก้) / ไม่ใช่ = ถมพื้นขาวก่อน (กันพื้นหลังดำ)
+        const toDataUrl = (url, png) => new Promise(res => {
             if (!url) return res('');
             if (String(url).startsWith('data:')) return res(url);
             const im = new Image(); im.crossOrigin = 'anonymous';
             const t = setTimeout(() => res(''), 5000);
-            im.onload = () => { clearTimeout(t); try { const k = Math.min(1, 160 / Math.max(im.naturalWidth, im.naturalHeight)); const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(im.naturalWidth * k)); c.height = Math.max(1, Math.round(im.naturalHeight * k)); c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); res(c.toDataURL('image/jpeg', 0.85)); } catch (e) { res(''); } };
+            im.onload = () => { clearTimeout(t); try { const lim = png ? 400 : 160; const k = Math.min(1, lim / Math.max(im.naturalWidth, im.naturalHeight)); const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(im.naturalWidth * k)); c.height = Math.max(1, Math.round(im.naturalHeight * k)); const g = c.getContext('2d'); if (!png) { g.fillStyle = '#ffffff'; g.fillRect(0, 0, c.width, c.height); } g.drawImage(im, 0, 0, c.width, c.height); res(png ? c.toDataURL('image/png') : c.toDataURL('image/jpeg', 0.85)); } catch (e) { res(''); } };
             im.onerror = () => { clearTimeout(t); res(''); };
             im.src = url;
         });
         const buildListPdfHtml = (c) => {
-            // สไตล์เดียวกับรายงานการตรวจความเรียบร้อย (ม่วง #7c3aed, แถวสลับสี #faf5ff)
+            // สไตล์เดียวกับรายงานการตรวจความเรียบร้อย (ฟอนต์ Sarabun, ม่วง #7c3aed, แถวสลับสี #faf5ff)
             const W = c.landscape ? 1075 : 730;
             const bd = c.style === 'box' ? '1px solid #ede9fe' : 'none';
             const bb = c.style === 'dotted' ? '1.5px dotted #a78bfa' : (c.style === 'line' ? '1px solid #ddd6fe' : '1px solid #ede9fe');
@@ -259,7 +272,8 @@
             const fixed = [{ h: 'ที่', w: 38, a: 'center', k: 'no' }];
             if (c.kind === 'inspectors') {
                 if (c.showPhoto) fixed.push({ h: 'รูป', w: 50, a: 'center', k: 'photo' });
-                fixed.push({ h: 'ชื่อ-สกุล', w: 215, a: 'left', k: 'name' }, { h: 'ตำแหน่ง', w: 105, a: 'center', k: 'role' }, { h: 'ฝ่าย', w: 110, a: 'center', k: 'dept' });
+                fixed.push({ h: 'ชื่อ-สกุล', w: 230, a: 'left', k: 'name' });
+                if (c.showRole) fixed.push({ h: 'ตำแหน่ง', w: 150, a: 'center', k: 'role' });
             } else {
                 fixed.push({ h: 'ห้องเรียน', w: 120, a: 'left', k: 'name' });
                 if (c.showZone) fixed.push({ h: 'เขตพื้นที่', w: 85, a: 'center', k: 'zone' });
@@ -294,7 +308,7 @@
                 rows += `<tr>${cells}</tr>`;
             });
             const info = (c.info || []).map(t => `<div>${escH(t)}</div>`).join('');
-            return `<div style="width:${W}px;background:#fff;color:#1e293b;padding:2px"><div style="display:flex;align-items:center;border-bottom:1.5px solid #e2e8f0;padding-bottom:14px;margin-bottom:12px">${c.logo ? `<img src="${c.logo}" style="width:56px;height:56px;object-fit:contain;margin-right:14px">` : ''}<div><h1 style="color:#6d28d9;font-size:22px;font-weight:bold;margin:0 0 3px 0;line-height:1.25">${escH(c.title)}</h1><p style="color:#64748b;font-size:13.5px;font-weight:600;margin:0;line-height:1.25">${escH(c.sub)}</p></div></div><div style="display:flex;gap:28px;font-size:13.5px;font-weight:bold;margin-bottom:14px">${info}</div><table style="width:100%;border-collapse:collapse;table-layout:fixed;border:1px solid #ddd6fe"><colgroup>${cg}</colgroup><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
+            return `<div style="width:${W}px;background:#fff;color:#1e293b;padding:2px;font-family:'Sarabun',sans-serif"><div style="display:flex;align-items:center;border-bottom:1.5px solid #e2e8f0;padding-bottom:14px;margin-bottom:12px">${c.logo ? `<img src="${c.logo}" style="width:56px;height:56px;object-fit:contain;margin-right:14px">` : ''}<div><h1 style="color:#6d28d9;font-size:22px;font-weight:bold;margin:0 0 3px 0;line-height:1.25">${escH(c.title)}</h1><p style="color:#64748b;font-size:13.5px;font-weight:600;margin:0;line-height:1.25">${escH(c.sub)}</p></div></div><div style="display:flex;gap:28px;font-size:13.5px;font-weight:bold;margin-bottom:14px">${info}</div><table style="width:100%;border-collapse:collapse;table-layout:fixed;border:1px solid #ddd6fe"><colgroup>${cg}</colgroup><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
         };
 
         const settingOn = (v) => String(v === undefined || v === null || v === '' ? 'true' : v).toLowerCase() !== 'false';
@@ -1251,6 +1265,7 @@
             const [metaModal, setMetaModal] = useState(null);
             const [printCfg, setPrintCfg] = useState(null);
             const [printBusy, setPrintBusy] = useState(false);
+            const [posEdit, setPosEdit] = useState(null);
             const [adminAvatarInput, setAdminAvatarInput] = useState(ADMIN_AVATAR_URL);
             const [adminNameInput, setAdminNameInput] = useState('นายภูธนากร หงษ์ทอง (พี่ภีม)');
             const [adminRoleInput, setAdminRoleInput] = useState('เลขานุการสภานักเรียนโรงเรียนคำม่วง');
@@ -4387,17 +4402,23 @@ ${roomSummaryLines}`;
             };
 
             const handleAddBulkInspectors = async () => {
-                if(!bulkInspectors.trim()) return;
-                const names = bulkInspectors.split('\n').map(n => n.trim()).filter(n => n);
+                if (!bulkInspectors.trim()) return;
+                const rowsIn = bulkInspectors.split('\n').map(l => l.replace(/\r/g, '').trim()).filter(Boolean).map(l => { const parts = l.split(/[,\t]/).map(x => x.trim().replace(/^"|"$/g, '')); return { name: parts[0] || '', pos: parts.slice(1).join(' ').trim() }; }).filter(r => r.name && !/^ชื่อ(-?สกุล)?$/.test(r.name));
+                if (!rowsIn.length) return;
                 const validInspectors = Array.isArray(inspectors) ? inspectors : [];
-                const newInspecs = [...validInspectors];
-                names.forEach(name => { if(!newInspecs.find(u => u.name === name)) newInspecs.push({ id: generateId('u'), name: name, avatar_url: '' }); });
-                setInspectors(newInspecs); 
+                const newInspecs = [...validInspectors]; const metaAdd = {};
+                rowsIn.forEach(r => {
+                    let u = newInspecs.find(x => x.name === r.name);
+                    if (!u) { u = { id: generateId('u'), name: r.name, avatar_url: '' }; newInspecs.push(u); }
+                    if (r.pos) metaAdd[u.id] = r.pos;
+                });
+                setInspectors(newInspecs);
                 try {
-                    await syncToGASAsync('updateInspectors', newInspecs); 
-                    setBulkInspectors(''); 
+                    await syncToGASAsync('updateInspectors', newInspecs);
+                    setBulkInspectors('');
+                    if (Object.keys(metaAdd).length) await persistMeta({ ...getInspMeta(), ...metaAdd });
                     showToast('เพิ่มรายชื่อสำเร็จ', 'success');
-                } catch(e) { showToast('เพิ่มรายชื่อล้มเหลว', 'error'); }
+                } catch (e) { showToast('เพิ่มรายชื่อล้มเหลว', 'error'); }
             };
 
             const handleSaveInspectorAvatar = async () => {
@@ -4440,10 +4461,33 @@ ${roomSummaryLines}`;
 
             const getInspMeta = () => { try { const m = JSON.parse(settings?.inspector_meta_json || '{}'); return (m && typeof m === 'object') ? m : {}; } catch (e) { return {}; } };
 
+            const persistMeta = async (map) => {
+                const clean = {};
+                Object.keys(map || {}).forEach(id => { const t = getPosText(map[id]); if (t) clean[id] = t; });
+                const json = JSON.stringify(clean);
+                setSettings(prev => ({ ...prev, inspector_meta_json: json }));
+                try { await syncToGASAsync('updateMultipleSettings', [{ key: 'inspector_meta_json', val: json === '{}' ? EMPTY_SETTING_SENTINEL : json }]); return clean; }
+                catch (e) { showToast('บันทึกลงเครื่องแล้ว แต่ซิงค์ออนไลน์ไม่สำเร็จ', 'warning'); return null; }
+            };
+
             const openMetaModal = () => {
                 const meta = getInspMeta(); const draft = {};
-                (inspectors || []).forEach(u => { draft[u.id] = { r: (meta[u.id] || {}).r || '', d: (meta[u.id] || {}).d || '' }; });
-                setMetaModal({ draft });
+                (inspectors || []).forEach(u => { draft[u.id] = getPosText(meta[u.id]); });
+                setMetaModal({ draft, bulk: '', open: false });
+            };
+
+            const applyBulkPositions = () => {
+                if (!metaModal) return;
+                const list = inspectors || []; const draft = { ...metaModal.draft }; let n = 0;
+                String(metaModal.bulk || '').split('\n').map(l => l.replace(/\r/g, '').trim()).filter(Boolean).forEach((line, i) => {
+                    const parts = line.split(/[,\t]/).map(x => x.trim().replace(/^"|"$/g, ''));
+                    if (parts.length >= 2 && parts[0]) {
+                        const u = list.find(x => String(x.name || '').trim() === parts[0]) || list.find(x => String(x.name || '').includes(parts[0]));
+                        if (u) { draft[u.id] = parts.slice(1).join(' ').trim(); n++; }
+                    } else if (list[i]) { draft[list[i].id] = parts[0]; n++; }
+                });
+                setMetaModal({ ...metaModal, draft, bulk: '' });
+                showToast(`ใส่ตำแหน่งให้ ${n} คนแล้ว ตรวจสอบแล้วกดบันทึก`, 'success');
             };
 
             const arrangeInspectorsByRole = async (metaOverride) => {
@@ -4454,43 +4498,75 @@ ${roomSummaryLines}`;
             };
 
             const saveInspMeta = async (arrange) => {
-                const draft = (metaModal && metaModal.draft) || {}; const clean = {};
-                Object.keys(draft).forEach(id => { const r = String(draft[id].r || '').trim(), d = String(draft[id].d || '').trim(); if (r || d) clean[id] = { r, d }; });
-                const json = JSON.stringify(clean);
-                setSettings(prev => ({ ...prev, inspector_meta_json: json }));
+                if (!metaModal) return;
+                const clean = await persistMeta(metaModal.draft);
                 setMetaModal(null);
-                try { await syncToGASAsync('updateMultipleSettings', [{ key: 'inspector_meta_json', val: json === '{}' ? EMPTY_SETTING_SENTINEL : json }]); }
-                catch (e) { showToast('บันทึกลงเครื่องแล้ว แต่ซิงค์ออนไลน์ไม่สำเร็จ', 'warning'); return; }
-                if (arrange) await arrangeInspectorsByRole(clean); else showToast('บันทึกตำแหน่งและฝ่ายสำเร็จ', 'success');
+                if (!clean) return;
+                if (arrange) await arrangeInspectorsByRole(clean); else showToast('บันทึกตำแหน่งสำเร็จ', 'success');
             };
 
-            const openPrint = (kind) => setPrintCfg({ kind, title: kind === 'inspectors' ? 'รายชื่อผู้ตรวจ' : 'รายชื่อห้องเรียน', extra: 4, style: 'box', headers: '', landscape: false, photo: false, groupDept: true, zone: false, rowH: 36 });
+            const savePosEdit = async () => {
+                if (!posEdit) return;
+                const meta = { ...getInspMeta(), [posEdit.id]: posEdit.value };
+                setPosEdit(null);
+                const ok = await persistMeta(meta);
+                if (ok) showToast('บันทึกตำแหน่งแล้ว', 'success');
+            };
 
-            const runPrintPdf = async () => {
+            const openPrint = (kind) => setPrintCfg({ kind, title: kind === 'inspectors' ? 'รายชื่อคณะกรรมการ' : 'รายชื่อห้องเรียน', extra: 4, style: 'box', headers: '', landscape: false, photo: false, groupDept: true, showRole: true, zone: false, rowH: 36 });
+
+            const runPrint = async (fmt) => {
                 const c = printCfg; if (!c || printBusy) return;
                 setPrintBusy(true);
                 try {
                     const meta = getInspMeta();
                     const items = c.kind === 'inspectors'
-                        ? (inspectors || []).map(u => ({ id: u.id, name: u.name || '', role: (meta[u.id] || {}).r || '', dept: (meta[u.id] || {}).d || '', avatar: u.avatar_url || '' }))
+                        ? (inspectors || []).map(u => { const t = getPosText(meta[u.id]); return { id: u.id, name: u.name || '', role: t, dept: posDept(t), avatar: u.avatar_url || '' }; })
                         : (rooms || []).map(r => ({ id: r.id, name: r.name || '', zone: r.hasZone !== false }));
-                    const photos = {};
-                    if (c.kind === 'inspectors' && c.photo) await Promise.all(items.map(async it => { photos[it.id] = await toDataUrl(it.avatar); }));
-                    const logo = await toDataUrl(settings?.school_logo_url || settings?.app_logo_url || HARDCODED_LOGO);
+                    const headers = String(c.headers || '').split(',').map(x => x.trim());
+                    const safeName = String(c.title || 'รายชื่อ').replace(/[\\/:*?"<>|]/g, '').trim() || 'รายชื่อ';
                     const dateText = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
-                    const html = buildListPdfHtml({ kind: c.kind, title: c.title || 'รายชื่อ', sub: 'สภานักเรียนโรงเรียนคำม่วง อำเภอคำม่วง จังหวัดกาฬสินธุ์', info: [`วันที่: ${dateText}`, `จำนวน: ${items.length} ${c.kind === 'inspectors' ? 'คน' : 'ห้อง'}`], landscape: c.landscape, style: c.style, extra: c.extra, headers: String(c.headers || '').split(',').map(x => x.trim()), rowH: c.rowH, showPhoto: c.photo, showZone: c.zone, groupDept: c.groupDept, items, photos, logo });
+                    const subText = 'สภานักเรียนโรงเรียนคำม่วง อำเภอคำม่วง จังหวัดกาฬสินธุ์';
+                    const unit = c.kind === 'inspectors' ? 'คน' : 'ห้อง';
+                    if (fmt === 'xlsx') {
+                        const head = ['ที่', c.kind === 'inspectors' ? 'ชื่อ-สกุล' : 'ห้องเรียน'];
+                        if (c.kind === 'inspectors' && c.showRole) head.push('ตำแหน่ง');
+                        if (c.kind === 'rooms' && c.zone) head.push('เขตพื้นที่');
+                        for (let i = 0; i < c.extra; i++) head.push(headers[i] || '');
+                        const body = items.map((it, i) => { const r = [i + 1, it.name]; if (c.kind === 'inspectors' && c.showRole) r.push(it.role); if (c.kind === 'rooms' && c.zone) r.push(it.zone ? 'มีเขต' : 'ไม่มีเขต'); for (let k = 0; k < c.extra; k++) r.push(''); return r; });
+                        const aoa = [[c.title || 'รายชื่อ'], [`${subText} • วันที่ ${dateText} • จำนวน ${items.length} ${unit}`], [], head, ...body];
+                        try {
+                            const X = await loadXlsx();
+                            const ws = X.utils.aoa_to_sheet(aoa);
+                            ws['!cols'] = head.map((h, i) => ({ wch: i === 0 ? 6 : (i === 1 ? 32 : (h === 'ตำแหน่ง' ? 26 : 14)) }));
+                            const wb = X.utils.book_new(); X.utils.book_append_sheet(wb, ws, 'รายชื่อ');
+                            const out = X.write(wb, { bookType: 'xlsx', type: 'array' });
+                            triggerSafeLocalDownload(new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `${safeName}_ZoneCheck.xlsx`, 'xlsx');
+                        } catch (err) {
+                            const csv = '\ufeff' + aoa.map(r => r.map(v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"').join(',')).join('\r\n');
+                            triggerSafeLocalDownload(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `${safeName}_ZoneCheck.csv`, 'csv');
+                            showToast('โหลดตัวสร้าง Excel ไม่ได้ จึงส่งออกเป็น CSV ให้แทน (เปิดใน Excel ได้)', 'warning');
+                        }
+                        setPrintCfg(null);
+                        return;
+                    }
+                    const photos = {};
+                    if (c.kind === 'inspectors' && c.photo) await Promise.all(items.map(async it => { photos[it.id] = await toDataUrl(it.avatar, false); }));
+                    const logo = await toDataUrl(settings?.school_logo_url || settings?.app_logo_url || HARDCODED_LOGO, true);
+                    const html = buildListPdfHtml({ kind: c.kind, title: c.title || 'รายชื่อ', sub: subText, info: [`วันที่: ${dateText}`, `จำนวน: ${items.length} ${unit}`], landscape: c.landscape, style: c.style, extra: c.extra, headers, rowH: c.rowH, showPhoto: c.photo, showRole: c.showRole, showZone: c.zone, groupDept: c.groupDept, items, photos, logo });
                     const host = document.createElement('div');
                     host.style.cssText = 'position:fixed;left:-20000px;top:0;background:#fff;';
                     host.innerHTML = html; document.body.appendChild(host);
                     try {
+                        try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (e) {}
                         await new Promise(r => setTimeout(r, 300));
-                        const fileName = `${c.kind === 'inspectors' ? 'รายชื่อผู้ตรวจ' : 'รายชื่อห้องเรียน'}_ZoneCheck.pdf`;
+                        const fileName = `${safeName}_ZoneCheck.pdf`;
                         const opt = { margin: [8, 8, 8, 8], filename: fileName, image: { type: 'jpeg', quality: 0.95 }, html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' }, jsPDF: { unit: 'mm', format: 'a4', orientation: c.landscape ? 'landscape' : 'portrait' }, pagebreak: { mode: ['css', 'legacy'], avoid: ['tr'] } };
                         const pdfBlob = await window.html2pdf().set(opt).from(host.firstElementChild).outputPdf('blob');
                         triggerSafeLocalDownload(pdfBlob, fileName, 'pdf');
                     } finally { document.body.removeChild(host); }
                     setPrintCfg(null);
-                } catch (e) { showToast('สร้างไฟล์ PDF ไม่สำเร็จ', 'error'); }
+                } catch (e) { showToast('สร้างไฟล์ไม่สำเร็จ', 'error'); }
                 finally { setPrintBusy(false); }
             };
 
@@ -6095,7 +6171,7 @@ ${roomSummaryLines}`;
                                    <div className="space-y-3 mb-4">
                                       <textarea value={bulkRooms} onChange={e=>setBulkRooms(e.target.value)} rows="3" placeholder="เพิ่มห้องเรียน (บรรทัดละ 1 ห้อง เช่น ม.1/1)..." className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-xs font-medium outline-none focus:border-[#C8102E]"></textarea>
                                       <button onClick={handleAddBulkRooms} className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-sm">เพิ่มห้องเรียน</button>
-                                      <button onClick={() => openPrint('rooms')} className="w-full py-2.5 bg-gray-900 text-white hover:bg-black rounded-xl font-bold text-xs">พิมพ์รายชื่อห้อง (PDF)</button>
+                                      <button onClick={() => openPrint('rooms')} className="w-full py-2.5 bg-gray-900 text-white hover:bg-black rounded-xl font-bold text-xs">พิมพ์ / ส่งออกรายชื่อห้อง</button>
                                    </div>
                                    <div className="max-h-64 overflow-y-auto custom-scrollbar divide-y divide-gray-100 border border-gray-100 rounded-xl p-2">
                                       {rooms.map((r, idx) => (
@@ -6133,12 +6209,13 @@ ${roomSummaryLines}`;
                                 <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 flex flex-col">
                                    <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2 text-sm"><i className="ph ph-users text-emerald-600"></i> จัดการรายชื่อผู้ตรวจและรูปโปรไฟล์ ({inspectors.length})</h3>
                                    <div className="space-y-3 mb-4">
-                                      <textarea value={bulkInspectors} onChange={e=>setBulkInspectors(e.target.value)} rows="3" placeholder="เพิ่มรายชื่อผู้ตรวจ (บรรทัดละ 1 ชื่อ)..." className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-xs font-medium outline-none focus:border-[#C8102E]"></textarea>
+                                      <textarea value={bulkInspectors} onChange={e=>setBulkInspectors(e.target.value)} rows="3" placeholder="เพิ่มรายชื่อผู้ตรวจ บรรทัดละ 1 คน (พิมพ์ชื่อ หรือ ชื่อ,ตำแหน่ง)..." className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 text-xs font-medium outline-none focus:border-[#C8102E]"></textarea>
                                       <button onClick={handleAddBulkInspectors} className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow-sm">เพิ่มรายชื่อผู้ตรวจ</button>
+                                      <label className="w-full py-2.5 bg-white border-2 border-dashed border-emerald-300 text-emerald-700 hover:bg-emerald-50 rounded-xl font-bold text-xs text-center cursor-pointer block">นำเข้าจากไฟล์ CSV (ชื่อ หรือ ชื่อ,ตำแหน่ง)<input type="file" accept=".csv,.txt,text/csv,text/plain" className="hidden" onChange={e => readTextFile(e, t => { setBulkInspectors(t); showToast('โหลดไฟล์แล้ว ตรวจรายชื่อในช่องด้านบน แล้วกด “เพิ่มรายชื่อผู้ตรวจ”', 'success'); })} /></label>
                                       <div className="grid grid-cols-3 gap-2">
-                                          <button onClick={openMetaModal} className="py-2.5 px-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-xl font-bold text-[11px] leading-tight">ตั้งตำแหน่ง / ฝ่าย</button>
+                                          <button onClick={openMetaModal} className="py-2.5 px-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-xl font-bold text-[11px] leading-tight">ตั้งตำแหน่ง</button>
                                           <button onClick={() => showConfirm('จัดเรียงรายชื่อใหม่ทั้งหมดตามตำแหน่ง (ประธาน → เลขานุการ → รองประธาน → ตำแหน่งอื่น → หัวหน้าฝ่าย → สมาชิกตามฝ่าย) ใช่หรือไม่?', () => arrangeInspectorsByRole())} className="py-2.5 px-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-xl font-bold text-[11px] leading-tight">จัดเรียงตามตำแหน่ง</button>
-                                          <button onClick={() => openPrint('inspectors')} className="py-2.5 px-1 bg-gray-900 text-white hover:bg-black rounded-xl font-bold text-[11px] leading-tight">พิมพ์รายชื่อ (PDF)</button>
+                                          <button onClick={() => openPrint('inspectors')} className="py-2.5 px-1 bg-gray-900 text-white hover:bg-black rounded-xl font-bold text-[11px] leading-tight">พิมพ์ / ส่งออกรายชื่อ</button>
                                       </div>
                                    </div>
                                    <div className="max-h-72 overflow-y-auto custom-scrollbar divide-y divide-gray-100 border border-gray-100 rounded-xl p-2">
@@ -6165,7 +6242,7 @@ ${roomSummaryLines}`;
                                                              className="w-8 h-8 rounded-full object-cover border border-gray-200 shrink-0 bg-gray-50"
                                                              onError={(e) => { e.target.src = settings?.app_logo_url || HARDCODED_LOGO; }}
                                                          />
-                                                         <div className="min-w-0"><span className="font-bold text-gray-700 truncate block">{u.name}</span>{(() => { const m = getInspMeta()[u.id]; return (m && (m.r || m.d)) ? <span className="text-[10px] font-bold text-emerald-700 block truncate">{[m.r, m.d].filter(Boolean).join(' • ')}</span> : null; })()}</div>
+                                                         <div className="min-w-0"><span className="font-bold text-gray-700 truncate block">{u.name}</span>{(() => { const t = getPosText(getInspMeta()[u.id]); return t ? <span className="text-[10px] font-bold text-emerald-700 block truncate">{t}</span> : null; })()}</div>
                                                      </div>
                                                      <div className="flex items-center gap-1 shrink-0">
                                                          <button 
@@ -6174,6 +6251,7 @@ ${roomSummaryLines}`;
                                                          >
                                                              แก้ไขชื่อ
                                                          </button>
+                                                         <button onClick={() => setPosEdit({ id: u.id, name: u.name || '', value: getPosText(getInspMeta()[u.id]) })} className="px-2 py-1 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 font-bold text-[10px]">ตำแหน่ง</button>
                                                          <button 
                                                              onClick={() => { setEditingInspectorAvatar(u); setInspectorAvatarUrlInput(u.avatar_url || ''); }} 
                                                              className="px-2 py-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 font-bold text-[10px] flex items-center gap-1"
@@ -6379,27 +6457,50 @@ ${roomSummaryLines}`;
                         <div className="fixed inset-0 z-[9000] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setMetaModal(null)}>
                             <div className="bg-white w-full max-w-lg max-h-[88vh] rounded-[2rem] shadow-2xl flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
                                 <div className="p-5 border-b border-gray-100">
-                                    <h3 className="font-black text-gray-800 text-base">ตั้งตำแหน่งและฝ่าย</h3>
-                                    <p className="text-[11px] text-gray-400 font-medium mt-0.5">พิมพ์ตำแหน่งเองได้ (เช่น เหรัญญิก) ชื่อฝ่ายให้พิมพ์ตรงกันของคนในฝ่ายเดียวกัน</p>
+                                    <h3 className="font-black text-gray-800 text-base">ตั้งตำแหน่ง</h3>
+                                    <p className="text-[11px] text-gray-400 font-medium mt-0.5">ใช้ช่องเดียว พิมพ์เช่น ประธานนักเรียน, เลขานุการ, หัวหน้าฝ่ายวิชาการ, สมาชิกฝ่ายวิชาการ ระบบจัดเรียงและแยกฝ่ายจากคำในชื่อตำแหน่ง</p>
+                                    <button type="button" onClick={() => setMetaModal({ ...metaModal, open: !metaModal.open })} className="mt-3 w-full py-2 rounded-xl bg-emerald-50 text-emerald-700 font-bold text-xs">{metaModal.open ? 'ซ่อนการเพิ่มหลายรายการ' : 'เพิ่มหลายรายการ / นำเข้า CSV'}</button>
+                                    {metaModal.open && (
+                                        <div className="mt-2 space-y-2">
+                                            <textarea rows="4" value={metaModal.bulk} onChange={e => setMetaModal({ ...metaModal, bulk: e.target.value })} placeholder={'วางตำแหน่งทีละบรรทัด เรียงตามลำดับรายชื่อ (บรรทัดที่ 1 = คนที่ 1)\nหรือพิมพ์ ชื่อ,ตำแหน่ง ต่อบรรทัด'} className="w-full p-2.5 rounded-xl border border-gray-200 bg-gray-50 text-xs font-medium outline-none focus:border-emerald-500" />
+                                            <div className="flex gap-2">
+                                                <label className="flex-1 py-2 rounded-xl bg-white border-2 border-dashed border-emerald-300 text-emerald-700 font-bold text-xs text-center cursor-pointer">นำเข้าไฟล์ CSV<input type="file" accept=".csv,.txt,text/csv,text/plain" className="hidden" onChange={e => readTextFile(e, t => setMetaModal(p => ({ ...p, bulk: t })))} /></label>
+                                                <button type="button" onClick={applyBulkPositions} className="flex-1 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs">ใส่ตำแหน่งตามนี้</button>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="overflow-y-auto custom-scrollbar divide-y divide-gray-100 px-3 flex-1">
-                                    {(inspectors || []).map(u => { const m = metaModal.draft[u.id] || { r: '', d: '' }; const upd = (k, v) => setMetaModal(p => ({ draft: { ...p.draft, [u.id]: { ...(p.draft[u.id] || { r: '', d: '' }), [k]: v } } })); return (
-                                        <div key={u.id} className="py-2.5 px-2 space-y-1.5">
-                                            <div className="text-xs font-bold text-gray-700 truncate">{u.name}</div>
-                                            <div className="grid grid-cols-2 gap-2">
-                                                <input list="zc-roles" value={m.r || ''} onChange={e => upd('r', e.target.value)} placeholder="ตำแหน่ง" className="p-2 rounded-lg border border-gray-200 text-xs font-medium outline-none focus:border-emerald-500" />
-                                                <input list="zc-depts" value={m.d || ''} onChange={e => upd('d', e.target.value)} placeholder="ฝ่าย" className="p-2 rounded-lg border border-gray-200 text-xs font-medium outline-none focus:border-emerald-500" />
+                                    {(inspectors || []).map((u, idx) => (
+                                        <div key={u.id} className="py-2 px-2 flex items-center gap-2">
+                                            <span className="w-6 text-[11px] font-black text-gray-400 text-right shrink-0">{idx + 1}</span>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="text-xs font-bold text-gray-700 truncate mb-1">{u.name}</div>
+                                                <input list="zc-roles" value={metaModal.draft[u.id] || ''} onChange={e => setMetaModal(p => ({ ...p, draft: { ...p.draft, [u.id]: e.target.value } }))} placeholder="ตำแหน่ง" className="w-full p-2 rounded-lg border border-gray-200 text-xs font-medium outline-none focus:border-emerald-500" />
                                             </div>
-                                        </div>); })}
+                                        </div>
+                                    ))}
                                 </div>
                                 <datalist id="zc-roles">{ROLE_OPTS.map(r => <option key={r} value={r} />)}</datalist>
-                                <datalist id="zc-depts">{[...new Set(Object.values(metaModal.draft).map(x => x.d).filter(Boolean))].map(d => <option key={d} value={d} />)}</datalist>
                                 <div className="p-4 border-t border-gray-100 flex flex-col gap-2">
                                     <button onClick={() => saveInspMeta(true)} className="w-full py-3 rounded-xl bg-emerald-600 text-white font-black text-xs">บันทึก และจัดเรียงทั้งหมดตามตำแหน่ง</button>
                                     <div className="flex gap-2">
                                         <button onClick={() => setMetaModal(null)} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-600 font-bold text-xs">ยกเลิก</button>
                                         <button onClick={() => saveInspMeta(false)} className="flex-1 py-2.5 rounded-xl bg-emerald-50 text-emerald-700 font-bold text-xs">บันทึกอย่างเดียว</button>
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    {posEdit && (
+                        <div className="fixed inset-0 z-[9000] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setPosEdit(null)}>
+                            <div className="bg-white w-full max-w-sm rounded-[2rem] shadow-2xl p-6 space-y-4" onClick={e => e.stopPropagation()}>
+                                <div><h3 className="font-black text-gray-800 text-base">ตำแหน่ง</h3><p className="text-xs font-bold text-emerald-700 mt-0.5 truncate">{posEdit.name}</p></div>
+                                <input list="zc-roles" autoFocus value={posEdit.value} onChange={e => setPosEdit({ ...posEdit, value: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') savePosEdit(); }} placeholder="เช่น หัวหน้าฝ่ายวิชาการ" className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold outline-none focus:border-emerald-500" />
+                                <datalist id="zc-roles">{ROLE_OPTS.map(r => <option key={r} value={r} />)}</datalist>
+                                <div className="flex gap-2">
+                                    <button onClick={() => setPosEdit(null)} className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-600 font-bold text-xs">ยกเลิก</button>
+                                    <button onClick={savePosEdit} className="flex-[2] py-3 rounded-xl bg-emerald-600 text-white font-black text-xs">บันทึกตำแหน่ง</button>
                                 </div>
                             </div>
                         </div>
@@ -6411,7 +6512,7 @@ ${roomSummaryLines}`;
                         return (
                         <div className="fixed inset-0 z-[9000] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => !printBusy && setPrintCfg(null)}>
                             <div className="bg-white w-full max-w-md max-h-[90vh] rounded-[2rem] shadow-2xl flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
-                                <div className="p-5 border-b border-gray-100"><h3 className="font-black text-gray-800 text-base">พิมพ์{printCfg.kind === 'inspectors' ? 'รายชื่อผู้ตรวจ' : 'รายชื่อห้องเรียน'} (PDF)</h3><p className="text-[11px] text-gray-400 font-medium mt-0.5">เว้นช่องว่างด้านข้างไว้ใช้งานอื่น เช่น เช็กชื่อ ลงคะแนน ลงชื่อ</p></div>
+                                <div className="p-5 border-b border-gray-100"><h3 className="font-black text-gray-800 text-base">ส่งออก{printCfg.kind === 'inspectors' ? 'รายชื่อคณะกรรมการ' : 'รายชื่อห้องเรียน'} (PDF / Excel)</h3><p className="text-[11px] text-gray-400 font-medium mt-0.5">เว้นช่องว่างด้านข้างไว้ใช้งานอื่น เช่น เช็กชื่อ ลงคะแนน ลงชื่อ</p></div>
                                 <div className="p-5 space-y-4 overflow-y-auto custom-scrollbar flex-1">
                                     <div><label className={lbl}>หัวข้อเอกสาร</label><input value={printCfg.title} onChange={e => set('title', e.target.value)} className="w-full p-2.5 rounded-xl border border-gray-200 text-sm font-bold outline-none focus:border-[#C8102E]" /></div>
                                     <div><label className={lbl}>จำนวนช่องว่างด้านข้าง (ความกว้างเท่ากัน เต็มขอบกระดาษ)</label>
@@ -6425,7 +6526,8 @@ ${roomSummaryLines}`;
                                     {printCfg.kind === 'inspectors' ? (
                                         <div className="space-y-2">
                                             <label className="flex items-center gap-2 text-xs font-bold text-gray-700 cursor-pointer"><input type="checkbox" checked={printCfg.photo} onChange={e => set('photo', e.target.checked)} className="w-4 h-4 accent-[#C8102E]" /> แสดงรูปโปรไฟล์</label>
-                                            <label className="flex items-center gap-2 text-xs font-bold text-gray-700 cursor-pointer"><input type="checkbox" checked={printCfg.groupDept} onChange={e => set('groupDept', e.target.checked)} className="w-4 h-4 accent-[#C8102E]" /> แสดงหัวข้อแยกตามฝ่าย</label>
+                                            <label className="flex items-center gap-2 text-xs font-bold text-gray-700 cursor-pointer"><input type="checkbox" checked={printCfg.showRole} onChange={e => set('showRole', e.target.checked)} className="w-4 h-4 accent-[#C8102E]" /> แสดงคอลัมน์ตำแหน่ง</label>
+                                            <label className="flex items-center gap-2 text-xs font-bold text-gray-700 cursor-pointer"><input type="checkbox" checked={printCfg.groupDept} onChange={e => set('groupDept', e.target.checked)} className="w-4 h-4 accent-[#C8102E]" /> แสดงหัวข้อแยกตามฝ่าย (จากคำว่า “ฝ่าย...” ในชื่อตำแหน่ง)</label>
                                             <p className="text-[10px] text-gray-400 font-medium">ลำดับในเอกสารเป็นไปตามลำดับในหน้าตั้งค่า (กด "จัดเรียงตามตำแหน่ง" ก่อนพิมพ์)</p>
                                         </div>
                                     ) : (
@@ -6434,7 +6536,8 @@ ${roomSummaryLines}`;
                                 </div>
                                 <div className="p-4 border-t border-gray-100 flex gap-2">
                                     <button disabled={printBusy} onClick={() => setPrintCfg(null)} className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-600 font-bold text-xs">ยกเลิก</button>
-                                    <button disabled={printBusy} onClick={runPrintPdf} className="flex-[2] py-3 rounded-xl bg-[#C8102E] text-white font-black text-xs disabled:opacity-60">{printBusy ? 'กำลังสร้างไฟล์...' : 'สร้างไฟล์ PDF'}</button>
+                                    <button disabled={printBusy} onClick={() => runPrint('xlsx')} className="flex-1 py-3 rounded-xl bg-emerald-600 text-white font-black text-xs disabled:opacity-60">Excel</button>
+                                    <button disabled={printBusy} onClick={() => runPrint('pdf')} className="flex-[1.5] py-3 rounded-xl bg-[#C8102E] text-white font-black text-xs disabled:opacity-60">{printBusy ? 'กำลังสร้าง...' : 'สร้าง PDF'}</button>
                                 </div>
                             </div>
                         </div>);
