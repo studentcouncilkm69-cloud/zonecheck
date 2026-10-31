@@ -246,6 +246,21 @@
         const parseIdList = (v) => { try { const a = JSON.parse(v || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } };
         // แถวผี: ในชีตชื่อว่าง (หลังบ้านเอารหัสมาแทนชื่อ) จึงเห็นชื่อเป็น u_xxxx
         const isGhostInspector = (u) => { const n = String((u && u.name) || '').trim(); return !n || n === String((u && u.id) || '').trim(); };
+        // ลิงก์ปลายทางของแบนเนอร์: รับเฉพาะ http/https (ถ้าพิมพ์ไม่มี http จะเติม https:// ให้) กันลิงก์อันตรายอย่าง javascript:
+        const normLink = (u) => { const t = String(u || '').trim(); if (!t) return ''; if (/^https?:\/\//i.test(t)) return t; if (/^[a-z][a-z0-9+.-]*:/i.test(t)) return ''; return 'https://' + t; };
+        const BannerLink = ({ href, className, children }) => { const h = normLink(href); return h ? <a href={h} target="_blank" rel="noopener noreferrer" className={className}>{children}</a> : <>{children}</>; };
+        const parseBanners = (v) => { try { const a = JSON.parse(v || '[]'); return Array.isArray(a) ? a.filter(b => b && typeof b === 'object') : []; } catch (e) { return []; } };
+        const BannerCarousel = ({ items }) => {
+            const [i, setI] = useState(0);
+            useEffect(() => { if (items.length < 2) return; const t = setInterval(() => setI(x => (x + 1) % items.length), 5000); return () => clearInterval(t); }, [items.length]);
+            const cur = items[Math.min(i, items.length - 1)];
+            return (
+                <div className="w-full aspect-[16/9] md:h-[250px] lg:h-[350px] md:aspect-auto rounded-[2rem] overflow-hidden shadow-sm border border-gray-200 relative select-none bg-gray-100 flex items-center justify-center">
+                    <BannerLink href={cur.link} className="absolute inset-0 block"><img src={cur.url} alt="Banner" className="w-full h-full object-cover block absolute inset-0" /></BannerLink>
+                    {items.length > 1 && <div className="absolute bottom-3 inset-x-0 flex justify-center gap-1.5 z-10">{items.map((_, k) => <button key={k} onClick={() => setI(k)} className={`h-1.5 rounded-full transition-all ${k === i ? 'w-5 bg-white' : 'w-1.5 bg-white/60'}`}></button>)}</div>}
+                </div>
+            );
+        };
         const readTextFile = (e, cb) => { const f = e.target.files && e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => cb(String(r.result || '').replace(/^\ufeff/, '')); r.readAsText(f, 'utf-8'); e.target.value = ''; };
         const loadXlsx = () => new Promise((res, rej) => {
             if (window.XLSX) return res(window.XLSX);
@@ -1266,6 +1281,11 @@
             const [enMainBanner, setEnMainBanner] = useState(true);
             const [enPopupBanner, setEnPopupBanner] = useState(true);
             const [enAnnounceBanner, setEnAnnounceBanner] = useState(true);
+            const [extraBanners, setExtraBanners] = useState([]);
+            const [popupIdx, setPopupIdx] = useState(0);
+            const [linkMainBanner, setLinkMainBanner] = useState('');
+            const [linkPopupBanner, setLinkPopupBanner] = useState('');
+            const [linkAnnounceBanner, setLinkAnnounceBanner] = useState('');
             const [showMaintPreview, setShowMaintPreview] = useState(false);
             const [metaModal, setMetaModal] = useState(null);
             const [printCfg, setPrintCfg] = useState(null);
@@ -1348,6 +1368,10 @@
                     setEnMainBanner(settingOn(settings.banner_main_enabled));
                     setEnPopupBanner(settingOn(settings.banner_popup_enabled));
                     setEnAnnounceBanner(settingOn(settings.banner_announce_enabled));
+                    setExtraBanners(parseBanners(settings.banners_json));
+                    setLinkMainBanner(settings.banner_main_link || '');
+                    setLinkPopupBanner(settings.banner_popup_link || '');
+                    setLinkAnnounceBanner(settings.banner_announce_link || '');
                     setAdminAvatarInput(settings.admin_avatar_url ?? ADMIN_AVATAR_URL);
                     setAdminNameInput(settings.admin_name || 'นายภูธนากร หงษ์ทอง (พี่ภีม)');
                     setAdminRoleInput(settings.admin_role || 'เลขานุการสภานักเรียนโรงเรียนคำม่วง');
@@ -2103,10 +2127,18 @@ ${roomSummaryLines}`;
                 return false;
             };
 
+            // รวมแบนเนอร์หลัก (ช่องเดิม) + แบนเนอร์เพิ่มเติม ของตำแหน่งนั้นๆ ที่ผู้ใช้คนนี้มีสิทธิ์เห็น
+            const getBanners = (place) => {
+                const out = [];
+                const cfg = { main: ['main_banner_url', 'banner_main_enabled', 'visibility_main_banner', 'banner_main_link'], popup: ['popup_banner_url', 'banner_popup_enabled', 'visibility_popup_banner', 'banner_popup_link'], announce: ['announce_banner_url', 'banner_announce_enabled', 'visibility_announce_banner', 'banner_announce_link'] }[place];
+                const u = place === 'announce' ? (settings?.announce_banner_url ?? settings?.banner_url) : settings?.[cfg[0]];
+                if (u && settingOn(settings?.[cfg[1]]) && canViewBanner(settings?.[cfg[2]])) out.push({ id: 'legacy-' + place, url: u, link: settings?.[cfg[3]] });
+                parseBanners(settings?.banners_json).forEach(b => { if (b.place === place && b.url && b.on !== false && canViewBanner(b.aud || 'public')) out.push(b); });
+                return out;
+            };
+
             useEffect(() => {
-                if (settings?.popup_banner_url && !showSplash) {
-                    if (!settingOn(settings.banner_popup_enabled)) return;
-                    if (!canViewBanner(settings.visibility_popup_banner)) return;
+                if (!showSplash && getBanners('popup').length > 0) {
                     const hiddenUntil = safeGetItem('zc26_hide_banner_until');
                     if (hiddenUntil) {
                         const now = new Date().getTime();
@@ -2119,7 +2151,7 @@ ${roomSummaryLines}`;
                     }
                     setTimeout(() => { setShowMainBannerPopup(true); }, 500);
                 }
-            }, [settings?.popup_banner_url, settings?.visibility_popup_banner, settings?.banner_popup_enabled, appMode, showSplash]);
+            }, [settings?.popup_banner_url, settings?.visibility_popup_banner, settings?.banner_popup_enabled, settings?.banners_json, appMode, showSplash]);
 
             const handleCloseMainBannerPopup = () => {
                 if (hideBannerFor7Days) {
@@ -3463,6 +3495,10 @@ ${roomSummaryLines}`;
                     { key: 'banner_main_enabled', val: String(enMainBanner) },
                     { key: 'banner_popup_enabled', val: String(enPopupBanner) },
                     { key: 'banner_announce_enabled', val: String(enAnnounceBanner) },
+                    { key: 'banners_json', val: extraBanners.filter(b => String(b.url || '').trim()).length ? JSON.stringify(extraBanners.filter(b => String(b.url || '').trim()).map(b => ({ id: b.id, place: b.place, url: String(b.url).trim(), link: String(b.link || '').trim(), aud: b.aud || 'public', on: b.on !== false }))) : '' },
+                    { key: 'banner_main_link', val: String(linkMainBanner || '').trim() },
+                    { key: 'banner_popup_link', val: String(linkPopupBanner || '').trim() },
+                    { key: 'banner_announce_link', val: String(linkAnnounceBanner || '').trim() },
                     { key: 'announcement_title', val: announcementTitleInput },
                     { key: 'announcement_msg', val: announcementInput },
                     { key: 'admin_avatar_url', val: adminAvatarInput },
@@ -5491,10 +5527,8 @@ ${roomSummaryLines}`;
 
                     {currentRoute === 'dashboard' && (
                             <div className="animate-in fade-in space-y-6">
-                                {settings?.main_banner_url && settingOn(settings?.banner_main_enabled) && canViewBanner(settings?.visibility_main_banner) ? (
-                                    <div className="w-full aspect-[16/9] md:h-[250px] lg:h-[350px] md:aspect-auto rounded-[2rem] overflow-hidden shadow-sm border border-gray-200 relative select-none bg-gray-100 flex items-center justify-center">
-                                        <img src={settings.main_banner_url} alt="Main Banner" className="w-full h-full object-cover block absolute inset-0" />
-                                    </div>
+                                {getBanners('main').length > 0 ? (
+                                    <BannerCarousel items={getBanners('main')} />
                                 ) : (
                                     <div className="bg-gradient-to-br from-[#E11D48] via-[#BE123C] to-[#881337] rounded-3xl p-6 md:p-10 text-white shadow-[0_8px_30px_rgb(200,16,46,0.3)] relative overflow-hidden">
                                         <div className="absolute -right-6 top-0 text-white/10 rotate-12 transform scale-110 pointer-events-none"><i className="ph ph-clipboard-text text-[140px]"></i></div>
@@ -6067,6 +6101,7 @@ ${roomSummaryLines}`;
                                                     <option value="admin">เฉพาะแอดมิน</option>
                                                 </select>
                                             </div>
+                                            <input type="text" value={linkMainBanner} onChange={e => setLinkMainBanner(e.target.value)} placeholder="ลิงก์ปลายทางเมื่อกดแบนเนอร์ (ไม่บังคับ) เช่น https://..." className="mt-2 w-full p-2.5 rounded-xl border border-gray-200 bg-white text-xs font-medium outline-none focus:border-[#C8102E]" />
                                          </div>
                                          <div className="border border-gray-200 p-3 rounded-xl bg-white">
                                             <label className="text-[10px] font-bold text-gray-500 mb-1 block uppercase">2. แบนเนอร์ป๊อปอัป (Popup)</label>
@@ -6079,7 +6114,10 @@ ${roomSummaryLines}`;
                                                     <option value="inspector">เฉพาะผู้ตรวจและแอดมิน</option>
                                                     <option value="admin">เฉพาะแอดมิน</option>
                                                 </select>
+                                                <button type="button" onClick={() => { if (!settings?.popup_banner_url) { showToast('ยังไม่มีลิงก์รูปป๊อปอัปที่บันทึกไว้ ใส่ลิงก์แล้วกดบันทึกก่อน', 'warning'); return; } safeRemoveItem('zc26_hide_banner_until'); setShowMainBannerPopup(true); }} className="w-full mt-1 py-1.5 rounded-lg bg-white border border-dashed border-gray-300 text-[11px] font-bold text-gray-600 hover:bg-gray-50">ดูตัวอย่างป๊อปอัป + ล้างการซ่อน 7 วัน (ในเครื่องนี้)</button>
                                             </div>
+                                            <input type="text" value={linkPopupBanner} onChange={e => setLinkPopupBanner(e.target.value)} placeholder="ลิงก์ปลายทางเมื่อกดแบนเนอร์ (ไม่บังคับ) เช่น https://..." className="mt-2 w-full p-2.5 rounded-xl border border-gray-200 bg-white text-xs font-medium outline-none focus:border-[#C8102E]" />
+                                            <button type="button" onClick={() => { if (!settings?.popup_banner_url) { showToast('ยังไม่ได้บันทึกลิงก์รูปป๊อปอัป กรอกลิงก์แล้วกดบันทึกก่อน', 'warning'); return; } safeRemoveItem('zc26_hide_banner_until'); setShowMainBannerPopup(true); }} className="mt-2 w-full py-2 rounded-xl bg-gray-100 text-gray-700 hover:bg-gray-200 font-bold text-[11px]">ทดสอบแสดงป๊อปอัปตอนนี้ (ล้างการซ่อน 7 วัน)</button>
                                          </div>
                                          <div className="border border-gray-200 p-3 rounded-xl bg-white">
                                             <label className="text-[10px] font-bold text-gray-500 mb-1 block uppercase">3. แบนเนอร์ในหน้าต่างประกาศ</label>
@@ -6093,6 +6131,28 @@ ${roomSummaryLines}`;
                                                     <option value="admin">เฉพาะแอดมิน</option>
                                                 </select>
                                             </div>
+                                            <input type="text" value={linkAnnounceBanner} onChange={e => setLinkAnnounceBanner(e.target.value)} placeholder="ลิงก์ปลายทางเมื่อกดแบนเนอร์ (ไม่บังคับ) เช่น https://..." className="mt-2 w-full p-2.5 rounded-xl border border-gray-200 bg-white text-xs font-medium outline-none focus:border-[#C8102E]" />
+                                         </div>
+                                         <div className="border border-gray-200 p-3 rounded-xl bg-white space-y-3">
+                                            <div className="flex items-center justify-between gap-2">
+                                                <label className="text-[10px] font-bold text-gray-500 uppercase">แบนเนอร์เพิ่มเติม (ตั้งได้หลายอัน)</label>
+                                                <button type="button" onClick={() => setExtraBanners(p => [...p, { id: 'b_' + Date.now().toString(36), place: 'main', url: '', link: '', aud: 'public', on: true }])} className="px-3 py-1.5 rounded-lg bg-[#C8102E] text-white text-[11px] font-black">+ เพิ่มแบนเนอร์</button>
+                                            </div>
+                                            {extraBanners.length === 0 && <p className="text-[11px] text-gray-400 font-medium">ยังไม่มี กด “เพิ่มแบนเนอร์” เช่น อันหนึ่งให้ทุกคนเห็น อีกอันให้เฉพาะผู้ตรวจ แล้วกดบันทึกด้านล่าง (หลายอันที่หน้าหลักจะสไลด์สลับกัน)</p>}
+                                            {extraBanners.map((b, idx) => { const up = (k, v) => setExtraBanners(p => p.map(x => x.id === b.id ? { ...x, [k]: v } : x)); return (
+                                                <div key={b.id} className="border border-gray-100 bg-gray-50 rounded-xl p-3 space-y-2">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-[11px] font-black text-gray-500">#{idx + 1}</span>
+                                                        <select value={b.place} onChange={e => up('place', e.target.value)} className="text-[11px] font-bold p-1.5 rounded-lg border border-gray-200 bg-white outline-none"><option value="main">แสดงที่หน้าหลัก</option><option value="popup">แสดงเป็นป๊อปอัป</option><option value="announce">แสดงในประกาศ</option></select>
+                                                        <button type="button" onClick={() => setExtraBanners(p => p.filter(x => x.id !== b.id))} className="ml-auto text-red-500 text-[11px] font-bold">ลบ</button>
+                                                    </div>
+                                                    <input type="text" value={b.url} onChange={e => up('url', e.target.value)} placeholder="URL รูปแบนเนอร์..." className="w-full p-2.5 rounded-lg border border-gray-200 bg-white text-xs font-medium outline-none focus:border-[#C8102E]" />
+                                                    <input type="text" value={b.link} onChange={e => up('link', e.target.value)} placeholder="ลิงก์ปลายทางเมื่อกดแบนเนอร์ (ไม่บังคับ)" className="w-full p-2.5 rounded-lg border border-gray-200 bg-white text-xs font-medium outline-none focus:border-[#C8102E]" />
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <label className="flex items-center gap-2 cursor-pointer select-none"><input type="checkbox" checked={b.on !== false} onChange={e => up('on', e.target.checked)} className="w-4 h-4 accent-[#C8102E]" /><span className={`text-[11px] font-bold ${b.on !== false ? 'text-green-600' : 'text-gray-400'}`}>{b.on !== false ? 'เปิดแสดงอยู่' : 'ปิดอยู่'}</span></label>
+                                                        <select value={b.aud || 'public'} onChange={e => up('aud', e.target.value)} className="ml-auto text-[11px] font-bold p-1.5 rounded-lg border border-gray-200 bg-white outline-none"><option value="public">ให้ทุกคนเห็น</option><option value="guest">เฉพาะบุคคลทั่วไป</option><option value="inspector">เฉพาะผู้ตรวจและแอดมิน</option><option value="admin">เฉพาะแอดมิน</option></select>
+                                                    </div>
+                                                </div>); })}
                                          </div>
                                          <div className="border border-gray-200 p-3 rounded-xl bg-white">
                                             <label className="text-[10px] font-bold text-gray-500 mb-1 block uppercase">4. แผนผังห้องเรียน (Room Map URL)</label>
@@ -8543,19 +8603,17 @@ ${roomSummaryLines}`;
                             <div className="bg-white rounded-[2rem] w-full max-w-md p-6 shadow-2xl relative" onClick={e => e.stopPropagation()}>
                                 <button onClick={() => setShowAnnouncement(false)} className="absolute top-4 right-4 w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center"><i className="ph ph-x"></i></button>
                                 <div className="flex items-center gap-2 text-[#C8102E] font-black text-base mb-3"><i className="ph ph-megaphone text-xl"></i> ประกาศสภานักเรียน</div>
-                                {(settings?.announce_banner_url ?? settings?.banner_url) && settingOn(settings?.banner_announce_enabled) && canViewBanner(settings?.visibility_announce_banner) && (
-                                    <img src={settings.announce_banner_url ?? settings.banner_url} className="w-full rounded-xl mb-3 object-cover max-h-56" />
-                                )}
+                                {getBanners('announce').map(b => (<BannerLink key={b.id} href={b.link} className="block"><img src={b.url} className="w-full rounded-xl mb-3 object-cover max-h-56" /></BannerLink>))}
                                 <h4 className="font-bold text-gray-800 text-sm mb-1">{settings?.announcement_title || 'ประกาศแจ้งเตือน'}</h4>
                                 <p className="text-xs text-gray-600 whitespace-pre-line leading-relaxed">{settings?.announcement_msg || 'ยังไม่มีประกาศใหม่ในขณะนี้'}</p>
                             </div>
                         </div>
                     )}
 
-                    {showMainBannerPopup && settings?.popup_banner_url && (
+                    {showMainBannerPopup && getBanners('popup').length > 0 && (
                         <div className="fixed inset-0 z-[9996] bg-gray-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
                             <div className="bg-white rounded-[2rem] w-full max-w-md overflow-hidden shadow-2xl relative">
-                                <img src={settings.popup_banner_url} className="w-full max-h-[65vh] object-contain bg-gray-900" />
+                                {(() => { const pl = getBanners('popup'); const pb = pl[Math.min(popupIdx, pl.length - 1)]; return (<div className="relative"><BannerLink href={pb.link} className="block"><img src={pb.url} className="w-full max-h-[65vh] object-contain bg-gray-900" /></BannerLink>{pl.length > 1 && <div className="absolute bottom-2 inset-x-0 flex justify-center gap-1.5">{pl.map((_, k) => <button key={k} onClick={() => setPopupIdx(k)} className={`h-2 rounded-full transition-all ${k === Math.min(popupIdx, pl.length - 1) ? 'w-6 bg-white' : 'w-2 bg-white/60'}`}></button>)}</div>}</div>); })()}
                                 <div className="p-4 flex items-center justify-between bg-white">
                                     <label className="flex items-center gap-2 text-xs font-bold text-gray-600 cursor-pointer">
                                         <input type="checkbox" checked={hideBannerFor7Days} onChange={e => setHideBannerFor7Days(e.target.checked)} className="accent-[#C8102E]" /> ไม่แสดงอีกใน 7 วัน
