@@ -271,12 +271,12 @@
             const W = c.landscape ? 1075 : 730;
             const bd = c.style === 'box' ? '1px solid #ede9fe' : 'none';
             const bb = c.style === 'dotted' ? '1.5px dotted #a78bfa' : (c.style === 'line' ? '1px solid #ddd6fe' : '1px solid #ede9fe');
-            const base = `border:${bd};border-bottom:${bb};padding:4px 6px;height:${c.rowH}px;vertical-align:middle;font-size:13px;overflow:hidden;text-align:center;`;
+            const base = `border:${bd};border-bottom:${bb};padding:4px 6px;height:${c.rowH}px;vertical-align:middle;font-size:13px;white-space:normal;word-break:break-word;text-align:center;`;
             const fixed = [{ h: 'ที่', w: 38, a: 'center', k: 'no' }];
             if (c.kind === 'inspectors') {
                 if (c.showPhoto) fixed.push({ h: 'รูป', w: 50, a: 'center', k: 'photo' });
                 fixed.push({ h: 'ชื่อ-สกุล', w: 230, a: 'left', k: 'name' });
-                if (c.showRole) fixed.push({ h: 'ตำแหน่ง', w: 150, a: 'center', k: 'role' });
+                if (c.showRole) fixed.push({ h: 'ตำแหน่ง', w: 215, a: 'left', k: 'role' });
             } else {
                 fixed.push({ h: 'ห้องเรียน', w: 120, a: 'left', k: 'name' });
                 if (c.showZone) fixed.push({ h: 'เขตพื้นที่', w: 85, a: 'center', k: 'zone' });
@@ -285,6 +285,7 @@
             const cg = fixed.map(f => `<col style="width:${f.w}px">`).join('') + Array.from({ length: c.extra }).map(() => '<col>').join('');
             const th = 'background:#7c3aed;color:#fff;font-weight:bold;font-size:13px;padding:9px 6px;border:1px solid #6d28d9;text-align:center;';
             const head = fixed.map(f => `<th style="${th}">${f.h}</th>`).join('') + Array.from({ length: c.extra }).map((_, i) => `<th style="${th}">${escH(c.headers[i] || '')}</th>`).join('');
+            const lvLabel = (lv) => { const m = String(lv).match(/^ม\.?\s*(\d+)$/); if (m) return 'ชั้นมัธยมศึกษาปีที่ ' + m[1]; const q = String(lv).match(/^ป\.?\s*(\d+)$/); if (q) return 'ชั้นประถมศึกษาปีที่ ' + q[1]; return 'ระดับชั้น ' + lv; };
             const grp = (t) => `<tr><td colspan="${total}" style="background:#ede9fe;font-weight:bold;font-size:13px;padding:6px 10px;border:1px solid #ddd6fe;color:#6d28d9;text-align:left">${escH(t)}</td></tr>`;
             let prev = null, rows = '', n = 0;
             c.items.forEach((it, idx) => {
@@ -294,7 +295,7 @@
                     prev = d;
                 } else if (c.kind === 'rooms') {
                     const lv = it.name.includes('/') ? it.name.split('/')[0].trim() : '';
-                    if (lv && lv !== prev) { rows += grp('ระดับชั้น ' + lv); n = 0; }
+                    if (lv && lv !== prev) { rows += grp(lvLabel(lv)); n = 0; }
                     prev = lv;
                 }
                 const bg = (n % 2 === 1) ? 'background:#faf5ff;' : '';
