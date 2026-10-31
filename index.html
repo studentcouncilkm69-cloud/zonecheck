@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="theme-color" content="#ffffff">
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="ZoneCheck">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" href="icon-192.png">
+    <script>window.addEventListener('load', function () { if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {}); });</script>
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     
     <title>ZoneCheck | สภานักเรียนโรงเรียนคำม่วง</title>
@@ -258,6 +264,66 @@
                 <div className="w-full aspect-[16/9] md:h-[250px] lg:h-[350px] md:aspect-auto rounded-[2rem] overflow-hidden shadow-sm border border-gray-200 relative select-none bg-gray-100 flex items-center justify-center">
                     <BannerLink href={cur.link} className="absolute inset-0 block"><img src={cur.url} alt="Banner" className="w-full h-full object-cover block absolute inset-0" /></BannerLink>
                     {items.length > 1 && <div className="absolute bottom-3 inset-x-0 flex justify-center gap-1.5 z-10">{items.map((_, k) => <button key={k} onClick={() => setI(k)} className={`h-1.5 rounded-full transition-all ${k === i ? 'w-5 bg-white' : 'w-1.5 bg-white/60'}`}></button>)}</div>}
+                </div>
+            );
+        };
+        // แถบความคืบหน้าตอนบันทึก: ไต่เร็วตอนแรกแล้วค่อยๆ ชะลอ (ไม่ถึง 100% จนกว่าจะบันทึกเสร็จ) ให้รู้สึกเร็วและไม่ค้าง
+        const SavingProgress = ({ expected }) => {
+            const [pct, setPct] = useState(4);
+            useEffect(() => {
+                const t0 = performance.now();
+                const tau = Math.max(1.5, (expected || 4) * 0.5) * 1000;
+                const id = setInterval(() => setPct(Math.min(96, Math.max(4, Math.round(96 * (1 - Math.exp(-(performance.now() - t0) / tau)))))), 100);
+                return () => clearInterval(id);
+            }, [expected]);
+            return (
+                <div className="w-full">
+                    <div className="flex items-end justify-between mb-1.5">
+                        <span className="text-[11px] font-bold text-gray-400">ความคืบหน้า</span>
+                        <span className="text-3xl font-black text-[#C8102E] tabular-nums leading-none">{pct}<span className="text-base">%</span></span>
+                    </div>
+                    <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
+                        <div className="h-full rounded-full bg-gradient-to-r from-[#C8102E] to-rose-500 transition-[width] duration-200 ease-out" style={{ width: pct + '%' }}></div>
+                    </div>
+                </div>
+            );
+        };
+        // แถบแนะนำให้ติดตั้งเป็นแอป: Android = ปุ่มติดตั้งจริง / iPhone-iPad = วิธีเพิ่มลงหน้าจอโฮม / LINE = ให้เปิดในเบราว์เซอร์ก่อน
+        const InstallPrompt = ({ logo, hidden }) => {
+            const [deferred, setDeferred] = useState(null);
+            const [show, setShow] = useState(false);
+            const ua = navigator.userAgent || '';
+            const isIOS = /iphone|ipad|ipod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+            const isLine = /Line\//i.test(ua);
+            const standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+            useEffect(() => {
+                if (standalone) return;
+                let last = 0; try { last = Number(localStorage.getItem('zc26_install_dismiss') || 0); } catch (e) {}
+                if (Date.now() - last < 7 * 86400000) return;
+                const onBip = (e) => { e.preventDefault(); setDeferred(e); setShow(true); };
+                window.addEventListener('beforeinstallprompt', onBip);
+                const t = setTimeout(() => { if (isIOS || isLine) setShow(true); }, 2500);
+                return () => { window.removeEventListener('beforeinstallprompt', onBip); clearTimeout(t); };
+            }, []);
+            if (!show || standalone || hidden) return null;
+            const close = () => { try { localStorage.setItem('zc26_install_dismiss', String(Date.now())); } catch (e) {} setShow(false); };
+            const install = async () => { if (!deferred) return; deferred.prompt(); try { await deferred.userChoice; } catch (e) {} setDeferred(null); setShow(false); };
+            const sub = deferred ? 'เปิดใช้งานได้สะดวกจากหน้าจอหลัก' : (isLine ? 'เปิดในเบราว์เซอร์ก่อน (กดไอคอนเข็มทิศหรือจุดสามจุดมุมจอ) จึงจะติดตั้งได้' : 'แตะปุ่มแชร์ของ Safari แล้วเลือก “เพิ่มลงในหน้าจอโฮม”');
+            return (
+                <div className="fixed left-3 right-3 z-[600] max-w-md mx-auto bg-white rounded-[1.5rem] shadow-[0_12px_40px_rgba(0,0,0,0.22)] border border-gray-100 p-3 flex items-center gap-3 animate-in slide-in-from-bottom" style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 96px)' }}>
+                    <img src={logo} className="w-11 h-11 object-contain shrink-0" />
+                    <div className="min-w-0 flex-1">
+                        <div className="text-sm font-black text-gray-800">ติดตั้งแอป ZoneCheck</div>
+                        <div className="text-[11px] font-medium text-gray-500 leading-snug">{sub}</div>
+                    </div>
+                    {deferred ? (
+                        <div className="flex flex-col gap-1.5 shrink-0">
+                            <button onClick={install} className="px-4 py-2 rounded-full bg-[#C8102E] text-white font-black text-xs">ติดตั้ง</button>
+                            <button onClick={close} className="px-4 py-1.5 rounded-full bg-gray-100 text-gray-600 font-bold text-[11px]">ไว้ทีหลัง</button>
+                        </div>
+                    ) : (
+                        <button onClick={close} className="px-3.5 py-2 rounded-full bg-gray-100 text-gray-600 font-bold text-xs shrink-0">ปิด</button>
+                    )}
                 </div>
             );
         };
@@ -6628,6 +6694,7 @@ ${roomSummaryLines}`;
                             </div>
                         </div>);
                     })()}
+                    <InstallPrompt logo={settings?.app_logo_url || HARDCODED_LOGO} hidden={showSplash} />
                     {showMaintPreview && (
                         <div className="fixed inset-0 z-[10000] bg-[#F3F4F6]">
                             <div className="absolute top-0 inset-x-0 z-20 bg-gray-900 text-white px-4 py-2.5 flex items-center justify-between gap-3 text-xs font-bold">
@@ -7253,7 +7320,7 @@ ${roomSummaryLines}`;
                                         {isSavingData ? (
                                             <>
                                                 <i className="ph ph-spinner animate-spin text-lg"></i>
-                                                <span>กำลังบันทึก ({savingCountdown}s)...</span>
+                                                <span>กำลังบันทึก...</span>
                                             </>
                                         ) : (
                                             <span>บันทึกผล</span>
@@ -7267,23 +7334,12 @@ ${roomSummaryLines}`;
                     {isSavingData && (
                         <div className="fixed inset-0 z-[999999] bg-gray-900/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in select-none">
                             <div className="bg-white rounded-[2.25rem] w-full max-w-xs p-6 text-center shadow-2xl border border-gray-100 flex flex-col items-center">
-                                <div className="relative w-20 h-20 flex items-center justify-center mb-4">
-                                    <div className="absolute inset-0 border-4 border-gray-100 rounded-full"></div>
-                                    <div className="absolute inset-0 border-4 border-t-[#C8102E] border-r-[#C8102E] border-b-transparent border-l-transparent rounded-full animate-spin"></div>
-                                    <span className="text-xl font-black text-[#C8102E]">{savingCountdown > 0 ? `${savingCountdown}s` : '...'}</span>
-                                </div>
+                                <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center mb-4"><i className="ph ph-cloud-arrow-up text-3xl text-[#C8102E] animate-pulse"></i></div>
                                 <h3 className="text-base font-black text-gray-800 mb-1">กำลังบันทึกข้อมูล</h3>
-                                <p className="text-xs font-bold text-gray-500 leading-relaxed mb-3">
+                                <p className="text-xs font-bold text-gray-500 leading-relaxed mb-4">
                                     {savingStatusText || 'กรุณารอสักครู่ ระบบกำลังส่งข้อมูลไปยังฐานข้อมูล...'}
                                 </p>
-                                {savingTotalTime > 0 && (
-                                    <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden mb-2">
-                                        <div 
-                                            className="bg-gradient-to-r from-[#C8102E] to-rose-500 h-full rounded-full transition-all duration-500"
-                                            style={{ width: `${Math.min(100, Math.max(15, Math.round(((savingTotalTime - savingCountdown + 1) / savingTotalTime) * 100)))}%` }}
-                                        ></div>
-                                    </div>
-                                )}
+                                <div className="w-full mb-4"><SavingProgress expected={savingTotalTime} /></div>
                                 <span className="text-[11px] font-bold text-[#C8102E] bg-red-50 px-3 py-1 rounded-full border border-red-100">
                                     กรุณาอย่าเพิ่งปิดหรือกดออกจากหน้านี้
                                 </span>
