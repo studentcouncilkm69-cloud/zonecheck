@@ -858,6 +858,7 @@
         const trimSignaturePng = (src) => new Promise((resolve) => {
             if (SIG_TRIM_CACHE[src]) return resolve(SIG_TRIM_CACHE[src]);
             const img = new Image();
+            if (/^https?:/i.test(src)) img.crossOrigin = 'anonymous';
             img.onload = () => {
                 try {
                     const c = document.createElement('canvas');
@@ -922,7 +923,7 @@
                     im.onerror = () => { if (alive) setInfo({ forSrc: src, src: finalSrc, w: maxW, h: maxH }); };
                     im.src = finalSrc;
                 };
-                if (typeof src === 'string' && src.startsWith('data:image/png')) {
+                if (typeof src === 'string' && (src.startsWith('data:image/png') || /^https?:\/\/lh3\.googleusercontent\.com\//i.test(src))) {
                     trimSignaturePng(src).then(build);
                 } else {
                     build(src);
@@ -2513,15 +2514,19 @@ ${roomSummaryLines}`;
                     return;
                 }
 
-                if (window.__zcSigBusy) return;
                 let sigFinal = loginSignatureDataUrl;
-                if (String(sigFinal).startsWith('data:image/')) {
-                    window.__zcSigBusy = true;
-                    showToast('กำลังบันทึกลายเซ็นของวันนี้...', 'info');
-                    try { sigFinal = await uploadDailySignature(finalName, sigFinal); } finally { window.__zcSigBusy = false; }
-                    setLoginSignatureDataUrl(sigFinal);
-                }
                 saveTodaySignatureForUser(finalName, sigFinal);
+                // อัปโหลดเบื้องหลังเงียบๆ ไม่ต้องรอและไม่แจ้งผู้ใช้ เสร็จแล้วค่อยสลับเป็นลิงก์สั้น
+                if (String(sigFinal).startsWith('data:image/') && !window.__zcSigBusy) {
+                    window.__zcSigBusy = true;
+                    const localSig = sigFinal;
+                    uploadDailySignature(finalName, localSig).then(url => {
+                        if (url && url !== localSig) {
+                            saveTodaySignatureForUser(finalName, url);
+                            setCurrentUser(u => (u && String(u.name).trim() === finalName && u.dailySignature === localSig) ? { ...u, dailySignature: url } : u);
+                        }
+                    }).catch(() => {}).finally(() => { window.__zcSigBusy = false; });
+                }
                 
                 const validInspectors = Array.isArray(inspectors) ? inspectors : [];
                 let userObj = validInspectors.find(u => u.name === finalName);
@@ -5214,8 +5219,8 @@ ${roomSummaryLines}`;
                 const colW = totalSigners >= 7 ? 215 : (totalSigners >= 4 ? 225 : 285);
                 const colGap = isCompact ? 22 : 30;
                 // ขนาดลายเซ็นแยกตามที่มา: เซ็นในแอป (data:) ปรับเล็กลง / รูปจากลิงก์ (http) ขยายให้ใหญ่ขึ้น
-                const SIG_SIZE_INAPP = { h: isCompact ? 50 : 62, pad: 24 };
-                const SIG_SIZE_LINK = { h: isCompact ? 70 : 88, pad: 14 };
+                const SIG_SIZE_INAPP = { h: isCompact ? 40 : 48, pad: 24 };
+                const SIG_SIZE_LINK = { h: isCompact ? 40 : 48, pad: 24 };
                 const blankParenText = '(..............................................)';
 
                 return (
@@ -6988,10 +6993,11 @@ ${roomSummaryLines}`;
                                                     className="w-full h-full cursor-crosshair block relative z-10 sig-pad-surface"
                                                 />
                                                 {loginSignatureDataUrl && !isDrawingSigRef.current && !loginSigDrawnRef.current && (
-                                                    <img 
-                                                        src={loginSignatureDataUrl} 
-                                                        alt="Saved Signature" 
-                                                        className="absolute inset-0 w-full h-full object-contain pointer-events-none z-0 p-2"
+                                                    <SigImg
+                                                        src={loginSignatureDataUrl}
+                                                        alt=""
+                                                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                                        className="absolute inset-0 w-full h-full object-contain pointer-events-none z-0 p-6"
                                                     />
                                                 )}
                                                 <div className="absolute bottom-9 left-8 right-8 border-b border-gray-200 pointer-events-none"></div>
