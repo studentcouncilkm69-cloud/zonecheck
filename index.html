@@ -920,6 +920,24 @@
             );
         };
 
+        // กล่อง AI Insights แบบพับไว้ก่อน กดปุ่มถึงจะแสดง
+        const AiInsightToggle = ({ count, children }) => {
+            const [open, setOpen] = useState(false);
+            return (
+                <div className="bg-gradient-to-br from-rose-50/80 via-white to-amber-50/50 rounded-2xl border border-red-100 shadow-sm overflow-hidden">
+                    <button type="button" onClick={() => setOpen(o => !o)} className="w-full flex items-center justify-between gap-2 p-3.5 text-left active:scale-[0.99] transition-all">
+                        <span className="text-xs font-black text-[#C8102E] flex items-center gap-1.5">
+                            <i className="ph ph-sparkle ph-fill text-sm"></i> {open ? 'ซ่อนการวิเคราะห์ (AI Insights)' : 'ดูวิเคราะห์จุดอ่อน-จุดแข็ง (AI Insights)'}
+                        </span>
+                        <span className="text-[10px] font-bold text-gray-400 flex items-center gap-1.5 shrink-0">
+                            {count} ครั้ง <i className={`ph ${open ? 'ph-caret-up' : 'ph-caret-down'} text-sm`}></i>
+                        </span>
+                    </button>
+                    {open && <div className="px-4 pb-4 space-y-2">{children}</div>}
+                </div>
+            );
+        };
+
         // ลายเซ็นที่ปรับขนาดให้พอดีกับช่องที่กำหนด (รักษาสัดส่วน ไม่ล้นช่อง)
         // วาดลงแคนวาสความละเอียด 3 เท่า พร้อมเว้นขอบโปร่งใสรอบด้าน (pad) เพื่อไม่ให้ปลายเส้นถูกตัดตอนส่งออกเป็น PDF/PNG
         const FitSigImg = ({ src: srcRaw, maxW, maxH, pad = 4, style, ...rest }) => {
@@ -2488,7 +2506,7 @@ ${roomSummaryLines}`;
                 const safe = String(name).replace(/[\\/:*?"<>|]/g, '-');
                 try {
                     const res = await Promise.race([
-                        syncToGASAsync('saveImageToDrive', { fileName: `ลายเซ็น_${safe}_${d}.png`, base64: m[2], mimeType: m[1], monthYear: `ลายเซ็นผู้ตรวจ ${formatMonthYearThai(d)}` }),
+                        syncToGASAsync('saveImageToDrive', { fileName: `ลายเซ็น_${safe}_${d}.png`, base64: m[2], mimeType: m[1], monthYear: `ลายเซ็นผู้ตรวจ ${formatMonthYearThai(d)}`, dayFolder: d }),
                         new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 15000))
                     ]);
                     return (res && res.url) ? res.url : dataUrl;
@@ -2967,7 +2985,7 @@ ${roomSummaryLines}`;
                         
                         try {
                             const uploadRes = await syncToGASAsync('saveImageToDrive', {
-                                fileName: roomFileName, base64: inspectImage.base64, mimeType: inspectImage.mimeType, monthYear: targetMonthYear
+                                fileName: roomFileName, base64: inspectImage.base64, mimeType: inspectImage.mimeType, monthYear: targetMonthYear, dayFolder: String(inspectModal.date || '').slice(0, 10)
                             });
                             photoUrl = uploadRes.url;
                         } catch (err) {
@@ -7245,15 +7263,7 @@ ${roomSummaryLines}`;
                                         const roomInsight = getRoomAiInsight(viewDetailModal.roomId || viewDetailModal.room?.id, viewDetailModal.room?.name);
                                         if (!roomInsight || !roomInsight.hasData) return null;
                                         return (
-                                            <div className="bg-gradient-to-br from-rose-50/80 via-white to-amber-50/50 p-4 rounded-2xl border border-red-100 space-y-2 shadow-sm">
-                                                <div className="flex items-center justify-between">
-                                                    <span className="text-xs font-black text-[#C8102E] flex items-center gap-1.5">
-                                                        <i className="ph ph-sparkle ph-fill text-sm"></i> วิเคราะห์จุดอ่อน-จุดแข็งสะสม (AI Insights)
-                                                    </span>
-                                                    <span className="text-[10px] font-bold text-gray-400">
-                                                        จากสถิติ {roomInsight.roomCheckedCount} ครั้ง
-                                                    </span>
-                                                </div>
+                                            <AiInsightToggle count={roomInsight.roomCheckedCount}>
                                                 <div className="space-y-1.5 text-xs">
                                                     <div className="bg-white/90 p-2.5 rounded-xl border border-emerald-100">
                                                         <span className="font-bold text-emerald-700 block text-[11px]">จุดแข็งของห้องนี้:</span>
@@ -7273,7 +7283,7 @@ ${roomSummaryLines}`;
                                                         คำแนะนำ: {roomInsight.adviceText}
                                                     </p>
                                                 </div>
-                                            </div>
+                                            </AiInsightToggle>
                                         );
                                     })()}
                                 </div>
