@@ -3912,47 +3912,52 @@ ${roomSummaryLines}`;
             };
 
             const buildDailyInspectorsSignerList = () => {
+              try {
                 const todayStr = getThaiDateStr();
                 const targetDateStr = (currentRoute === 'history' && dateMode !== 'today') ? filterDate : todayStr;
                 const validInspections = Array.isArray(inspections) ? inspections : [];
                 const dayInsps = validInspections.filter(i => i.date && String(i.date).startsWith(targetDateStr));
 
-                const inspectorMap = new Map();
+                // รวมคนที่ตรวจด้วยกันเป็นทีมเดียว: ใช้ลายเซ็นของผู้ตรวจหลัก (คนแรก) แล้วแสดงชื่อทุกคนในทีม
+                const teamMap = new Map();
                 dayInsps.forEach(insp => {
                     const rawTeam = String(insp.inspector || '').split(',').map(s => s.trim()).filter(Boolean);
                     const mainName = String(insp.mainInspector || rawTeam[0] || '').trim();
+                    if (!mainName) return;
+                    const members = [mainName, ...rawTeam.filter(n => n !== mainName)];
+                    const key = members.join('|');
                     const sigUrl = insp.inspectorSignature || '';
-
-                    rawTeam.forEach(personName => {
-                        if (!inspectorMap.has(personName)) {
-                            inspectorMap.set(personName, {
-                                name: personName,
-                                signatureUrl: (personName === mainName && sigUrl) ? sigUrl : ''
-                            });
-                        } else if (personName === mainName && sigUrl && !inspectorMap.get(personName).signatureUrl) {
-                            inspectorMap.get(personName).signatureUrl = sigUrl;
-                        }
-                    });
+                    if (!teamMap.has(key)) {
+                        teamMap.set(key, { names: members, signatureUrl: sigUrl });
+                    } else if (sigUrl && !teamMap.get(key).signatureUrl) {
+                        teamMap.get(key).signatureUrl = sigUrl;
+                    }
                 });
 
-                if (inspectorMap.size === 0 && currentUser?.name) {
-                    inspectorMap.set(currentUser.name, {
-                        name: currentUser.name,
+                if (teamMap.size === 0 && currentUser?.name) {
+                    const members = [currentUser.name, ...(coInspectors || []).filter(n => n && n !== currentUser.name)];
+                    teamMap.set(members.join('|'), {
+                        names: members,
                         signatureUrl: currentUser.dailySignature || loginSignatureDataUrl || ''
-                    });
-                    (coInspectors || []).forEach(coName => {
-                        if (coName && !inspectorMap.has(coName)) {
-                            inspectorMap.set(coName, { name: coName, signatureUrl: '' });
-                        }
                     });
                 }
 
-                return Array.from(inspectorMap.values()).map((item, idx) => ({
-                    id: `daily_insp_${idx + 1}`,
-                    name: item.name,
-                    role: `ผู้ตรวจ ${idx + 1}`,
-                    signatureUrl: item.signatureUrl
-                }));
+                let personCounter = 0;
+                return Array.from(teamMap.values()).map((team, idx) => {
+                    const startNo = personCounter + 1;
+                    personCounter += team.names.length;
+                    return {
+                        id: `daily_insp_${idx + 1}`,
+                        name: team.names.join(', '),
+                        names: team.names,
+                        role: team.names.length > 1 ? `ผู้ตรวจ ${startNo}-${personCounter}` : `ผู้ตรวจ ${startNo}`,
+                        signatureUrl: team.signatureUrl
+                    };
+                });
+              } catch (e) {
+                // กันไม่ให้ข้อมูลแปลกๆ ทำให้หน้าจอพัง: ถ้าจัดทีมไม่ได้ ให้แสดงลายเซ็นว่างแทน ฟังก์ชันตรวจไม่กระทบ
+                return [];
+              }
             };
 
             const activeSignersForExport = useMemo(() => {
@@ -5292,6 +5297,16 @@ ${roomSummaryLines}`;
                             const displayParenName = cleanName
                                 ? (cleanName.startsWith('(') && cleanName.endsWith(')') ? cleanName : `(${cleanName})`)
                                 : blankParenText;
+                            // ตรวจด้วยกันหลายคน: แต่ละชื่อขึ้นบรรทัดใหม่ คนก่อนสุดท้ายคั่นด้วยจุลภาค (ถ้ามี 3 คนขึ้นไป) และคนสุดท้ายนำหน้าด้วย "และ"
+                            const nameLines = (Array.isArray(signer.names) && signer.names.length > 1)
+                                ? signer.names.map((n, i, arr) => {
+                                    const isLast = i === arr.length - 1;
+                                    let t = isLast ? `และ ${n}` : (arr.length > 2 ? `${n},` : n);
+                                    if (i === 0) t = `(${t}`;
+                                    if (isLast) t = `${t})`;
+                                    return t;
+                                })
+                                : null;
                             const isInAppSig = String(signer.signatureUrl || '').startsWith('data:');
                             const sz = isInAppSig ? SIG_SIZE_INAPP : SIG_SIZE_LINK;
                             const sigPad = sz.pad;
@@ -5358,7 +5373,7 @@ ${roomSummaryLines}`;
                                         marginTop: '4px',
                                         whiteSpace: 'nowrap'
                                     }}>
-                                        {displayParenName}
+                                        {nameLines ? nameLines.map((ln, li) => <div key={li}>{ln}</div>) : displayParenName}
                                     </div>
                                     {signer.role && (
                                         <div style={{
