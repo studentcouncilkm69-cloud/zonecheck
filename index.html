@@ -9044,8 +9044,8 @@ ${roomSummaryLines}`;
         };
 
         // ===== หน้าส่งรูปสำหรับนักเรียน (เปิดด้วยลิงก์ ?send=1) แยกจากระบบตรวจ ไม่เกี่ยวกับคะแนน =====
-        const STUDENT_ROOMS_FALLBACK = ['ม.1/1','ม.1/2','ม.1/3','ม.1/4','ม.1/5','ม.1/Sp','ม.1/Sm','ม.2/1','ม.2/2','ม.2/3','ม.2/4','ม.2/5','ม.2/6','ม.2/Sp','ม.2/Sm','ม.3/1','ม.3/2','ม.3/3','ม.3/4','ม.3/5','ม.3/6','ม.3/Sp','ม.3/Sm','ม.4/1','ม.4/2','ม.4/3','ม.4/4','ม.4/5','ม.4/6 (ICP)','ม.4/7','ม.4/Sm','ม.4/Sp','ม.5/1','ม.5/2','ม.5/3','ม.5/4','ม.5/5','ม.5/6','ม.5/7','ม.5/Sm','ม.6/1','ม.6/2','ม.6/3','ม.6/4','ม.6/5','ม.6/6','ม.6/7','ม.6/Sm'];
-        const compressImageToJpeg = (file, maxSide = 1600, quality = 0.8) => new Promise((resolve, reject) => {
+        const STUDENT_ROOMS = ['ม.1/1','ม.1/2','ม.1/3','ม.1/4','ม.1/5','ม.1/Sp','ม.1/Sm','ม.2/1','ม.2/2','ม.2/3','ม.2/4','ม.2/5','ม.2/6','ม.2/Sp','ม.2/Sm','ม.3/1','ม.3/2','ม.3/3','ม.3/4','ม.3/5','ม.3/6','ม.3/Sp','ม.3/Sm','ม.4/1','ม.4/2','ม.4/3','ม.4/4','ม.4/5','ม.4/6 (ICP)','ม.4/7','ม.4/Sm','ม.4/Sp','ม.5/1','ม.5/2','ม.5/3','ม.5/4','ม.5/5','ม.5/6','ม.5/7','ม.5/Sm','ม.6/1','ม.6/2','ม.6/3','ม.6/4','ม.6/5','ม.6/6','ม.6/7','ม.6/Sm'];
+        const compressImageToJpeg = (file, maxSide = 1280, quality = 0.75) => new Promise((resolve, reject) => {
             const url = URL.createObjectURL(file);
             const img = new Image();
             img.onload = () => {
@@ -9066,121 +9066,117 @@ ${roomSummaryLines}`;
 
         const StudentPhotoPage = () => {
             const MAX_PHOTOS = 3;
-            const [rooms, setRooms] = useState(STUDENT_ROOMS_FALLBACK);
             const [room, setRoom] = useState('');
             const [photos, setPhotos] = useState([]);
             const [busy, setBusy] = useState(false);
+            const [prep, setPrep] = useState(false);
+            const [sentN, setSentN] = useState(0);
             const [done, setDone] = useState(null);
             const [err, setErr] = useState('');
             const fileRef = useRef(null);
 
-            useEffect(() => {
-                let off = false;
-                (async () => {
-                    try {
-                        const r = await fetch(`${GOOGLE_SCRIPT_URL}?action=getInitialData&_t=${Date.now()}`, { redirect: 'follow' });
-                        const j = JSON.parse(await r.text());
-                        if (!off && j && j.status === 'Success' && Array.isArray(j.rooms) && j.rooms.length) {
-                            const names = sortRoomsNaturally(j.rooms).map(x => String(x.name || '').trim()).filter(Boolean);
-                            if (names.length) setRooms(names);
-                        }
-                    } catch (e) { /* ใช้รายชื่อห้องสำรองต่อไป */ }
-                })();
-                return () => { off = true; };
-            }, []);
-
+            // ย่อรูปพร้อมกันทุกรูป ไม่รอทีละรูป
             const onPick = async (e) => {
                 const files = Array.from(e.target.files || []);
                 e.target.value = '';
                 if (!files.length) return;
                 setErr('');
-                const left = MAX_PHOTOS - photos.length;
+                const left = Math.max(0, MAX_PHOTOS - photos.length);
                 if (files.length > left) setErr(`ส่งได้ไม่เกิน ${MAX_PHOTOS} รูป`);
+                setPrep(true);
                 try {
-                    const out = [];
-                    for (const f of files.slice(0, Math.max(0, left))) {
-                        out.push({ id: Math.random().toString(36).slice(2), dataUrl: await compressImageToJpeg(f) });
-                    }
+                    const out = await Promise.all(files.slice(0, left).map(async f => ({ id: Math.random().toString(36).slice(2), dataUrl: await compressImageToJpeg(f) })));
                     setPhotos(p => [...p, ...out]);
                 } catch (ex) { setErr('เลือกรูปไม่สำเร็จ: ' + (ex.message || ex)); }
+                finally { setPrep(false); }
             };
 
+            // ส่งทุกรูปพร้อมกัน รูปไหนส่งไม่สำเร็จจะเหลือไว้ให้กดส่งซ้ำ
             const send = async () => {
                 if (!room || !photos.length || busy) return;
-                setBusy(true); setErr('');
+                setBusy(true); setErr(''); setSentN(0);
                 const date = getThaiDateStr();
                 const now = new Date();
                 const hhmm = String(now.getHours()).padStart(2, '0') + String(now.getMinutes()).padStart(2, '0');
-                try {
-                    for (let i = 0; i < photos.length; i++) {
-                        const res = await fetch(GOOGLE_SCRIPT_URL, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                            body: JSON.stringify({ action: 'saveImageToDrive', data: {
-                                fileName: `${room.replace(/\//g, '-')}_${date}_${hhmm}_${i + 1}.jpg`,
-                                base64: photos[i].dataUrl.split(',')[1],
-                                mimeType: 'image/jpeg',
-                                monthYear: `รูปจากนักเรียน ${formatMonthYearThai(date)}`,
-                                dayFolder: date,
-                                roomFolder: room
-                            } })
-                        });
-                        const j = await res.json();
-                        if (j.status !== 'Success') throw new Error(j.message || 'ส่งไม่สำเร็จ');
-                    }
-                    setDone({ room, count: photos.length });
-                    setPhotos([]);
-                } catch (ex) {
-                    setErr('ส่งไม่สำเร็จ: ' + (ex.message || ex) + ' ลองกดส่งอีกครั้ง');
-                } finally { setBusy(false); }
+                const batch = photos;
+                const results = await Promise.allSettled(batch.map(async (ph, i) => {
+                    const res = await fetch(GOOGLE_SCRIPT_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({ action: 'saveImageToDrive', data: {
+                            fileName: `${room.replace(/\//g, '-')}_${date}_${hhmm}_${i + 1}.jpg`,
+                            base64: ph.dataUrl.split(',')[1],
+                            mimeType: 'image/jpeg',
+                            monthYear: `รูปจากนักเรียน ${formatMonthYearThai(date)}`,
+                            dayFolder: date,
+                            roomFolder: room
+                        } })
+                    });
+                    const j = await res.json();
+                    if (j.status !== 'Success') throw new Error(j.message || 'ส่งไม่สำเร็จ');
+                    setSentN(n => n + 1);
+                    return ph.id;
+                }));
+                const okIds = new Set(results.filter(r => r.status === 'fulfilled').map(r => r.value));
+                const failed = batch.length - okIds.size;
+                if (failed === 0) { setDone({ room, count: batch.length }); setPhotos([]); }
+                else { setPhotos(batch.filter(ph => !okIds.has(ph.id))); setErr(`ส่งไม่สำเร็จ ${failed} รูป กดส่งอีกครั้งได้เลย`); }
+                setBusy(false);
             };
 
-            const card = 'bg-white rounded-3xl shadow-sm border border-gray-100 p-5';
+            const card = 'bg-white rounded-[2rem] shadow-sm border border-gray-100 p-6';
             return (
-                <div className="min-h-screen bg-[#fff5f5] pb-10" style={{ fontFamily: "'Sarabun', sans-serif" }}>
-                    <div className="bg-[#C8102E] text-white px-5 pt-8 pb-10 rounded-b-[2rem]">
-                        <p className="text-xs font-bold opacity-80">สภานักเรียน โรงเรียนคำม่วง</p>
-                        <h1 className="text-2xl font-black mt-1">ส่งรูปรายงาน</h1>
+                <div className="min-h-screen bg-gray-50 pb-10" style={{ fontFamily: "'Sarabun', sans-serif" }}>
+                    <div className="bg-white border-b border-gray-100 px-5 py-3 flex items-center gap-3 sticky top-0 z-10">
+                        <img src={HARDCODED_LOGO} alt="" className="w-11 h-11 object-contain shrink-0" />
+                        <div className="min-w-0">
+                            <h1 className="font-black text-gray-800 leading-tight">ZoneCheck</h1>
+                            <p className="text-[11px] font-bold text-gray-400 truncate">สภานักเรียน โรงเรียนคำม่วง</p>
+                        </div>
                     </div>
-                    <div className="max-w-md mx-auto px-4 -mt-5 space-y-4">
+                    <div className="max-w-md mx-auto p-4 space-y-4">
+                        <div className="bg-gradient-to-r from-[#C8102E] to-orange-600 rounded-[2rem] p-5 text-white shadow-lg shadow-red-200">
+                            <h2 className="text-lg font-black flex items-center gap-2"><i className="ph ph-camera"></i> ส่งรูปรายงาน</h2>
+                            <p className="text-xs font-medium opacity-90 mt-1">เลือกห้อง แล้วแนบรูปได้ไม่เกิน {MAX_PHOTOS} รูป</p>
+                        </div>
                         {done ? (
                             <div className={card + ' text-center'}>
-                                <div className="text-5xl mb-2">✅</div>
+                                <div className="w-16 h-16 mx-auto rounded-full bg-green-50 text-green-600 flex items-center justify-center mb-3"><i className="ph ph-check-circle text-4xl"></i></div>
                                 <p className="font-black text-lg text-gray-800">ส่งรูปเรียบร้อยแล้ว</p>
                                 <p className="text-sm text-gray-500 mt-1">ห้อง {done.room} · {done.count} รูป</p>
-                                <button onClick={() => { setDone(null); setRoom(''); }} className="mt-5 w-full py-3 rounded-2xl bg-[#C8102E] text-white font-black">ส่งรูปอีกครั้ง</button>
+                                <button onClick={() => { setDone(null); setRoom(''); }} className="mt-5 w-full py-3.5 rounded-2xl bg-[#C8102E] hover:bg-red-700 text-white font-black shadow-lg shadow-red-200 transition-all active:scale-95">ส่งรูปอีกครั้ง</button>
                             </div>
                         ) : (
-                            <>
-                                <div className={card}>
-                                    <p className="font-black text-gray-800 mb-3">1. เลือกห้องของคุณ</p>
-                                    <div className="grid grid-cols-3 gap-2">
-                                        {rooms.map(r => (
-                                            <button key={r} onClick={() => setRoom(r)} className={'py-2.5 rounded-xl text-sm font-bold border transition-all ' + (room === r ? 'bg-[#C8102E] text-white border-[#C8102E]' : 'bg-white text-gray-700 border-gray-200')}>{r}</button>
+                            <div className={card + ' space-y-5'}>
+                                <div>
+                                    <label className="text-[10px] font-bold text-gray-500 mb-1.5 block uppercase">1. เลือกห้อง</label>
+                                    <select value={room} onChange={e => setRoom(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3.5 text-base font-bold text-gray-800 outline-none focus:border-[#C8102E]">
+                                        <option value="">เลือกห้องของคุณ...</option>
+                                        {STUDENT_ROOMS.map(r => <option key={r} value={r}>{r}</option>)}
+                                    </select>
+                                </div>
+                                <div className={room ? '' : 'opacity-40 pointer-events-none'}>
+                                    <label className="text-[10px] font-bold text-gray-500 mb-1.5 block uppercase">2. แนบรูป ({photos.length}/{MAX_PHOTOS})</label>
+                                    <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={onPick} />
+                                    <div className="grid grid-cols-3 gap-2.5">
+                                        {photos.map(ph => (
+                                            <div key={ph.id} className="relative aspect-square rounded-2xl overflow-hidden border border-gray-200 bg-gray-100">
+                                                <img src={ph.dataUrl} alt="" className="w-full h-full object-cover" />
+                                                <button onClick={() => setPhotos(p => p.filter(x => x.id !== ph.id))} disabled={busy} className="absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-black/60 text-white flex items-center justify-center"><i className="ph ph-x text-sm"></i></button>
+                                            </div>
                                         ))}
+                                        {photos.length < MAX_PHOTOS && (
+                                            <button onClick={() => fileRef.current && fileRef.current.click()} disabled={prep || busy} className="aspect-square rounded-2xl border-2 border-dashed border-[#C8102E]/40 bg-red-50/40 text-[#C8102E] font-black text-xs flex flex-col items-center justify-center gap-1">
+                                                <i className={'ph ' + (prep ? 'ph-spinner animate-spin' : 'ph-plus') + ' text-2xl'}></i>{prep ? 'กำลังเตรียม' : 'แนบรูป'}
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
-                                {room && (
-                                    <div className={card}>
-                                        <p className="font-black text-gray-800 mb-1">2. แนบรูป (ไม่เกิน {MAX_PHOTOS} รูป)</p>
-                                        <p className="text-xs text-gray-500 mb-3">ห้อง {room}</p>
-                                        <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={onPick} />
-                                        <div className="grid grid-cols-3 gap-2">
-                                            {photos.map(ph => (
-                                                <div key={ph.id} className="relative aspect-square rounded-xl overflow-hidden border border-gray-200">
-                                                    <img src={ph.dataUrl} alt="" className="w-full h-full object-cover" />
-                                                    <button onClick={() => setPhotos(p => p.filter(x => x.id !== ph.id))} className="absolute top-1 right-1 w-7 h-7 rounded-full bg-black/60 text-white text-sm font-bold">×</button>
-                                                </div>
-                                            ))}
-                                            {photos.length < MAX_PHOTOS && (
-                                                <button onClick={() => fileRef.current && fileRef.current.click()} className="aspect-square rounded-xl border-2 border-dashed border-[#C8102E]/40 text-[#C8102E] font-black text-sm">+ แนบรูป</button>
-                                            )}
-                                        </div>
-                                        {err && <p className="text-sm text-red-600 font-bold mt-3">{err}</p>}
-                                        <button onClick={send} disabled={!photos.length || busy} className={'mt-4 w-full py-3.5 rounded-2xl font-black text-white ' + (!photos.length || busy ? 'bg-gray-300' : 'bg-[#C8102E]')}>{busy ? 'กำลังส่งรูป...' : `ส่งรูป ${photos.length ? '(' + photos.length + ')' : ''}`}</button>
-                                    </div>
-                                )}
-                            </>
+                                {err && <p className="text-sm text-red-600 font-bold">{err}</p>}
+                                <button onClick={send} disabled={!room || !photos.length || busy || prep} className={'w-full py-3.5 rounded-2xl font-black text-white transition-all active:scale-95 ' + (!room || !photos.length || busy || prep ? 'bg-gray-300' : 'bg-[#C8102E] hover:bg-red-700 shadow-lg shadow-red-200')}>
+                                    {busy ? `กำลังส่ง ${sentN}/${photos.length}` : 'ส่งรูป'}
+                                </button>
+                            </div>
                         )}
                     </div>
                 </div>
