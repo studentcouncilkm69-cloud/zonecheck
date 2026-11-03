@@ -6157,6 +6157,11 @@ ${roomSummaryLines}`;
                                         <i className="ph ph-scan text-lg text-amber-300"></i> สแกนแบบประเมิน
                                     </button>
                                 </div>
+                                <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-gray-100">
+                                    <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2"><i className="ph ph-camera text-[#C8102E]"></i> รูปรายงานเขตพื้นที่จากนักเรียน</h3>
+                                    <p className="text-[11px] text-gray-500 mt-1">ดูว่าห้องไหนส่งรูปแล้ว/ยังไม่ส่ง ส่งออกเป็น PDF, Excel หรือคัดลอกข้อความลงกลุ่ม LINE ได้</p>
+                                    <StudentPhotoReport showToast={showToast} triggerSafeLocalDownload={triggerSafeLocalDownload} settings={settings} />
+                                </div>
 
                                 <button onClick={() => setBatchModal({ isOpen: true, type: 'room', isSkipped: false, roomScores: { c1: 2, c2: 2, c3: 2, c4: 2, c5: 2, noDuty: false }, zoneScore: 10, gradeFilter: 'all', comment: '' })} className="w-full bg-gradient-to-r from-[#C8102E] via-rose-600 to-amber-600 text-white p-4 rounded-2xl shadow-lg shadow-red-500/20 flex items-center justify-between hover:opacity-95 active:scale-[0.99] transition-all">
                                     <div className="flex items-center gap-3 text-left">
@@ -9087,8 +9092,10 @@ ${roomSummaryLines}`;
 
         const StudentPhotoPage = () => {
             const MAX_PHOTOS = STUDENT_MAX_PHOTOS;
-            const [grade, setGrade] = useState('');
-            const [room, setRoom] = useState('');
+            // จำห้องที่เคยเลือกไว้ในเครื่องนี้ (เปิดครั้งต่อไปจะเลือกห้องให้เลย)
+            const [savedRoom] = useState(() => { try { const r = localStorage.getItem('zc_student_room'); return STUDENT_ROOMS.includes(r) ? r : ''; } catch (e) { return ''; } });
+            const [grade, setGrade] = useState(savedRoom ? ((savedRoom.match(/^ม\.(\d)/) || [])[1] || '') : '');
+            const [room, setRoom] = useState(savedRoom);
             const [photos, setPhotos] = useState([]);
             const [busy, setBusy] = useState(false);
             const [prep, setPrep] = useState(false);
@@ -9139,6 +9146,16 @@ ${roomSummaryLines}`;
             };
             useEffect(() => { refresh(''); }, []);
             useEffect(() => { if (room) refresh(room); }, [room]);
+            useEffect(() => { try { if (room) localStorage.setItem('zc_student_room', room); } catch (e) {} }, [room]);
+
+            // ข้ามวันใหม่ตอนเปิดหน้าค้างไว้: ล้างสถานะของเมื่อวาน แล้วนับรูปของวันใหม่เป็น 0 ใหม่
+            const dayRef = useRef(today);
+            useEffect(() => {
+                if (dayRef.current === today) return;
+                dayRef.current = today;
+                setCounts({}); setCheckedRoom(''); setDone(null); setPhotos([]); setErr('');
+                if (room) refresh(room);
+            }, [today]);
 
             const onPick = async (e) => {
                 const files = Array.from(e.target.files || []);
