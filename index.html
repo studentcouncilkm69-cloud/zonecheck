@@ -6260,6 +6260,7 @@ ${roomSummaryLines}`;
                                        if (ok) showToast('คัดลอกลิงก์ส่งรูปแล้ว', 'success'); else window.prompt('คัดลอกลิงก์นี้ไปส่งให้นักเรียน', url);
                                    }} className="w-full bg-[#C8102E] hover:bg-red-700 text-white py-3 rounded-xl font-black text-sm flex items-center justify-center gap-2"><i className="ph ph-copy text-lg"></i> คัดลอกลิงก์ส่งรูป</button>
                                    <StudentFolderLinkRow settings={settings} showToast={showToast} />
+                                   <StudentPhotoReport showToast={showToast} triggerSafeLocalDownload={triggerSafeLocalDownload} />
                                 </div>
 
                                 <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 col-span-full">
@@ -9043,8 +9044,19 @@ ${roomSummaryLines}`;
             );
         };
 
-        // ===== หน้าส่งรูปสำหรับนักเรียน (เปิดด้วยลิงก์ ?send=1) แยกจากระบบตรวจ ไม่เกี่ยวกับคะแนน =====
+        // ===== หน้าส่งรูปเขตพื้นที่สำหรับนักเรียน (เปิดด้วยลิงก์ ?send=1) แยกจากระบบตรวจ ไม่เกี่ยวกับคะแนน =====
         const STUDENT_ROOMS = ['ม.1/1','ม.1/2','ม.1/3','ม.1/4','ม.1/5','ม.1/Sp','ม.1/Sm','ม.2/1','ม.2/2','ม.2/3','ม.2/4','ม.2/5','ม.2/6','ม.2/Sp','ม.2/Sm','ม.3/1','ม.3/2','ม.3/3','ม.3/4','ม.3/5','ม.3/6','ม.3/Sp','ม.3/Sm','ม.4/1','ม.4/2','ม.4/3','ม.4/4','ม.4/5','ม.4/6 (ICP)','ม.4/7','ม.4/Sm','ม.4/Sp','ม.5/1','ม.5/2','ม.5/3','ม.5/4','ม.5/5','ม.5/6','ม.5/7','ม.5/Sm','ม.6/1','ม.6/2','ม.6/3','ม.6/4','ม.6/5','ม.6/6','ม.6/7','ม.6/Sm'];
+        const STUDENT_MAX_PHOTOS = 3;
+        // ชื่อโฟลเดอร์ห้องใน Drive (ตรงกับที่ Apps Script ตั้ง: เปลี่ยน / เป็น -)
+        const studentRoomKey = (room) => String(room || '').replace(/[\\\/]/g, '-').trim();
+        // ถามจำนวนรูปที่แต่ละห้องส่งแล้วในวันนั้น + ชื่อ/เวอร์ชันแอป จาก Apps Script
+        const fetchStudentPhotoStatus = async (date, opts = {}) => {
+            const q = (opts.room ? `&room=${encodeURIComponent(studentRoomKey(opts.room))}` : '') + (opts.all ? '&all=1' : '');
+            const r = await fetch(`${GOOGLE_SCRIPT_URL}?action=studentPhotoStatus&date=${encodeURIComponent(date)}${q}&_t=${Date.now()}`, { redirect: 'follow' });
+            const j = JSON.parse(await r.text());
+            if (!j || j.status !== 'Success') throw new Error((j && j.message) || 'โหลดสถานะไม่สำเร็จ');
+            return j;
+        };
         const compressImageToJpeg = (file, maxSide = 1280, quality = 0.75) => new Promise((resolve, reject) => {
             const url = URL.createObjectURL(file);
             const img = new Image();
@@ -9065,27 +9077,49 @@ ${roomSummaryLines}`;
         });
 
         const StudentPhotoPage = () => {
-            const MAX_PHOTOS = 3;
+            const MAX_PHOTOS = STUDENT_MAX_PHOTOS;
             const [grade, setGrade] = useState('');
             const [room, setRoom] = useState('');
             const [photos, setPhotos] = useState([]);
             const [busy, setBusy] = useState(false);
             const [prep, setPrep] = useState(false);
             const [sentN, setSentN] = useState(0);
+            const [totalN, setTotalN] = useState(0);
             const [done, setDone] = useState(null);
             const [err, setErr] = useState('');
+            const [counts, setCounts] = useState(null);
+            const [checking, setChecking] = useState(false);
+            const [checkedRoom, setCheckedRoom] = useState('');
+            const [meta, setMeta] = useState({ title: 'ZoneCheck', version: 'V3.0' });
             const fileRef = useRef(null);
+            const today = getThaiDateStr();
             const grades = [...new Set(STUDENT_ROOMS.map(r => (r.match(/^ม\.(\d)/) || [])[1]).filter(Boolean))];
             const roomsOfGrade = grade ? STUDENT_ROOMS.filter(r => r.startsWith('ม.' + grade + '/')) : [];
+            const known = !!room && checkedRoom === room;
+            const sentOfRoom = (counts && room) ? (counts[studentRoomKey(room)] || 0) : 0;
+            const remaining = Math.max(0, MAX_PHOTOS - sentOfRoom);
 
-            // ย่อรูปพร้อมกันทุกรูป ไม่รอทีละรูป
+            // จำจำนวนรูปที่ห้องนี้ส่งแล้ววันนี้ (เก็บฝั่งเซิร์ฟเวอร์ ทุกเครื่องเห็นตรงกัน)
+            const refresh = async (roomArg) => {
+                setChecking(true);
+                try {
+                    const j = await fetchStudentPhotoStatus(today, { room: roomArg || '' });
+                    setCounts(c => ({ ...(c || {}), ...(j.counts || {}) }));
+                    if (roomArg) setCheckedRoom(roomArg);
+                    setMeta(m => ({ title: (j.title || m.title), version: ('version' in j) ? String(j.version || '') : m.version }));
+                } catch (e) { /* เช็กไม่ได้: ให้ฝั่งเซิร์ฟเวอร์คุมจำนวนให้แทน */ }
+                finally { setChecking(false); }
+            };
+            useEffect(() => { refresh(''); }, []);
+            useEffect(() => { if (room) refresh(room); }, [room]);
+
             const onPick = async (e) => {
                 const files = Array.from(e.target.files || []);
                 e.target.value = '';
                 if (!files.length) return;
                 setErr('');
-                const left = Math.max(0, MAX_PHOTOS - photos.length);
-                if (files.length > left) setErr(`ส่งได้ไม่เกิน ${MAX_PHOTOS} รูป`);
+                const left = Math.max(0, remaining - photos.length);
+                if (files.length > left) setErr(`ห้องนี้ส่งเพิ่มได้อีก ${remaining} รูป`);
                 setPrep(true);
                 try {
                     const out = await Promise.all(files.slice(0, left).map(async f => ({ id: Math.random().toString(36).slice(2), dataUrl: await compressImageToJpeg(f) })));
@@ -9094,10 +9128,10 @@ ${roomSummaryLines}`;
                 finally { setPrep(false); }
             };
 
-            // ส่งทุกรูปพร้อมกัน รูปไหนส่งไม่สำเร็จจะเหลือไว้ให้กดส่งซ้ำ
             const send = async () => {
                 if (!room || !photos.length || busy) return;
-                setBusy(true); setErr(''); setSentN(0);
+                if (known && photos.length > remaining) { setErr(`ห้องนี้ส่งเพิ่มได้อีก ${remaining} รูป`); return; }
+                setBusy(true); setErr(''); setSentN(0); setTotalN(photos.length);
                 const date = getThaiDateStr();
                 const now = new Date();
                 const hhmm = String(now.getHours()).padStart(2, '0') + String(now.getMinutes()).padStart(2, '0');
@@ -9122,12 +9156,17 @@ ${roomSummaryLines}`;
                 }));
                 const okIds = new Set(results.filter(r => r.status === 'fulfilled').map(r => r.value));
                 const failed = batch.length - okIds.size;
+                const firstErr = results.find(r => r.status === 'rejected');
+                if (okIds.size > 0) setCounts(c => ({ ...(c || {}), [studentRoomKey(room)]: sentOfRoom + okIds.size }));
                 if (failed === 0) { setDone({ room, count: batch.length }); setPhotos([]); }
-                else { setPhotos(batch.filter(ph => !okIds.has(ph.id))); setErr(`ส่งไม่สำเร็จ ${failed} รูป กดส่งอีกครั้งได้เลย`); }
+                else { setPhotos(batch.filter(ph => !okIds.has(ph.id))); setErr(`ส่งไม่สำเร็จ ${failed} รูป: ${(firstErr && firstErr.reason && firstErr.reason.message) || 'ลองส่งอีกครั้ง'}`); }
                 setBusy(false);
+                refresh(room);
             };
 
             const card = 'bg-white rounded-[2rem] shadow-sm border border-gray-100 p-6';
+            const selCls = 'w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3.5 text-base font-bold text-gray-800 outline-none focus:border-[#C8102E]';
+            const full = known && remaining === 0;
             return (
                 <div className="min-h-screen bg-gray-50 pb-10">
                     <header className="bg-white border-b border-gray-200 h-[70px] px-4 flex items-center gap-3 shadow-sm sticky top-0 z-10">
@@ -9135,13 +9174,18 @@ ${roomSummaryLines}`;
                             <img src={HARDCODED_LOGO} className="w-full h-full object-cover" alt="" />
                         </div>
                         <div className="overflow-hidden min-w-0">
-                            <h1 className="font-bold text-gray-800 text-[15px] leading-tight truncate">ZoneCheck</h1>
+                            <div className="flex items-center gap-1.5">
+                                <h1 className="font-bold text-gray-800 text-[15px] leading-tight truncate">{meta.title}</h1>
+                                {meta.version && (
+                                    <span className="px-2 py-0.5 text-[10px] font-black bg-red-50 text-[#C8102E] border border-red-200 rounded-full shrink-0">{meta.version}</span>
+                                )}
+                            </div>
                             <p className="text-[10px] text-gray-500 leading-tight truncate tracking-wider">{HARDCODED_NAME}</p>
                         </div>
                     </header>
                     <div className="max-w-md mx-auto p-4 space-y-4">
                         <div className="bg-gradient-to-r from-[#C8102E] to-orange-600 rounded-[2rem] p-5 text-white shadow-lg shadow-red-200">
-                            <h2 className="text-lg font-black flex items-center gap-2"><i className="ph ph-camera"></i> ส่งรูปรายงานห้องเรียน</h2>
+                            <h2 className="text-lg font-black flex items-center gap-2"><i className="ph ph-camera"></i> ส่งรูปรายงานเขตพื้นที่</h2>
                             <p className="text-xs font-medium opacity-90 mt-1.5 leading-relaxed">เลือกชั้น เลือกห้อง แล้วแนบรูปได้ไม่เกิน {MAX_PHOTOS} รูป ระบบจะเก็บรูปให้ตามวันและห้องอัตโนมัติ</p>
                         </div>
                         {done ? (
@@ -9149,26 +9193,32 @@ ${roomSummaryLines}`;
                                 <div className="w-16 h-16 mx-auto rounded-full bg-green-50 text-green-600 flex items-center justify-center mb-3"><i className="ph ph-check-circle text-4xl"></i></div>
                                 <p className="font-black text-lg text-gray-800">ส่งรูปเรียบร้อยแล้ว</p>
                                 <p className="text-sm text-gray-500 mt-1">ห้อง {done.room} · {done.count} รูป</p>
-                                <button onClick={() => { setDone(null); setGrade(''); setRoom(''); }} className="mt-5 w-full py-3.5 rounded-2xl bg-[#C8102E] hover:bg-red-700 text-white font-black shadow-lg shadow-red-200 transition-all active:scale-95">ส่งรูปอีกครั้ง</button>
+                                <button onClick={() => { setDone(null); setGrade(''); setRoom(''); }} className="mt-5 w-full py-3.5 rounded-2xl bg-[#C8102E] hover:bg-red-700 text-white font-black shadow-lg shadow-red-200 transition-all active:scale-95">ส่งรูปห้องอื่น</button>
                             </div>
                         ) : (
                             <div className={card + ' space-y-5'}>
                                 <div>
                                     <label className="text-[10px] font-bold text-gray-500 mb-1.5 block uppercase">1. เลือกชั้น</label>
-                                    <select value={grade} onChange={e => { setGrade(e.target.value); setRoom(''); }} className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3.5 text-base font-bold text-gray-800 outline-none focus:border-[#C8102E]">
+                                    <select value={grade} onChange={e => { setGrade(e.target.value); setRoom(''); setPhotos([]); }} className={selCls}>
                                         <option value="">เลือกชั้น...</option>
                                         {grades.map(g => <option key={g} value={g}>มัธยมศึกษาปีที่ {g}</option>)}
                                     </select>
                                 </div>
                                 <div className={grade ? '' : 'opacity-40 pointer-events-none'}>
                                     <label className="text-[10px] font-bold text-gray-500 mb-1.5 block uppercase">2. เลือกห้อง</label>
-                                    <select value={room} onChange={e => setRoom(e.target.value)} disabled={!grade} className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3.5 text-base font-bold text-gray-800 outline-none focus:border-[#C8102E]">
+                                    <select value={room} onChange={e => { setRoom(e.target.value); setPhotos([]); setErr(''); }} disabled={!grade} className={selCls}>
                                         <option value="">เลือกห้อง...</option>
                                         {roomsOfGrade.map(r => <option key={r} value={r}>{r}</option>)}
                                     </select>
                                 </div>
-                                <div className={room ? '' : 'opacity-40 pointer-events-none'}>
-                                    <label className="text-[10px] font-bold text-gray-500 mb-1.5 block uppercase">3. แนบรูป ({photos.length}/{MAX_PHOTOS})</label>
+                                {room && (
+                                    <div className={'rounded-2xl px-4 py-3 text-xs font-bold flex items-center gap-2 border ' + (full ? 'bg-red-50 text-red-700 border-red-100' : 'bg-blue-50 text-blue-700 border-blue-100')}>
+                                        <i className={'ph text-base shrink-0 ' + (!known && checking ? 'ph-spinner animate-spin' : full ? 'ph-warning-circle' : 'ph-info')}></i>
+                                        <span>{!known ? (checking ? 'กำลังตรวจสอบจำนวนรูปของห้องนี้...' : `ส่งได้ไม่เกิน ${MAX_PHOTOS} รูปต่อห้องต่อวัน`) : full ? `ห้อง ${room} ส่งรูปครบ ${MAX_PHOTOS} รูปแล้ววันนี้` : `ห้อง ${room} ส่งแล้ว ${sentOfRoom}/${MAX_PHOTOS} รูป ส่งเพิ่มได้อีก ${remaining} รูป`}</span>
+                                    </div>
+                                )}
+                                <div className={room && !full ? '' : 'opacity-40 pointer-events-none'}>
+                                    <label className="text-[10px] font-bold text-gray-500 mb-1.5 block uppercase">3. แนบรูป ({photos.length}/{Math.min(remaining, MAX_PHOTOS)})</label>
                                     <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={onPick} />
                                     <div className="grid grid-cols-3 gap-2.5">
                                         {photos.map(ph => (
@@ -9177,7 +9227,7 @@ ${roomSummaryLines}`;
                                                 <button onClick={() => setPhotos(p => p.filter(x => x.id !== ph.id))} disabled={busy} className="absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-black/60 text-white flex items-center justify-center"><i className="ph ph-x text-sm"></i></button>
                                             </div>
                                         ))}
-                                        {photos.length < MAX_PHOTOS && (
+                                        {photos.length < remaining && (
                                             <button onClick={() => fileRef.current && fileRef.current.click()} disabled={prep || busy} className="aspect-square rounded-2xl border-2 border-dashed border-[#C8102E]/40 bg-red-50/40 text-[#C8102E] font-black text-xs flex flex-col items-center justify-center gap-1">
                                                 <i className={'ph ' + (prep ? 'ph-spinner animate-spin' : 'ph-plus') + ' text-2xl'}></i>{prep ? 'กำลังเตรียม' : 'แนบรูป'}
                                             </button>
@@ -9185,12 +9235,120 @@ ${roomSummaryLines}`;
                                     </div>
                                 </div>
                                 {err && <p className="text-sm text-red-600 font-bold">{err}</p>}
-                                <button onClick={send} disabled={!room || !photos.length || busy || prep} className={'w-full py-3.5 rounded-2xl font-black text-white transition-all active:scale-95 ' + (!room || !photos.length || busy || prep ? 'bg-gray-300' : 'bg-[#C8102E] hover:bg-red-700 shadow-lg shadow-red-200')}>
-                                    {busy ? `กำลังส่ง ${sentN}/${photos.length}` : 'ส่งรูป'}
-                                </button>
+                                <button onClick={send} disabled={!room || full || !photos.length || busy || prep} className={'w-full py-3.5 rounded-2xl font-black text-white transition-all active:scale-95 ' + (!room || full || !photos.length || busy || prep ? 'bg-gray-300' : 'bg-[#C8102E] hover:bg-red-700 shadow-lg shadow-red-200')}>ส่งรูป</button>
                             </div>
                         )}
                     </div>
+                    {busy && (
+                        <div className="fixed inset-0 z-[999999] bg-gray-900/75 backdrop-blur-sm flex items-center justify-center p-4 select-none">
+                            <div className="bg-white rounded-[2.25rem] w-full max-w-xs p-6 text-center shadow-2xl border border-gray-100 flex flex-col items-center">
+                                <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center mb-4"><i className="ph ph-cloud-arrow-up text-3xl text-[#C8102E] animate-pulse"></i></div>
+                                <h3 className="text-base font-black text-gray-800 mb-1">กำลังส่งรูป</h3>
+                                <p className="text-xs font-bold text-gray-500 leading-relaxed mb-4">ห้อง {room} · ส่งแล้ว {sentN}/{totalN} รูป</p>
+                                <div className="w-full mb-4"><SavingProgress expected={4} /></div>
+                                <span className="text-[11px] font-bold text-[#C8102E] bg-red-50 px-3 py-1 rounded-full border border-red-100">กรุณาอย่าเพิ่งปิดหรือกดออกจากหน้านี้</span>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // ===== แอดมิน: ดูว่าห้องไหนส่งรูปแล้ว/ยังไม่ส่ง พร้อมส่งออก PDF / Excel =====
+        const StudentPhotoReport = ({ showToast, triggerSafeLocalDownload }) => {
+            const [open, setOpen] = useState(false);
+            const [day, setDay] = useState(getThaiDateStr());
+            const [loading, setLoading] = useState(false);
+            const [counts, setCounts] = useState(null);
+            const [exporting, setExporting] = useState('');
+            const load = async (d) => {
+                setLoading(true); setCounts(null);
+                try { const j = await fetchStudentPhotoStatus(d, { all: true }); setCounts(j.counts || {}); }
+                catch (e) { showToast('โหลดสถานะไม่สำเร็จ: ' + (e.message || e), 'error'); setCounts({}); }
+                finally { setLoading(false); }
+            };
+            useEffect(() => { if (open && day) load(day); }, [open, day]);
+            const rows = STUDENT_ROOMS.map((r, i) => ({ no: i + 1, room: r, n: counts ? (counts[studentRoomKey(r)] || 0) : 0 }));
+            const sentRooms = rows.filter(r => r.n > 0).length;
+            const totalPhotos = rows.reduce((a, r) => a + r.n, 0);
+            const thaiDay = (() => { const m = String(day).match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? `${Number(m[3])}/${Number(m[2])}/${Number(m[1]) + 543}` : day; })();
+            const fileBase = `รายงานส่งรูปเขตพื้นที่_${day}`;
+
+            const exportExcel = async () => {
+                if (!counts) return;
+                setExporting('xlsx');
+                try {
+                    const X = await loadXlsx();
+                    const wb = X.utils.book_new();
+                    const data = rows.map(r => ({ 'ลำดับ': r.no, 'ห้อง': r.room, 'จำนวนรูป': r.n, 'สถานะ': r.n > 0 ? 'ส่งแล้ว' : 'ยังไม่ส่ง' }));
+                    const ws = X.utils.json_to_sheet(data);
+                    ws['!cols'] = [{ wch: 8 }, { wch: 16 }, { wch: 12 }, { wch: 12 }];
+                    X.utils.book_append_sheet(wb, ws, 'สถานะการส่งรูป');
+                    const sum = X.utils.json_to_sheet([{ 'วันที่': thaiDay, 'ส่งแล้ว (ห้อง)': sentRooms, 'ยังไม่ส่ง (ห้อง)': rows.length - sentRooms, 'รวมรูป': totalPhotos }]);
+                    X.utils.book_append_sheet(wb, sum, 'สรุป');
+                    const out = X.write(wb, { bookType: 'xlsx', type: 'array' });
+                    triggerSafeLocalDownload(new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `${fileBase}.xlsx`, 'xlsx');
+                } catch (e) { showToast('สร้างไฟล์ Excel ไม่สำเร็จ', 'error'); }
+                finally { setExporting(''); }
+            };
+
+            const exportPdf = async () => {
+                if (!counts) return;
+                setExporting('pdf');
+                const trs = rows.map(r => `<tr style="background:${r.no % 2 ? '#fff' : '#faf5f6'}"><td style="padding:3px 8px;border-bottom:1px solid #eee;text-align:center">${r.no}</td><td style="padding:3px 8px;border-bottom:1px solid #eee;font-weight:700">${escH(r.room)}</td><td style="padding:3px 8px;border-bottom:1px solid #eee;text-align:center;font-weight:700">${r.n}</td><td style="padding:3px 8px;border-bottom:1px solid #eee;text-align:center;font-weight:700;color:${r.n > 0 ? '#15803d' : '#C8102E'}">${r.n > 0 ? 'ส่งแล้ว' : 'ยังไม่ส่ง'}</td></tr>`).join('');
+                const html = `<div style="width:194mm;background:#fff;color:#1e293b;font-family:'Noto Sans Thai','Sarabun',sans-serif;font-size:12px"><div style="border-bottom:3px solid #C8102E;padding-bottom:6px;margin-bottom:8px"><div style="font-size:18px;font-weight:900;color:#C8102E">รายงานการส่งรูปเขตพื้นที่</div><div style="font-size:12px;color:#64748b">ประจำวันที่ ${escH(thaiDay)} · ${escH(HARDCODED_NAME)}</div></div><div style="margin-bottom:8px;font-weight:700">ส่งแล้ว ${sentRooms} ห้อง · ยังไม่ส่ง ${rows.length - sentRooms} ห้อง · รวม ${totalPhotos} รูป</div><table style="width:100%;border-collapse:collapse"><thead><tr style="background:#C8102E;color:#fff"><th style="padding:5px 8px;width:50px">ลำดับ</th><th style="padding:5px 8px;text-align:left">ห้อง</th><th style="padding:5px 8px;width:90px">จำนวนรูป</th><th style="padding:5px 8px;width:110px">สถานะ</th></tr></thead><tbody>${trs}</tbody></table></div>`;
+                const host = document.createElement('div');
+                host.style.cssText = 'position:fixed;left:-20000px;top:0;background:#fff;';
+                host.innerHTML = html; document.body.appendChild(host);
+                try {
+                    try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (e) {}
+                    await new Promise(r => setTimeout(r, 300));
+                    const opt = { margin: [8, 8, 8, 8], filename: `${fileBase}.pdf`, image: { type: 'jpeg', quality: 0.95 }, html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }, pagebreak: { mode: ['css', 'legacy'], avoid: ['tr'] } };
+                    const blob = await window.html2pdf().set(opt).from(host.firstElementChild).outputPdf('blob');
+                    triggerSafeLocalDownload(blob, `${fileBase}.pdf`, 'pdf');
+                } catch (e) { showToast('สร้างไฟล์ PDF ไม่สำเร็จ', 'error'); }
+                finally { document.body.removeChild(host); setExporting(''); }
+            };
+
+            return (
+                <div className="mt-3 pt-3 border-t border-gray-100">
+                    <button onClick={() => setOpen(true)} className="w-full py-3 rounded-xl border-2 border-[#C8102E]/30 text-[#C8102E] bg-red-50/40 hover:bg-red-50 font-black text-sm flex items-center justify-center gap-2"><i className="ph ph-list-checks text-lg"></i> ดูสถานะการส่งรูปของทุกห้อง</button>
+                    {open && (
+                        <div className="fixed inset-0 z-[99999] bg-gray-900/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setOpen(false)}>
+                            <div className="bg-white rounded-[2rem] w-full max-w-md max-h-[90vh] flex flex-col shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+                                <div className="p-5 border-b border-gray-100 flex items-center justify-between gap-3">
+                                    <div className="min-w-0"><h3 className="font-black text-gray-800">สถานะการส่งรูปเขตพื้นที่</h3><p className="text-[11px] text-gray-400 font-bold">ห้องไหนส่งแล้ว / ยังไม่ส่ง</p></div>
+                                    <button onClick={() => setOpen(false)} className="w-9 h-9 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center shrink-0"><i className="ph ph-x"></i></button>
+                                </div>
+                                <div className="p-4 space-y-3 overflow-y-auto">
+                                    <input type="date" value={day} onChange={e => setDay(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold" />
+                                    {loading || !counts ? (
+                                        <p className="text-center text-sm font-bold text-gray-400 py-8"><i className="ph ph-spinner animate-spin mr-1"></i> กำลังโหลด...</p>
+                                    ) : (
+                                        <>
+                                            <div className="grid grid-cols-3 gap-2 text-center">
+                                                <div className="bg-green-50 rounded-xl py-2"><p className="text-xl font-black text-green-600">{sentRooms}</p><p className="text-[10px] font-bold text-green-700">ส่งแล้ว (ห้อง)</p></div>
+                                                <div className="bg-red-50 rounded-xl py-2"><p className="text-xl font-black text-[#C8102E]">{rows.length - sentRooms}</p><p className="text-[10px] font-bold text-red-700">ยังไม่ส่ง (ห้อง)</p></div>
+                                                <div className="bg-gray-50 rounded-xl py-2"><p className="text-xl font-black text-gray-700">{totalPhotos}</p><p className="text-[10px] font-bold text-gray-500">รวมรูป</p></div>
+                                            </div>
+                                            <div className="rounded-xl border border-gray-100 overflow-hidden">
+                                                {rows.map(r => (
+                                                    <div key={r.room} className={'flex items-center justify-between px-3 py-2 text-sm border-b border-gray-50 last:border-0 ' + (r.no % 2 ? 'bg-white' : 'bg-gray-50/60')}>
+                                                        <span className="font-bold text-gray-700"><span className="text-gray-300 text-xs mr-2 tabular-nums">{r.no}</span>{r.room}</span>
+                                                        <span className={'text-xs font-black px-2.5 py-1 rounded-full ' + (r.n > 0 ? 'bg-green-50 text-green-700' : 'bg-red-50 text-[#C8102E]')}>{r.n > 0 ? `ส่งแล้ว ${r.n} รูป` : 'ยังไม่ส่ง'}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                                <div className="p-4 border-t border-gray-100 grid grid-cols-2 gap-2">
+                                    <button onClick={exportPdf} disabled={!counts || loading || !!exporting} className={'py-3 rounded-xl font-black text-sm text-white flex items-center justify-center gap-1.5 ' + (!counts || loading || exporting ? 'bg-gray-300' : 'bg-[#C8102E]')}><i className={'ph ' + (exporting === 'pdf' ? 'ph-spinner animate-spin' : 'ph-file-pdf') + ' text-lg'}></i> ส่งออก PDF</button>
+                                    <button onClick={exportExcel} disabled={!counts || loading || !!exporting} className={'py-3 rounded-xl font-black text-sm text-white flex items-center justify-center gap-1.5 ' + (!counts || loading || exporting ? 'bg-gray-300' : 'bg-emerald-600')}><i className={'ph ' + (exporting === 'xlsx' ? 'ph-spinner animate-spin' : 'ph-file-xls') + ' text-lg'}></i> ส่งออก Excel</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             );
         };
