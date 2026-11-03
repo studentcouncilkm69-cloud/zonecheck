@@ -9049,6 +9049,11 @@ ${roomSummaryLines}`;
         const STUDENT_MAX_PHOTOS = 3;
         // เวลาปิดรับรูป (เวลาไทย) ต้องตรงกับค่าใน Apps Script (STUDENT_CUTOFF_MIN)
         const STUDENT_CUTOFF = { h: 18, m: 30 };
+        // โหมดทดสอบ: เติม &test=1 ท้ายลิงก์ (ไม่ส่งรูปจริง) และ &time=18:25 เพื่อตั้งนาฬิกาเริ่มต้น
+        const STUDENT_QS = (() => { try { return new URLSearchParams(window.location.search); } catch (e) { return new URLSearchParams(''); } })();
+        const STUDENT_TEST = STUDENT_QS.get('test') === '1';
+        const STUDENT_TEST_TIME = STUDENT_TEST ? (STUDENT_QS.get('time') || '') : '';
+        const STUDENT_TEST_OFFSET = (() => { const m = String(STUDENT_TEST_TIME).match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/); if (!m) return 0; const t = new Date(`${getThaiDateStr()}T${m[1].padStart(2, '0')}:${m[2]}:${m[3] || '00'}+07:00`).getTime(); return isNaN(t) ? 0 : t - Date.now(); })();
         const bkkClock = (ms) => { const t = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).format(new Date(ms)).split(':').map(Number); return { h: t[0] % 24, m: t[1], s: t[2] }; };
         const bkkDateLabel = (ms) => new Intl.DateTimeFormat('th-TH', { timeZone: 'Asia/Bangkok', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(ms));
         // ชื่อโฟลเดอร์ห้องใน Drive (ตรงกับที่ Apps Script ตั้ง: เปลี่ยน / เป็น -)
@@ -9095,8 +9100,8 @@ ${roomSummaryLines}`;
             const [checking, setChecking] = useState(false);
             const [checkedRoom, setCheckedRoom] = useState('');
             const [meta, setMeta] = useState({ title: 'ZoneCheck', version: 'V3.0' });
-            const [nowMs, setNowMs] = useState(Date.now());
-            const offsetRef = useRef(0); // ส่วนต่างระหว่างนาฬิกาเครื่องกับเวลาเซิร์ฟเวอร์ (กันเครื่องตั้งเวลาผิด)
+            const [nowMs, setNowMs] = useState(Date.now() + STUDENT_TEST_OFFSET);
+            const offsetRef = useRef(STUDENT_TEST_OFFSET); // ส่วนต่างระหว่างนาฬิกาเครื่องกับเวลาเซิร์ฟเวอร์ (กันเครื่องตั้งเวลาผิด)
             const fileRef = useRef(null);
             const today = getThaiDateStr(new Date(nowMs));
             const grades = [...new Set(STUDENT_ROOMS.map(r => (r.match(/^ม\.(\d)/) || [])[1]).filter(Boolean))];
@@ -9121,6 +9126,7 @@ ${roomSummaryLines}`;
 
             // จำจำนวนรูปที่ห้องนี้ส่งแล้ววันนี้ (เก็บฝั่งเซิร์ฟเวอร์ ทุกเครื่องเห็นตรงกัน)
             const refresh = async (roomArg) => {
+                if (STUDENT_TEST) return; // โหมดทดสอบ: ไม่ยิงเซิร์ฟเวอร์
                 setChecking(true);
                 try {
                     const j = await fetchStudentPhotoStatus(getThaiDateStr(new Date(Date.now() + offsetRef.current)), { room: roomArg || '' });
@@ -9160,6 +9166,7 @@ ${roomSummaryLines}`;
                 const hhmm = pad2(bc.h) + pad2(bc.m);
                 const batch = photos;
                 const results = await Promise.allSettled(batch.map(async (ph, i) => {
+                    if (STUDENT_TEST) { await new Promise(r => setTimeout(r, 700 + i * 300)); setSentN(n => n + 1); return ph.id; }
                     const res = await fetch(GOOGLE_SCRIPT_URL, {
                         method: 'POST',
                         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -9209,16 +9216,27 @@ ${roomSummaryLines}`;
                         </div>
                     </header>
                     <div className="max-w-md mx-auto p-4 space-y-4">
-                        <div className="bg-gradient-to-r from-[#C8102E] to-orange-600 rounded-[2rem] p-5 text-white shadow-lg shadow-red-200">
-                            <p className="text-[12px] font-bold opacity-90 flex items-center gap-1.5"><i className="ph ph-calendar-blank"></i>{bkkDateLabel(nowMs)}</p>
-                            <div className="flex items-center justify-between gap-2 mt-1.5 mb-3">
-                                <div className="flex items-center gap-2 text-3xl font-black tabular-nums leading-none"><i className="ph ph-clock text-2xl opacity-90"></i>{pad2(clk.h)}:{pad2(clk.m)}<span className="text-xl opacity-80">:{pad2(clk.s)}</span><span className="text-sm font-bold opacity-90 self-end pb-0.5">น.</span></div>
-                                <span className={'px-3 py-1.5 rounded-full text-[11px] font-black shrink-0 ' + (closed ? 'bg-black/30 text-white' : soon ? 'bg-yellow-300 text-red-800' : 'bg-white/20 text-white')}>
-                                    {closed ? 'ปิดรับรูปแล้ว' : soon ? `เหลืออีก ${minLeft} นาที` : `รับรูปถึง ${cutoffText} น.`}
-                                </span>
+                        {STUDENT_TEST && (
+                            <div className="rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold px-4 py-2.5 flex items-center gap-2"><i className="ph ph-flask text-base shrink-0"></i><span>โหมดทดสอบ: ไม่ได้ส่งรูปจริงเข้าระบบ{STUDENT_TEST_TIME ? ` (นาฬิกาเริ่มที่ ${STUDENT_TEST_TIME} น.)` : ''}</span></div>
+                        )}
+                        <div className="relative overflow-hidden bg-gradient-to-br from-[#C8102E] via-[#D92A2A] to-orange-600 rounded-[2rem] p-5 text-white shadow-lg shadow-red-200">
+                            <i className="ph ph-map-pin absolute -right-5 -bottom-8 text-[10rem] opacity-10 rotate-12 pointer-events-none"></i>
+                            <div className="relative flex items-center gap-3.5">
+                                <div className="w-14 h-14 rounded-2xl bg-white text-[#C8102E] flex items-center justify-center shadow-lg shrink-0"><i className="ph ph-map-pin text-3xl"></i></div>
+                                <div className="min-w-0">
+                                    <h2 className="text-xl font-black leading-tight">ส่งรูปรายงานเขตพื้นที่</h2>
+                                    <p className="text-[12px] font-semibold opacity-90 mt-1 leading-snug">แนบได้ไม่เกิน {MAX_PHOTOS} รูปต่อห้อง ระบบจัดเก็บตามวันและห้องให้อัตโนมัติ</p>
+                                </div>
                             </div>
-                            <h2 className="text-lg font-black flex items-center gap-2"><i className="ph ph-camera"></i> ส่งรูปรายงานเขตพื้นที่</h2>
-                            <p className="text-xs font-medium opacity-90 mt-1.5 leading-relaxed">เลือกชั้น เลือกห้อง แล้วแนบรูปได้ไม่เกิน {MAX_PHOTOS} รูป ระบบจะเก็บรูปให้ตามวันและห้องอัตโนมัติ</p>
+                            <div className="relative mt-4 bg-white/15 border border-white/25 rounded-2xl px-4 py-3 backdrop-blur-sm">
+                                <p className="text-[12px] font-bold opacity-95 flex items-center gap-1.5"><i className="ph ph-calendar-blank text-sm"></i>{bkkDateLabel(nowMs)}</p>
+                                <div className="flex items-center justify-between gap-2 mt-1.5">
+                                    <div className="flex items-end gap-1.5 tabular-nums leading-none"><i className="ph ph-clock text-2xl opacity-90 self-center"></i><span className="text-[2rem] font-black">{pad2(clk.h)}:{pad2(clk.m)}</span><span className="text-lg font-bold opacity-80 pb-0.5">:{pad2(clk.s)}</span><span className="text-sm font-bold opacity-90 pb-1 ml-0.5">น.</span></div>
+                                    <span className={'px-3 py-1.5 rounded-full text-[11px] font-black shrink-0 ' + (closed ? 'bg-black/35 text-white' : soon ? 'bg-yellow-300 text-red-800' : 'bg-white text-[#C8102E]')}>
+                                        {closed ? 'ปิดรับรูปแล้ว' : soon ? `เหลืออีก ${minLeft} นาที` : `รับรูปถึง ${cutoffText} น.`}
+                                    </span>
+                                </div>
+                            </div>
                         </div>
                         {done ? (
                             <div className={card + ' text-center'} style={{ animation: 'zcUp .45s ease-out' }}>
@@ -9243,9 +9261,8 @@ ${roomSummaryLines}`;
                                         <span className="text-left leading-tight">ส่งรูปเพิ่มเติม<span className="block text-[11px] font-bold opacity-90">ห้อง {done.room} ส่งได้อีก {remaining} รูป</span></span>
                                     </button>
                                 ) : (
-                                    <p className="mt-6 text-xs font-bold text-gray-400">{remaining === 0 ? `ห้อง ${done.room} ส่งรูปครบ ${MAX_PHOTOS} รูปแล้ววันนี้` : `ปิดรับรูปแล้ว (รับถึง ${cutoffText} น.)`}</p>
+                                    <p className="mt-6 text-sm font-bold text-gray-500 bg-gray-50 border border-gray-100 rounded-2xl px-4 py-3">{remaining === 0 ? `ห้อง ${done.room} ส่งรูปครบ ${MAX_PHOTOS} รูปแล้ววันนี้` : `ปิดรับรูปแล้ว (รับถึง ${cutoffText} น.)`}</p>
                                 )}
-                                <button onClick={() => { setDone(null); setGrade(''); setRoom(''); setErr(''); }} className={'mt-3 w-full py-3.5 rounded-2xl font-black transition-all active:scale-95 border-2 ' + (remaining > 0 && !closed ? 'border-gray-200 text-gray-600 bg-white hover:bg-gray-50' : 'border-[#C8102E] bg-[#C8102E] text-white shadow-lg shadow-red-200')}>ส่งรูปห้องอื่น</button>
                             </div>
                         ) : closed ? (
                             <div className={card + ' text-center'} style={{ animation: 'zcUp .45s ease-out' }}>
