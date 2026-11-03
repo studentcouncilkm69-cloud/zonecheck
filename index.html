@@ -9220,18 +9220,15 @@ ${roomSummaryLines}`;
                             <div className="rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold px-4 py-2.5 flex items-center gap-2"><i className="ph ph-flask text-base shrink-0"></i><span>โหมดทดสอบ: ไม่ได้ส่งรูปจริงเข้าระบบ{STUDENT_TEST_TIME ? ` (นาฬิกาเริ่มที่ ${STUDENT_TEST_TIME} น.)` : ''}</span></div>
                         )}
                         <div className="bg-gradient-to-r from-[#C8102E] to-orange-600 rounded-[2rem] p-5 text-white shadow-lg shadow-red-200">
-                            <p className="text-[12px] font-bold opacity-90 flex items-center gap-1.5"><i className="ph ph-calendar-blank"></i>{bkkDateLabel(nowMs)}</p>
+                            <p className="text-[12px] font-bold opacity-90">{bkkDateLabel(nowMs)}</p>
                             <div className="flex items-center justify-between gap-2 mt-1.5 mb-3">
-                                <div className="flex items-center gap-2 text-3xl font-black tabular-nums leading-none"><i className="ph ph-clock text-2xl opacity-90"></i>{pad2(clk.h)}:{pad2(clk.m)}<span className="text-xl opacity-80">:{pad2(clk.s)}</span><span className="text-sm font-bold opacity-90 self-end pb-0.5">น.</span></div>
+                                <div className="flex items-center gap-2 text-3xl font-black tabular-nums leading-none">{pad2(clk.h)}:{pad2(clk.m)}<span className="text-xl opacity-80">:{pad2(clk.s)}</span><span className="text-sm font-bold opacity-90 self-end pb-0.5">น.</span></div>
                                 <span className={'px-3 py-1.5 rounded-full text-[11px] font-black shrink-0 ' + (closed ? 'bg-black/30 text-white' : soon ? 'bg-yellow-300 text-red-800' : 'bg-white/20 text-white')}>
-                                    {closed ? 'ปิดรับรูปแล้ว' : soon ? `เหลืออีก ${minLeft} นาที` : 'เปิดรับรูป'}
+                                    {closed ? 'ปิดรับรูปแล้ว' : soon ? `เหลืออีก ${minLeft} นาที` : `รับรูปถึง ${cutoffText} น.`}
                                 </span>
                             </div>
                             <h2 className="text-lg font-black flex items-center gap-2"><i className="ph ph-map-pin"></i> ส่งรูปรายงานเขตพื้นที่</h2>
-                            <div className="mt-1.5 space-y-0.5 text-xs font-medium opacity-90 leading-relaxed">
-                                <p className="flex items-center gap-1.5"><i className="ph ph-clock-countdown shrink-0"></i>ระบบรับรูปถึงเวลา {cutoffText} น. ของทุกวัน</p>
-                                <p className="flex items-center gap-1.5"><i className="ph ph-images shrink-0"></i>ส่งได้ไม่เกิน {MAX_PHOTOS} รูปต่อห้อง</p>
-                            </div>
+                            <p className="text-xs font-medium opacity-90 mt-1.5 leading-relaxed">ระบบรับรูปถึงเวลา {cutoffText} น. ของทุกวัน ส่งได้ไม่เกิน {MAX_PHOTOS} รูปต่อห้อง</p>
                         </div>
                         {done ? (
                             <div className={card + ' text-center'} style={{ animation: 'zcUp .45s ease-out' }}>
