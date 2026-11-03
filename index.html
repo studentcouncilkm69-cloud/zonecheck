@@ -9222,12 +9222,12 @@ ${roomSummaryLines}`;
                         <div className="bg-gradient-to-r from-[#C8102E] to-orange-600 rounded-[2rem] p-5 text-white shadow-lg shadow-red-200">
                             <p className="text-[12px] font-bold opacity-90">{bkkDateLabel(nowMs)}</p>
                             <div className="flex items-center justify-between gap-2 mt-1.5 mb-3">
-                                <div className="flex items-center gap-2 text-3xl font-black tabular-nums leading-none">{pad2(clk.h)}:{pad2(clk.m)}<span className="text-xl opacity-80">:{pad2(clk.s)}</span><span className="text-sm font-bold opacity-90 self-end pb-0.5">น.</span></div>
+                                <div className="flex items-center gap-2 text-3xl font-black tabular-nums leading-none"><i className="ph ph-clock text-2xl opacity-90"></i>{pad2(clk.h)}:{pad2(clk.m)}<span className="text-xl opacity-80">:{pad2(clk.s)}</span><span className="text-sm font-bold opacity-90 self-end pb-0.5">น.</span></div>
                                 <span className={'px-3 py-1.5 rounded-full text-[11px] font-black shrink-0 ' + (closed ? 'bg-black/30 text-white' : soon ? 'bg-yellow-300 text-red-800' : 'bg-white/20 text-white')}>
                                     {closed ? 'ปิดรับรูปแล้ว' : soon ? `เหลืออีก ${minLeft} นาที` : `รับรูปถึง ${cutoffText} น.`}
                                 </span>
                             </div>
-                            <h2 className="text-lg font-black flex items-center gap-2"><i className="ph ph-map-pin"></i> ส่งรูปรายงานเขตพื้นที่</h2>
+                            <h2 className="text-lg font-black">ส่งรูปรายงานเขตพื้นที่</h2>
                             <p className="text-xs font-medium opacity-90 mt-1.5 leading-relaxed">ระบบรับรูปถึงเวลา {cutoffText} น. ของทุกวัน ส่งได้ไม่เกิน {MAX_PHOTOS} รูปต่อห้อง</p>
                         </div>
                         {done ? (
@@ -9260,8 +9260,8 @@ ${roomSummaryLines}`;
                             <div className={card + ' text-center'} style={{ animation: 'zcUp .45s ease-out' }}>
                                 <div className="w-20 h-20 mx-auto rounded-full bg-red-50 text-[#C8102E] flex items-center justify-center mb-4"><i className="ph ph-clock-countdown text-4xl"></i></div>
                                 <p className="font-black text-xl text-gray-800">ปิดรับรูปของวันนี้แล้ว</p>
-                                <p className="text-sm text-gray-500 mt-2 leading-relaxed">ระบบรับรูปรายงานเขตพื้นที่ถึงเวลา <b className="text-gray-700">{cutoffText} น.</b> ของทุกวัน เพื่อให้สภานักเรียนรวบรวมรูปและสรุปรายงานประจำวันได้ทัน</p>
-                                <div className="mt-4 bg-gray-50 border border-gray-100 rounded-2xl px-4 py-3 text-xs font-bold text-gray-500 leading-relaxed">ตอนนี้เวลา {pad2(clk.h)}:{pad2(clk.m)} น. หากห้องของคุณยังไม่ได้ส่ง กรุณาแจ้งสภานักเรียน และส่งใหม่ได้ในวันถัดไป</div>
+                                <p className="text-sm text-gray-500 mt-2 leading-relaxed">ระบบรับรูปรายงานเขตพื้นที่ถึงเวลา <b className="text-gray-700">{cutoffText} น.</b> ของทุกวัน เพื่อให้สภานักเรียนรวบรวมรูปและสรุปรายงานประจำวันได้ทัน จึงไม่สามารถส่งรูปหลังเวลานี้ได้</p>
+                                <div className="mt-4 bg-red-50 border border-red-100 rounded-2xl px-4 py-3 text-xs font-bold text-[#C8102E] leading-relaxed flex items-center justify-center gap-2"><i className="ph ph-chat-circle-dots text-base shrink-0"></i><span>หากมีปัญหาหรือส่งรูปไม่ทัน กรุณาติดต่อสภานักเรียน</span></div>
                             </div>
                         ) : (
                             <div className={card + ' space-y-5'}>
