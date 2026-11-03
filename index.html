@@ -6157,11 +6157,7 @@ ${roomSummaryLines}`;
                                         <i className="ph ph-scan text-lg text-amber-300"></i> สแกนแบบประเมิน
                                     </button>
                                 </div>
-                                <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-gray-100">
-                                    <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2"><i className="ph ph-camera text-[#C8102E]"></i> รูปรายงานเขตพื้นที่จากนักเรียน</h3>
-                                    <p className="text-[11px] text-gray-500 mt-1">ดูว่าห้องไหนส่งรูปแล้ว/ยังไม่ส่ง ส่งออกเป็น PDF, Excel หรือคัดลอกข้อความลงกลุ่ม LINE ได้</p>
-                                    <StudentPhotoReport showToast={showToast} triggerSafeLocalDownload={triggerSafeLocalDownload} settings={settings} />
-                                </div>
+                                <StudentPhotoReport bar showToast={showToast} triggerSafeLocalDownload={triggerSafeLocalDownload} settings={settings} />
 
                                 <button onClick={() => setBatchModal({ isOpen: true, type: 'room', isSkipped: false, roomScores: { c1: 2, c2: 2, c3: 2, c4: 2, c5: 2, noDuty: false }, zoneScore: 10, gradeFilter: 'all', comment: '' })} className="w-full bg-gradient-to-r from-[#C8102E] via-rose-600 to-amber-600 text-white p-4 rounded-2xl shadow-lg shadow-red-500/20 flex items-center justify-between hover:opacity-95 active:scale-[0.99] transition-all">
                                     <div className="flex items-center gap-3 text-left">
@@ -9028,7 +9024,7 @@ ${roomSummaryLines}`;
 
 
 
-        const StudentFolderLinkRow = ({ settings, showToast }) => {
+        const StudentFolderLinkRow = ({ settings, showToast, bar }) => {
             const [day, setDay] = useState(getThaiDateStr());
             const url = settings ? String(settings['student_folder_' + day] || '').trim() : '';
             const copy = async () => {
@@ -9037,6 +9033,18 @@ ${roomSummaryLines}`;
                 try { if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(url); ok = true; } } catch (e) {}
                 if (ok) showToast('คัดลอกลิงก์โฟลเดอร์รูปนักเรียนแล้ว', 'success'); else window.prompt('คัดลอกลิงก์นี้ไปวางในกลุ่ม', url);
             };
+            if (bar) return (
+                <button onClick={copy} className="w-full bg-gradient-to-r from-amber-600 via-orange-500 to-red-500 text-white p-4 rounded-2xl shadow-lg shadow-orange-500/20 flex items-center justify-between hover:opacity-95 active:scale-[0.99] transition-all">
+                    <div className="flex items-center gap-3 text-left">
+                        <div className="w-11 h-11 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center shrink-0"><i className="ph ph-folder-open text-2xl text-white"></i></div>
+                        <div>
+                            <div className="font-black text-sm sm:text-base leading-tight">รูปจากนักเรียน (โฟลเดอร์วันนี้)</div>
+                            <div className="text-[11px] text-white/90 font-medium mt-0.5">{url ? 'พบรูปของวันนี้แล้ว • คัดลอกลิงก์ส่งลงกลุ่ม' : 'ยังไม่มีรูปของวันนี้ • ลองกดซิงค์ข้อมูลอีกครั้ง'}</div>
+                        </div>
+                    </div>
+                    <div className={'px-3 py-1.5 rounded-xl font-bold text-xs shrink-0 shadow-sm ' + (url ? 'bg-white text-orange-600' : 'bg-white/30 text-white')}>คัดลอก</div>
+                </button>
+            );
             return (
                 <div className="mt-3 pt-3 border-t border-gray-100">
                     <p className="text-[11px] font-bold text-gray-600 mb-2">ลิงก์โฟลเดอร์รูปที่นักเรียนส่ง (เลือกวันได้)</p>
@@ -9340,7 +9348,7 @@ ${roomSummaryLines}`;
         };
 
         // ===== แอดมิน: ดูว่าห้องไหนส่งรูปแล้ว/ยังไม่ส่ง พร้อมส่งออก PDF / Excel =====
-        const StudentPhotoReport = ({ showToast, triggerSafeLocalDownload, settings }) => {
+        const StudentPhotoReport = ({ showToast, triggerSafeLocalDownload, settings, bar }) => {
             const [open, setOpen] = useState(false);
             const [day, setDay] = useState(getThaiDateStr());
             const [loading, setLoading] = useState(false);
@@ -9441,9 +9449,31 @@ ${roomSummaryLines}`;
                 window.open('https://line.me/R/msg/text/?' + encodeURIComponent(buildText()), '_blank');
             };
 
+            const folderUrl = settings ? String(settings['student_folder_' + day] || '').trim() : '';
+            const copyAny = async (url, okMsg, promptMsg) => {
+                let ok = false;
+                try { if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(url); ok = true; } } catch (e) {}
+                if (ok) showToast(okMsg, 'success'); else window.prompt(promptMsg, url);
+            };
+            const copyStudentLink = () => copyAny(`${window.location.origin}${window.location.pathname}?send=1`, 'คัดลอกลิงก์ส่งรูปแล้ว ส่งลงกลุ่มได้เลย', 'คัดลอกลิงก์นี้ไปส่งให้นักเรียน');
+            const copyFolderLink = () => { if (!folderUrl) { showToast('ยังไม่มีรูปของวันที่เลือก (หรือกดซิงค์ข้อมูลก่อน)', 'info'); return; } copyAny(folderUrl, 'คัดลอกลิงก์โฟลเดอร์รูปนักเรียนแล้ว', 'คัดลอกลิงก์นี้ไปวางในกลุ่ม'); };
+
             return (
-                <div className="mt-3 pt-3 border-t border-gray-100">
+                <div className={bar ? '' : 'mt-3 pt-3 border-t border-gray-100'}>
+                    {bar ? (
+                    <button onClick={() => setOpen(true)} className="w-full bg-gradient-to-r from-[#C8102E] via-rose-600 to-amber-600 text-white p-4 rounded-2xl shadow-lg shadow-red-500/20 flex items-center justify-between hover:opacity-95 active:scale-[0.99] transition-all">
+                        <div className="flex items-center gap-3 text-left">
+                            <div className="w-11 h-11 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center shrink-0"><i className="ph ph-camera text-2xl text-amber-200"></i></div>
+                            <div>
+                                <div className="font-black text-sm sm:text-base leading-tight">รูปรายงานเขตพื้นที่จากนักเรียน</div>
+                                <div className="text-[11px] text-white/90 font-medium mt-0.5">ดูห้องที่ส่งแล้ว/ยังไม่ส่ง • คัดลอกลิงก์ • ส่งสรุปลงกลุ่ม LINE</div>
+                            </div>
+                        </div>
+                        <div className="bg-white text-[#C8102E] px-3 py-1.5 rounded-xl font-bold text-xs shrink-0 shadow-sm">เปิด</div>
+                    </button>
+                    ) : (
                     <button onClick={() => setOpen(true)} className="w-full py-3 rounded-xl border-2 border-[#C8102E]/30 text-[#C8102E] bg-red-50/40 hover:bg-red-50 font-black text-sm flex items-center justify-center gap-2"><i className="ph ph-list-checks text-lg"></i> ดูสถานะการส่งรูปของทุกห้อง</button>
+                    )}
                     {open && (
                         <div className="fixed inset-0 z-[99999] bg-gray-900/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setOpen(false)}>
                             <div className="bg-white rounded-[2rem] w-full max-w-md max-h-[90vh] flex flex-col shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
@@ -9453,6 +9483,10 @@ ${roomSummaryLines}`;
                                 </div>
                                 <div className="p-4 space-y-3 overflow-y-auto">
                                     <input type="date" value={day} onChange={e => setDay(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold" />
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <button onClick={copyStudentLink} className="py-2.5 rounded-xl font-black text-xs text-white bg-[#C8102E] flex items-center justify-center gap-1.5"><i className="ph ph-link text-base"></i> ลิงก์ให้นักเรียนส่งรูป</button>
+                                        <button onClick={copyFolderLink} className={'py-2.5 rounded-xl font-black text-xs text-white flex items-center justify-center gap-1.5 ' + (folderUrl ? 'bg-orange-600' : 'bg-gray-400')}><i className="ph ph-folder-open text-base"></i> ลิงก์โฟลเดอร์รูป</button>
+                                    </div>
                                     {loading || !counts ? (
                                         <p className="text-center text-sm font-bold text-gray-400 py-8"><i className="ph ph-spinner animate-spin mr-1"></i> กำลังโหลด...</p>
                                     ) : (
