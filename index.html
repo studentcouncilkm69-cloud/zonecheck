@@ -9224,7 +9224,7 @@ ${roomSummaryLines}`;
             const full = known && remaining === 0;
             const roomTotal = done ? Math.min(MAX_PHOTOS, sentOfRoom) : 0;
             return (
-                <div className="min-h-screen bg-gray-50 pb-10">
+                <div className="min-h-screen bg-gray-50 pb-36">
                     <style>{`@keyframes zcPop{0%{transform:scale(.4);opacity:0}60%{transform:scale(1.14);opacity:1}100%{transform:scale(1)}}@keyframes zcRing{0%{transform:scale(.85);opacity:.55}100%{transform:scale(1.8);opacity:0}}@keyframes zcUp{0%{transform:translateY(10px);opacity:0}100%{transform:translateY(0);opacity:1}}`}</style>
                     <header className="bg-white border-b border-gray-200 h-[70px] px-4 flex items-center gap-3 shadow-sm sticky top-0 z-10">
                         <div className="w-10 h-10 rounded-full flex items-center justify-center shadow-sm overflow-hidden bg-white flex-shrink-0 border border-gray-200">
@@ -9327,11 +9327,20 @@ ${roomSummaryLines}`;
                                         )}
                                     </div>
                                 </div>
-                                {err && <p className="text-sm text-red-600 font-bold">{err}</p>}
-                                <button onClick={send} disabled={!room || full || !photos.length || busy || prep} className={'w-full py-3.5 rounded-2xl font-black text-white transition-all active:scale-95 ' + (!room || full || !photos.length || busy || prep ? 'bg-gray-300' : 'bg-[#C8102E] hover:bg-red-700 shadow-lg shadow-red-200')}>ส่งรูป</button>
                             </div>
                         )}
                     </div>
+                    {!done && !closed && (
+                        <div className="fixed bottom-0 inset-x-0 z-20 bg-white/95 backdrop-blur border-t border-gray-200 px-4 pt-3 shadow-[0_-8px_24px_rgba(0,0,0,0.06)]" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
+                            <div className="max-w-md mx-auto">
+                                {err && <p className="text-xs text-red-600 font-bold mb-2 text-center">{err}</p>}
+                                <button onClick={send} disabled={!room || full || !photos.length || busy || prep} className={'w-full py-4 rounded-2xl font-black text-base text-white transition-all active:scale-95 flex items-center justify-center gap-2 ' + (!room || full || !photos.length || busy || prep ? 'bg-gray-300' : 'bg-gradient-to-r from-[#C8102E] to-orange-600 shadow-lg shadow-red-200')}>
+                                    <i className={'ph ' + (prep ? 'ph-spinner animate-spin' : 'ph-paper-plane-tilt') + ' text-xl'}></i>
+                                    {!room ? 'เลือกห้องก่อนส่งรูป' : full ? 'ห้องนี้ส่งรูปครบแล้ว' : prep ? 'กำลังเตรียมรูป...' : !photos.length ? 'แนบรูปก่อนส่ง' : `ส่งรูป ${photos.length} รูป`}
+                                </button>
+                            </div>
+                        </div>
+                    )}
                     {busy && (
                         <div className="fixed inset-0 z-[999999] bg-gray-900/75 backdrop-blur-sm flex items-center justify-center p-4 select-none">
                             <div className="bg-white rounded-[2.25rem] w-full max-w-xs p-6 text-center shadow-2xl border border-gray-100 flex flex-col items-center">
