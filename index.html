@@ -9327,16 +9327,17 @@ ${roomSummaryLines}`;
                                         )}
                                     </div>
                                 </div>
+                                {err && !photos.length && <p className="text-sm text-red-600 font-bold">{err}</p>}
                             </div>
                         )}
                     </div>
-                    {!done && !closed && (
-                        <div className="fixed bottom-0 inset-x-0 z-20 bg-white/95 backdrop-blur border-t border-gray-200 px-4 pt-3 shadow-[0_-8px_24px_rgba(0,0,0,0.06)]" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
-                            <div className="max-w-md mx-auto">
-                                {err && <p className="text-xs text-red-600 font-bold mb-2 text-center">{err}</p>}
-                                <button onClick={send} disabled={!room || full || !photos.length || busy || prep} className={'w-full py-4 rounded-2xl font-black text-base text-white transition-all active:scale-95 flex items-center justify-center gap-2 ' + (!room || full || !photos.length || busy || prep ? 'bg-gray-300' : 'bg-gradient-to-r from-[#C8102E] to-orange-600 shadow-lg shadow-red-200')}>
+                    {!done && !closed && photos.length > 0 && (
+                        <div className="fixed bottom-0 inset-x-0 z-20 pointer-events-none px-4 pt-12 bg-gradient-to-t from-gray-50 via-gray-50/80 to-transparent" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
+                            <div className="max-w-md mx-auto pointer-events-auto" style={{ animation: 'zcUp .3s ease-out' }}>
+                                {err && <div className="mb-2 text-xs font-bold text-red-700 bg-red-50 border border-red-100 rounded-full px-4 py-2 text-center shadow-sm">{err}</div>}
+                                <button onClick={send} disabled={!room || full || busy || prep} className={'w-full py-4 rounded-full font-black text-base text-white transition-all active:scale-95 flex items-center justify-center gap-2 ' + (!room || full || busy || prep ? 'bg-gray-300' : 'bg-gradient-to-r from-[#C8102E] to-orange-600 shadow-xl shadow-red-300/60')}>
                                     <i className={'ph ' + (prep ? 'ph-spinner animate-spin' : 'ph-paper-plane-tilt') + ' text-xl'}></i>
-                                    {!room ? 'เลือกห้องก่อนส่งรูป' : full ? 'ห้องนี้ส่งรูปครบแล้ว' : prep ? 'กำลังเตรียมรูป...' : !photos.length ? 'แนบรูปก่อนส่ง' : `ส่งรูป ${photos.length} รูป`}
+                                    {prep ? 'กำลังเตรียมรูป...' : `ส่งรูป ${photos.length} รูป`}
                                 </button>
                             </div>
                         </div>
