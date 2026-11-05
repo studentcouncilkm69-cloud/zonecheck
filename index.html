@@ -9113,6 +9113,9 @@ ${roomSummaryLines}`;
             const [err, setErr] = useState('');
             const [counts, setCounts] = useState(null);
             const [checking, setChecking] = useState(false);
+            const [preview, setPreview] = useState('');
+            const [adding, setAdding] = useState(false);
+            const [sentPhotos, setSentPhotos] = useState([]); // id ไฟล์รูปที่ห้องนี้ส่งแล้ววันนี้ (จาก Drive)
             const [checkedRoom, setCheckedRoom] = useState('');
             const [meta, setMeta] = useState({ title: 'ZoneCheck', version: 'V3.0' });
             const [nowMs, setNowMs] = useState(Date.now() + STUDENT_TEST_OFFSET);
@@ -9147,6 +9150,7 @@ ${roomSummaryLines}`;
                     const j = await fetchStudentPhotoStatus(getThaiDateStr(new Date(Date.now() + offsetRef.current)), { room: roomArg || '' });
                     if (j.now) { offsetRef.current = Number(j.now) - Date.now(); setNowMs(Date.now() + offsetRef.current); }
                     setCounts(c => ({ ...(c || {}), ...(j.counts || {}) }));
+                    if (roomArg) setSentPhotos(Array.isArray(j.photos) ? j.photos : []);
                     if (roomArg) setCheckedRoom(roomArg);
                     setMeta(m => ({ title: (j.title || m.title), version: ('version' in j) ? String(j.version || '') : m.version }));
                 } catch (e) { /* เช็กไม่ได้: ให้ฝั่งเซิร์ฟเวอร์คุมจำนวนและเวลาให้แทน */ }
@@ -9161,7 +9165,7 @@ ${roomSummaryLines}`;
             useEffect(() => {
                 if (dayRef.current === today) return;
                 dayRef.current = today;
-                setCounts({}); setCheckedRoom(''); setDone(null); setPhotos([]); setErr('');
+                setCounts({}); setCheckedRoom(''); setDone(null); setPhotos([]); setErr(''); setAdding(false); setSentPhotos([]);
                 if (room) refresh(room);
             }, [today]);
 
@@ -9222,7 +9226,11 @@ ${roomSummaryLines}`;
             const card = 'bg-white rounded-[2rem] shadow-sm border border-gray-100 p-6';
             const selCls = 'w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3.5 text-base font-bold text-gray-800 outline-none focus:border-[#C8102E]';
             const full = known && remaining === 0;
-            const roomTotal = done ? Math.min(MAX_PHOTOS, sentOfRoom) : 0;
+            const alreadySent = !done && known && sentOfRoom > 0 && !adding; // ห้องนี้ส่งแล้ววันนี้: เปิดมาเจอหน้าสรุปเลย
+            const sv = done || { room: room, count: 0, thumbs: null };
+            const driveImg = (id, w) => `https://drive.google.com/thumbnail?id=${id}&sz=w${w}`;
+            const shownThumbs = sentPhotos.length ? sentPhotos.map(id => ({ thumb: driveImg(id, 240), full: driveImg(id, 1280) })) : (sv.thumbs || []).map(u => ({ thumb: u, full: u }));
+            const roomTotal = (done || alreadySent) ? Math.min(MAX_PHOTOS, sentOfRoom) : 0;
             return (
                 <div className="min-h-screen bg-gray-50 pb-36">
                     <style>{`@keyframes zcPop{0%{transform:scale(.4);opacity:0}60%{transform:scale(1.14);opacity:1}100%{transform:scale(1)}}@keyframes zcRing{0%{transform:scale(.85);opacity:.55}100%{transform:scale(1.8);opacity:0}}@keyframes zcUp{0%{transform:translateY(10px);opacity:0}100%{transform:translateY(0);opacity:1}}`}</style>
@@ -9255,17 +9263,19 @@ ${roomSummaryLines}`;
                             <h2 className="text-lg font-black">ส่งรูปรายงานเขตพื้นที่</h2>
                             <p className="text-xs font-medium opacity-90 mt-1.5 leading-relaxed">ระบบรับรูปถึงเวลา {cutoffText} น. ของทุกวัน ส่งได้ไม่เกิน {MAX_PHOTOS} รูปต่อห้อง</p>
                         </div>
-                        {done ? (
+                        {(!done && room && !known && checking) ? (
+                            <div className={card + ' text-center py-12'}><i className="ph ph-spinner animate-spin text-3xl text-[#C8102E]"></i><p className="text-sm font-bold text-gray-400 mt-3">กำลังตรวจสอบรูปของห้อง {room}...</p></div>
+                        ) : (done || alreadySent) ? (
                             <div className={card + ' text-center'} style={{ animation: 'zcUp .45s ease-out' }}>
                                 <div className="relative w-24 h-24 mx-auto mb-4">
                                     <span className="absolute inset-0 rounded-full bg-green-400" style={{ animation: 'zcRing 1.4s ease-out 2' }}></span>
                                     <div className="relative w-24 h-24 rounded-full bg-gradient-to-br from-green-400 to-emerald-600 text-white flex items-center justify-center shadow-lg shadow-green-200" style={{ animation: 'zcPop .6s ease-out' }}><i className="ph ph-check text-5xl"></i></div>
                                 </div>
-                                <p className="font-black text-xl text-gray-800">ส่งรูปเรียบร้อยแล้ว</p>
-                                <p className="text-sm text-gray-500 mt-1">ห้อง {done.room} · ส่งครั้งนี้ {done.count} รูป</p>
-                                {done.thumbs && done.thumbs.length > 0 && (
-                                    <div className="flex justify-center gap-2 mt-4">
-                                        {done.thumbs.map((u, i) => <img key={i} src={u} alt="" className="w-16 h-16 rounded-2xl object-cover border-2 border-white shadow-md ring-1 ring-gray-100" />)}
+                                <p className="font-black text-xl text-gray-800">{sv.count ? 'ส่งรูปเรียบร้อยแล้ว' : 'ห้องนี้ส่งรูปวันนี้แล้ว'}</p>
+                                <p className="text-sm text-gray-500 mt-1">ห้อง {sv.room} · {sv.count ? `ส่งครั้งนี้ ${sv.count} รูป` : `วันนี้ส่งแล้ว ${sentOfRoom} รูป`}</p>
+                                {shownThumbs.length > 0 && (
+                                    <div className="flex flex-wrap justify-center gap-2.5 mt-4">
+                                        {shownThumbs.map((t, i) => <img key={t.thumb + i} src={t.thumb} alt="" onClick={() => setPreview(t.full)} onError={(e) => { e.currentTarget.style.display = 'none'; }} className="w-20 h-20 rounded-2xl object-cover border-2 border-white shadow-md ring-1 ring-gray-100 cursor-zoom-in bg-gray-100" />)}
                                     </div>
                                 )}
                                 <div className="mt-4 inline-flex items-center gap-1.5 bg-gray-50 border border-gray-100 rounded-full px-3 py-1.5">
@@ -9273,12 +9283,12 @@ ${roomSummaryLines}`;
                                     <span className="text-[11px] font-bold text-gray-500 ml-1">ห้องนี้ส่งวันนี้แล้ว {roomTotal}/{MAX_PHOTOS} รูป</span>
                                 </div>
                                 {remaining > 0 && !closed ? (
-                                    <button onClick={() => { setDone(null); setErr(''); }} className="mt-6 w-full py-4 rounded-2xl bg-gradient-to-r from-[#C8102E] to-orange-600 text-white font-black shadow-lg shadow-red-200 transition-all active:scale-95 flex items-center justify-center gap-3">
+                                    <button onClick={() => { setDone(null); setAdding(true); setErr(''); }} className="mt-6 w-full py-4 rounded-2xl bg-gradient-to-r from-[#C8102E] to-orange-600 text-white font-black shadow-lg shadow-red-200 transition-all active:scale-95 flex items-center justify-center gap-3">
                                         <span className="w-9 h-9 rounded-full bg-white/25 flex items-center justify-center shrink-0"><i className="ph ph-plus text-xl"></i></span>
-                                        <span className="text-left leading-tight">ส่งรูปเพิ่มเติม<span className="block text-[11px] font-bold opacity-90">ห้อง {done.room} ส่งได้อีก {remaining} รูป</span></span>
+                                        <span className="text-left leading-tight">ส่งรูปเพิ่มเติม<span className="block text-[11px] font-bold opacity-90">ห้อง {sv.room} ส่งได้อีก {remaining} รูป</span></span>
                                     </button>
                                 ) : (
-                                    <p className="mt-6 text-sm font-bold text-gray-500 bg-gray-50 border border-gray-100 rounded-2xl px-4 py-3">{remaining === 0 ? `ห้อง ${done.room} ส่งรูปครบ ${MAX_PHOTOS} รูปแล้ววันนี้` : `ปิดรับรูปแล้ว (รับถึง ${cutoffText} น.)`}</p>
+                                    <p className="mt-6 text-sm font-bold text-gray-500 bg-gray-50 border border-gray-100 rounded-2xl px-4 py-3">{remaining === 0 ? `ห้อง ${sv.room} ส่งรูปครบ ${MAX_PHOTOS} รูปแล้ววันนี้` : `ปิดรับรูปแล้ว (รับถึง ${cutoffText} น.)`}</p>
                                 )}
                             </div>
                         ) : closed ? (
@@ -9292,14 +9302,14 @@ ${roomSummaryLines}`;
                             <div className={card + ' space-y-5'}>
                                 <div>
                                     <label className="text-[10px] font-bold text-gray-500 mb-1.5 block uppercase">1. เลือกชั้น</label>
-                                    <select value={grade} onChange={e => { setGrade(e.target.value); setRoom(''); setPhotos([]); }} className={selCls}>
+                                    <select value={grade} onChange={e => { setGrade(e.target.value); setRoom(''); setPhotos([]); setAdding(false); setSentPhotos([]); }} className={selCls}>
                                         <option value="">เลือกชั้น...</option>
                                         {grades.map(g => <option key={g} value={g}>มัธยมศึกษาปีที่ {g}</option>)}
                                     </select>
                                 </div>
                                 <div className={grade ? '' : 'opacity-40 pointer-events-none'}>
                                     <label className="text-[10px] font-bold text-gray-500 mb-1.5 block uppercase">2. เลือกห้อง</label>
-                                    <select value={room} onChange={e => { setRoom(e.target.value); setPhotos([]); setErr(''); }} disabled={!grade} className={selCls}>
+                                    <select value={room} onChange={e => { setRoom(e.target.value); setPhotos([]); setErr(''); setAdding(false); setSentPhotos([]); }} disabled={!grade} className={selCls}>
                                         <option value="">เลือกห้อง...</option>
                                         {roomsOfGrade.map(r => <option key={r} value={r}>{r}</option>)}
                                     </select>
@@ -9316,8 +9326,8 @@ ${roomSummaryLines}`;
                                     <div className="grid grid-cols-3 gap-2.5">
                                         {photos.map(ph => (
                                             <div key={ph.id} className="relative aspect-square rounded-2xl overflow-hidden border border-gray-200 bg-gray-100">
-                                                <img src={ph.dataUrl} alt="" className="w-full h-full object-cover" />
-                                                <button onClick={() => setPhotos(p => p.filter(x => x.id !== ph.id))} disabled={busy} className="absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-black/60 text-white flex items-center justify-center"><i className="ph ph-x text-sm"></i></button>
+                                                <img src={ph.dataUrl} alt="" onClick={() => setPreview(ph.dataUrl)} className="w-full h-full object-cover cursor-zoom-in" />
+                                                <button onClick={(ev) => { ev.stopPropagation(); setPhotos(p => p.filter(x => x.id !== ph.id)); }} disabled={busy} className="absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-black/60 text-white flex items-center justify-center"><i className="ph ph-x text-sm"></i></button>
                                             </div>
                                         ))}
                                         {photos.length < remaining && (
@@ -9340,6 +9350,12 @@ ${roomSummaryLines}`;
                                     {prep ? 'กำลังเตรียมรูป...' : `ส่งรูป ${photos.length} รูป`}
                                 </button>
                             </div>
+                        </div>
+                    )}
+                    {preview && (
+                        <div className="fixed inset-0 z-[999998] bg-black/90 flex items-center justify-center p-4" onClick={() => setPreview('')} style={{ animation: 'zcUp .2s ease-out' }}>
+                            <img src={preview} alt="" className="max-w-full max-h-full object-contain rounded-2xl shadow-2xl" />
+                            <button onClick={() => setPreview('')} className="absolute right-4 w-11 h-11 rounded-full bg-white/20 text-white flex items-center justify-center" style={{ top: 'max(1rem, env(safe-area-inset-top))' }}><i className="ph ph-x text-xl"></i></button>
                         </div>
                     )}
                     {busy && (
