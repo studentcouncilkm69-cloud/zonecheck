@@ -1242,6 +1242,11 @@
             const [inspectors, setInspectors] = useState(() => loadDataSafe('zc26_inspectors', []));
             const [inspections, setInspections] = useState(() => loadDataSafe('zc26_inspections', []));
             const [settings, setSettings] = useState(() => loadDataSafe('zc26_settings', initialSettings));
+            const [dutyViewOpen, setDutyViewOpen] = useState(false);
+            const [dutyViewDate, setDutyViewDate] = useState('');
+            const [dutyEdit, setDutyEdit] = useState(null);
+            const [dutyPick, setDutyPick] = useState(null);
+            const [subFor, setSubFor] = useState('');
 
             const [isSavingData, setIsSavingData] = useState(false);
             const [savingCountdown, setSavingCountdown] = useState(0);
@@ -2432,6 +2437,93 @@ ${roomSummaryLines}`;
                 return [mainName, ...coInspectors].join(', ');
             };
 
+            // ===== ตารางเวรผู้ตรวจ (เก็บเป็น JSON ใน settings.duty_roster_json) =====
+            const DUTY_DAYS = [['1', 'จันทร์'], ['2', 'อังคาร'], ['3', 'พุธ'], ['4', 'พฤหัสบดี'], ['5', 'ศุกร์']];
+            // เวรหนึ่งช่อง (ห้อง/เขต) ตรวจได้หลายคน จึงเก็บเป็นอาร์เรย์ของ id (ข้อมูลเก่าที่เป็นข้อความเดียวก็อ่านได้)
+            const toIds = (v) => Array.isArray(v) ? v.map(String).filter(Boolean) : (v ? [String(v)] : []);
+            const dutyDow = (dateStr) => new Date(`${dateStr}T00:00:00Z`).getUTCDay();
+            const dutyShift = (dateStr, n) => { const t = new Date(`${dateStr}T00:00:00Z`); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
+            const dutyLabel = (dateStr) => {
+                const p = String(dateStr || '').split('-'); if (p.length !== 3) return '';
+                const mo = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+                return `วัน${['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'][dutyDow(dateStr)]}ที่ ${Number(p[2])} ${mo[Number(p[1]) - 1]} ${Number(p[0]) + 543}`;
+            };
+            const dutyData = useMemo(() => {
+                try { const j = JSON.parse(settings?.duty_roster_json || ''); return { week: (j && j.week) || {}, overrides: (j && j.overrides) || {} }; }
+                catch (e) { return { week: {}, overrides: {} }; }
+            }, [settings?.duty_roster_json]);
+            const dutyHasData = Object.keys(dutyData.week).length > 0 || Object.keys(dutyData.overrides).length > 0;
+            const dutyItems = useMemo(() => {
+                const out = [];
+                (Array.isArray(rooms) ? rooms : []).forEach(r => {
+                    out.push({ key: `room:${r.id}`, type: 'room', roomId: r.id, room: r });
+                    if (r.hasZone !== false) out.push({ key: `zone:${r.id}`, type: 'zone', roomId: r.id, room: r });
+                });
+                return out;
+            }, [rooms]);
+            const getDutyOwnerIds = (dateStr, type, roomId, data = dutyData) => {
+                const key = `${type}:${roomId}`;
+                const ov = toIds(data.overrides && data.overrides[dateStr] && data.overrides[dateStr][key]);
+                if (ov.length) return ov;
+                const wk = data.week && data.week[String(dutyDow(dateStr))];
+                return toIds(wk && wk[key]);
+            };
+            const getDutyOwners = (dateStr, type, roomId) => {
+                const list = Array.isArray(inspectors) ? inspectors : [];
+                return getDutyOwnerIds(dateStr, type, roomId).map(id => list.find(u => String(u.id) === id)).filter(Boolean);
+            };
+            const isMyName = (name) => {
+                const n = String(name || '').trim(); if (!n) return false;
+                return n === String(currentUser?.name || '').trim() || (coInspectors || []).some(c => String(c).trim() === n);
+            };
+            const getDefaultSubFor = (dateStr, type, roomId) => { const os = getDutyOwners(dateStr, type, roomId); return (!os.length || os.some(o => isMyName(o.name))) ? '' : os.map(o => o.name).join(', '); };
+            const getDutyForDate = (dateStr) => dutyItems.map(it => ({ ...it, ownerIds: getDutyOwnerIds(dateStr, it.type, it.roomId) })).filter(x => x.ownerIds.length);
+            const isDutyDone = (dateStr, it) => (Array.isArray(inspections) ? inspections : []).some(i => i && i.roomId === it.roomId && i.type === it.type && String(i.date || '').slice(0, 10) === dateStr);
+            // วันทำงานล่าสุดก่อนวันนี้ (ย้อนไม่เกิน 7 วัน, ข้ามวันที่ไม่มีใครตรวจเลย เช่น เสาร์-อาทิตย์/วันหยุด) แล้วหาเวรที่ไม่มีผลตรวจ
+            const getMissedDuty = () => {
+                const today = getThaiDateStr();
+                const all = Array.isArray(inspections) ? inspections : [];
+                for (let back = 1; back <= 7; back++) {
+                    const d = dutyShift(today, -back);
+                    const dayInsps = all.filter(i => i && String(i.date || '').slice(0, 10) === d);
+                    if (!dayInsps.length) continue;
+                    const missed = getDutyForDate(d).filter(x => !dayInsps.some(i => i.roomId === x.roomId && i.type === x.type));
+                    return { date: d, items: missed, hadDuty: getDutyForDate(d).length > 0 };
+                }
+                return null;
+            };
+            const dutyShownRef = useRef('');
+            useEffect(() => {
+                if ((appMode !== 'inspector' && appMode !== 'admin') || !currentUser) { dutyShownRef.current = ''; return; }
+                if (!dutyHasData) return;
+                const k = appMode + ':' + String(currentUser.name || '');
+                if (dutyShownRef.current === k) return;
+                dutyShownRef.current = k;
+                setDutyViewDate(getThaiDateStr());
+                setDutyViewOpen(true);
+            }, [appMode, currentUser?.name, dutyHasData]);
+            const openDutyEditor = () => {
+                const today = getThaiDateStr(); const dow = dutyDow(today);
+                setDutyEdit({ tab: (dow >= 1 && dow <= 5) ? String(dow) : '1', date: today, draft: JSON.parse(JSON.stringify(dutyData)), saving: false });
+            };
+            const saveDutyDraft = async () => {
+                if (!dutyEdit) return;
+                const cleanMap = (m) => { const o = {}; Object.keys(m || {}).forEach(k => { const b = {}; Object.entries(m[k] || {}).forEach(([kk, v]) => { const arr = toIds(v); if (arr.length) b[kk] = arr; }); if (Object.keys(b).length) o[k] = b; }); return o; };
+                const clean = { week: cleanMap(dutyEdit.draft.week), overrides: cleanMap(dutyEdit.draft.overrides) };
+                const empty = !Object.keys(clean.week).length && !Object.keys(clean.overrides).length;
+                const json = JSON.stringify(clean);
+                setDutyEdit(p => ({ ...p, saving: true }));
+                setSettings(prev => ({ ...prev, duty_roster_json: empty ? '' : json }));
+                try {
+                    await syncToGASAsync('updateMultipleSettings', [{ key: 'duty_roster_json', val: empty ? EMPTY_SETTING_SENTINEL : json }]);
+                    showToast('บันทึกตารางเวรแล้ว', 'success');
+                    setDutyEdit(null);
+                } catch (e) {
+                    showToast('บันทึกลงเครื่องแล้ว แต่ซิงค์ออนไลน์ไม่สำเร็จ', 'warning');
+                    setDutyEdit(p => (p ? { ...p, saving: false } : p));
+                }
+            };
+
             const getInspectorAvatar = (name) => {
                 if (!name) return settings?.app_logo_url || HARDCODED_LOGO;
                 const cleanName = String(name).trim();
@@ -2848,6 +2940,7 @@ ${roomSummaryLines}`;
                     setInspectImage(null);
                     setIsSkipped(false);
                     if(type === 'room') setRoomScores({ c1: 2, c2: 2, c3: 2, c4: 2, c5: 2, noDuty: false }); else setZoneScore(10);
+                    setSubFor(getDefaultSubFor(String(targetDateStr || '').slice(0, 10), type, room.id));
                     setInspectModal({ isOpen: true, room: room, type: type, date: targetDateStr });
                 }
             };
@@ -2995,10 +3088,13 @@ ${roomSummaryLines}`;
 
                     setSavingStatusText('กำลังบันทึกคะแนนลงฐานข้อมูล...');
 
+                    const dutyOwnersNow = getDutyOwners(String(inspectModal.date || '').slice(0, 10), type, loc.id);
+                    const subName = (dutyOwnersNow.length && !dutyOwnersNow.some(x => isMyName(x.name))) ? (subFor || '') : '';
                     const newInsp = { 
                         id: generateId('insp'), roomId: loc.id, type: type, date: finalDateISO, 
                         inspector: getActiveInspectorTeamString(), 
                         mainInspector: currentUser?.name || '',
+                        substituteFor: subName,
                         inspectorSignature: currentUser?.dailySignature || loginSignatureDataUrl || '',
                         scores: breakdown, totalScore, comment: evalComment, photoUrl: photoUrl 
                     };
@@ -6157,6 +6253,17 @@ ${roomSummaryLines}`;
                                         <i className="ph ph-scan text-lg text-amber-300"></i> สแกนแบบประเมิน
                                     </button>
                                 </div>
+                                <button onClick={() => { setDutyViewDate(getThaiDateStr()); setDutyViewOpen(true); }} className="w-full bg-gradient-to-r from-indigo-700 via-indigo-600 to-sky-500 text-white p-4 rounded-2xl shadow-lg shadow-indigo-500/20 flex items-center justify-between hover:opacity-95 active:scale-[0.99] transition-all">
+                                    <div className="flex items-center gap-3 text-left">
+                                        <div className="w-11 h-11 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center shrink-0"><i className="ph ph-calendar-check text-2xl text-white"></i></div>
+                                        <div>
+                                            <div className="font-black text-sm sm:text-base leading-tight">ตารางเวรผู้ตรวจ</div>
+                                            <div className="text-[11px] text-white/90 font-medium mt-0.5">ดูเวรวันนี้ • ใครลืมตรวจเมื่อวาน</div>
+                                        </div>
+                                    </div>
+                                    <div className="bg-white text-indigo-700 px-3 py-1.5 rounded-xl font-bold text-xs shrink-0 shadow-sm">ดูเวร</div>
+                                </button>
+
                                 <StudentPhotoReport bar showToast={showToast} triggerSafeLocalDownload={triggerSafeLocalDownload} settings={settings} />
 
                                 <button onClick={() => setBatchModal({ isOpen: true, type: 'room', isSkipped: false, roomScores: { c1: 2, c2: 2, c3: 2, c4: 2, c5: 2, noDuty: false }, zoneScore: 10, gradeFilter: 'all', comment: '' })} className="w-full bg-gradient-to-r from-[#C8102E] via-rose-600 to-amber-600 text-white p-4 rounded-2xl shadow-lg shadow-red-500/20 flex items-center justify-between hover:opacity-95 active:scale-[0.99] transition-all">
@@ -7329,6 +7436,201 @@ ${roomSummaryLines}`;
                         </div>
                     )}
 
+                    {dutyViewOpen && (() => {
+                        const today = getThaiDateStr();
+                        const vd = dutyViewDate || today;
+                        const isToday = vd === today;
+                        const insp = Array.isArray(inspectors) ? inspectors : [];
+                        const duties = getDutyForDate(vd);
+                        const mine = duties.filter(d => d.ownerIds.some(id => { const u = insp.find(x => String(x.id) === id); return u && isMyName(u.name); }));
+                        const groupBy = (list) => { const m = {}; list.forEach(d => d.ownerIds.forEach(id => { (m[id] = m[id] || []).push(d); })); return Object.keys(m).map(id => ({ u: insp.find(x => String(x.id) === id), items: m[id] })).filter(g => g.u); };
+                        const owners = groupBy(duties);
+                        const missed = isToday ? getMissedDuty() : null;
+                        const missedGroups = missed ? groupBy(missed.items) : [];
+                        const chip = (d, done) => (
+                            <span key={d.key} className={'inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold border ' + (done ? 'bg-green-50 text-green-700 border-green-200' : d.type === 'room' ? 'bg-blue-50 text-blue-700 border-blue-100' : 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-100')}>
+                                <i className={'ph ' + (done ? 'ph-check-circle' : d.type === 'room' ? 'ph-buildings' : 'ph-map-pin') + ' text-sm'}></i>{d.type === 'room' ? 'ห้อง' : 'เขต'} {d.room.name}
+                            </span>
+                        );
+                        const missedLabel = missed ? (missed.date === dutyShift(today, -1) ? 'เมื่อวาน' : dutyLabel(missed.date)) : '';
+                        return (
+                            <div className="fixed inset-0 z-[9996] bg-gray-900/80 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4 animate-in fade-in">
+                                <div className="bg-white w-full max-w-md rounded-t-[2rem] sm:rounded-[2rem] shadow-2xl flex flex-col max-h-[92vh]">
+                                    <div className="px-5 pt-5 pb-3 border-b border-gray-100 shrink-0">
+                                        <div className="flex items-center justify-between gap-2">
+                                            <h2 className="text-lg font-black text-gray-800 flex items-center gap-2"><i className="ph ph-calendar-check text-indigo-600 text-xl"></i> ตารางเวรผู้ตรวจ</h2>
+                                            <button onClick={() => setDutyViewOpen(false)} className="w-8 h-8 bg-gray-100 text-gray-500 rounded-full flex items-center justify-center shrink-0"><i className="ph ph-x"></i></button>
+                                        </div>
+                                        <div className="flex items-center justify-between mt-2.5 bg-indigo-50 rounded-xl px-1 py-1">
+                                            <button onClick={() => setDutyViewDate(dutyShift(vd, -1))} className="w-9 h-9 rounded-lg text-indigo-700 flex items-center justify-center active:scale-95"><i className="ph ph-caret-left text-lg"></i></button>
+                                            <button onClick={() => setDutyViewDate(today)} className="text-sm font-black text-indigo-800">{dutyLabel(vd)}{isToday ? ' (วันนี้)' : ''}</button>
+                                            <button onClick={() => setDutyViewDate(dutyShift(vd, 1))} className="w-9 h-9 rounded-lg text-indigo-700 flex items-center justify-center active:scale-95"><i className="ph ph-caret-right text-lg"></i></button>
+                                        </div>
+                                    </div>
+                                    <div className="flex-1 overflow-y-auto custom-scrollbar px-5 py-4 space-y-4">
+                                        {isToday && missed && missed.items.length > 0 && (
+                                            <div className="rounded-2xl border-2 border-red-200 bg-red-50 p-3.5">
+                                                <p className="text-sm font-black text-red-700 flex items-center gap-1.5"><i className="ph ph-warning-circle text-lg"></i> {missedLabel}ยังไม่ได้ตรวจ</p>
+                                                <div className="mt-3 space-y-3">
+                                                    {missedGroups.map(g => (
+                                                        <div key={g.u.id} className="flex items-start gap-3">
+                                                            <img src={getInspectorAvatar(g.u.name)} alt="" className="w-11 h-11 rounded-full object-cover border-2 border-white shadow shrink-0 bg-white" />
+                                                            <div className="min-w-0">
+                                                                <p className="text-sm font-black text-gray-800 leading-tight">{g.u.name}</p>
+                                                                <div className="flex flex-wrap gap-1.5 mt-1.5">{g.items.map(d => chip(d, false))}</div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                        {isToday && missed && missed.hadDuty && missed.items.length === 0 && (
+                                            <div className="rounded-2xl border border-green-200 bg-green-50 px-3.5 py-3 text-sm font-bold text-green-700 flex items-center gap-2"><i className="ph ph-check-circle text-lg"></i> {missedLabel}ตรวจครบทุกเวร</div>
+                                        )}
+                                        {duties.length === 0 ? (
+                                            <div className="text-center text-sm font-bold text-gray-400 py-8"><i className="ph ph-calendar-blank text-4xl block mb-2"></i>ยังไม่ได้ตั้งเวรสำหรับวันนี้</div>
+                                        ) : (
+                                            <>
+                                                <div>
+                                                    <p className="text-[11px] font-black text-gray-500 uppercase mb-2">เวรของคุณ</p>
+                                                    {mine.length > 0 ? <div className="flex flex-wrap gap-1.5">{mine.map(d => chip(d, isDutyDone(vd, d)))}</div> : <p className="text-sm font-bold text-gray-400">วันนี้คุณไม่มีเวร</p>}
+                                                </div>
+                                                <div>
+                                                    <p className="text-[11px] font-black text-gray-500 uppercase mb-2">ตารางเวรทุกคน</p>
+                                                    <div className="space-y-3">
+                                                        {owners.map(g => {
+                                                            const doneN = g.items.filter(d => isDutyDone(vd, d)).length;
+                                                            return (
+                                                                <div key={g.u.id} className="flex items-start gap-3 bg-gray-50 border border-gray-100 rounded-2xl p-3">
+                                                                    <img src={getInspectorAvatar(g.u.name)} alt="" className="w-10 h-10 rounded-full object-cover border-2 border-white shadow shrink-0 bg-white" />
+                                                                    <div className="min-w-0 flex-1">
+                                                                        <div className="flex items-center justify-between gap-2">
+                                                                            <p className="text-sm font-black text-gray-800 leading-tight truncate">{g.u.name}</p>
+                                                                            <span className={'text-[10px] font-black px-2 py-0.5 rounded-full shrink-0 ' + (doneN === g.items.length ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600')}>{doneN}/{g.items.length}</span>
+                                                                        </div>
+                                                                        <div className="flex flex-wrap gap-1.5 mt-1.5">{g.items.map(d => chip(d, isDutyDone(vd, d)))}</div>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+                                    <div className="px-5 pt-3 pb-5 border-t border-gray-100 shrink-0 flex gap-2" style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}>
+                                        {appMode === 'admin' && <button onClick={() => { setDutyViewOpen(false); openDutyEditor(); }} className="flex-1 py-3 rounded-xl border-2 border-indigo-200 text-indigo-700 font-black text-sm flex items-center justify-center gap-1.5 active:scale-95"><i className="ph ph-pencil-simple text-base"></i> แก้ไขตารางเวร</button>}
+                                        <button onClick={() => setDutyViewOpen(false)} className="flex-1 py-3 rounded-xl bg-gradient-to-r from-[#C8102E] to-orange-600 text-white font-black text-sm active:scale-95 shadow-lg shadow-red-200">รับทราบ</button>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })()}
+                    {dutyEdit && (() => {
+                        const insp = Array.isArray(inspectors) ? inspectors : [];
+                        const { tab, date, draft } = dutyEdit;
+                        const bucket = tab === 'date' ? ((draft.overrides || {})[date] || {}) : ((draft.week || {})[tab] || {});
+                        const baseBucket = tab === 'date' ? ((draft.week || {})[String(dutyDow(date))] || {}) : {};
+                        const mut = (fn) => setDutyEdit(prev => { const dr = JSON.parse(JSON.stringify(prev.draft)); dr.week = dr.week || {}; dr.overrides = dr.overrides || {}; fn(dr, prev); return { ...prev, draft: dr }; });
+                        const target = (dr, prev) => prev.tab === 'date' ? (dr.overrides[prev.date] = dr.overrides[prev.date] || {}) : (dr.week[prev.tab] = dr.week[prev.tab] || {});
+                        const setCell = (key, arr) => mut((dr, prev) => { const b = target(dr, prev); if (arr && arr.length) b[key] = [...arr]; else delete b[key]; });
+                        const gradeOf = (it) => (String(it.room.name).match(/^ม\.(\d)/) || [])[1] || 'อื่นๆ';
+                        const grades = [...new Set(dutyItems.map(gradeOf))];
+                        const setGradeAll = (g, type, arr) => mut((dr, prev) => { const b = target(dr, prev); dutyItems.filter(it => gradeOf(it) === g && it.type === type).forEach(it => { if (arr && arr.length) b[it.key] = [...arr]; }); });
+                        const nameOf = (id) => { const u = insp.find(x => String(x.id) === String(id)); return u ? u.name : ''; };
+                        const emptyLabel = (key) => tab === 'date' ? ('ตามปกติ' + (toIds(baseBucket[key]).length ? ` (${toIds(baseBucket[key]).map(nameOf).filter(Boolean).join(', ')})` : '')) : '— ไม่กำหนด —';
+                        const idsOf = (key) => toIds(bucket[key]);
+                        const cellLabel = (key) => { const names = idsOf(key).map(nameOf).filter(Boolean); if (!names.length) return emptyLabel(key); return names.length > 1 ? `${names[0]} +${names.length - 1}` : names[0]; };
+                        const pickBtn = (key, title) => (
+                            <button onClick={() => setDutyPick({ kind: 'cell', key, title })} className={'w-full min-w-0 text-left rounded-xl px-2 py-2 text-xs font-bold border truncate ' + (idsOf(key).length ? 'bg-indigo-50 border-indigo-200 text-indigo-800' : 'bg-gray-50 border-gray-200 text-gray-500')}>{cellLabel(key)}</button>
+                        );
+                        const gradeBtn = (g, type) => (
+                            <button onClick={() => setDutyPick({ kind: 'grade', g, type, sel: [], title: `ตั้ง${type === 'room' ? 'ห้อง' : 'เขต'}ทั้งชั้น ม.${g}` })} className="w-full text-left bg-white border border-gray-200 rounded-xl px-2 py-2 text-xs font-bold text-indigo-700 truncate">ตั้ง{type === 'room' ? 'ห้อง' : 'เขต'}ทั้งชั้น…</button>
+                        );
+                        const overrideDates = Object.keys(draft.overrides || {}).filter(d => Object.keys(draft.overrides[d] || {}).length).sort();
+                        const tabBtn = (id, label) => <button key={id} onClick={() => setDutyEdit(p => ({ ...p, tab: id }))} className={'px-3 py-2 rounded-xl text-xs font-black whitespace-nowrap border ' + (tab === id ? 'bg-indigo-600 text-white border-indigo-600 shadow' : 'bg-white text-gray-600 border-gray-200')}>{label}</button>;
+                        return (
+                            <div className="fixed inset-0 z-[9997] bg-gray-900/80 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4 animate-in fade-in">
+                                <div className="bg-white w-full max-w-lg rounded-t-[2rem] sm:rounded-[2rem] shadow-2xl flex flex-col max-h-[94vh]">
+                                    <div className="px-5 pt-5 pb-3 border-b border-gray-100 shrink-0">
+                                        <div className="flex items-center justify-between gap-2">
+                                            <h2 className="text-lg font-black text-gray-800 flex items-center gap-2"><i className="ph ph-pencil-simple-line text-indigo-600 text-xl"></i> แก้ไขตารางเวร</h2>
+                                            <button onClick={() => setDutyEdit(null)} className="w-8 h-8 bg-gray-100 text-gray-500 rounded-full flex items-center justify-center shrink-0"><i className="ph ph-x"></i></button>
+                                        </div>
+                                        <div className="flex gap-1.5 mt-3 overflow-x-auto pb-1">
+                                            {DUTY_DAYS.map(([id, label]) => tabBtn(id, label))}
+                                            {tabBtn('date', 'เฉพาะวัน')}
+                                        </div>
+                                        <p className="text-[11px] text-gray-500 font-medium mt-2 leading-relaxed">{tab === 'date' ? 'เวรพิเศษเฉพาะวันที่เลือก (เช่น ฝากตรวจแทน) จะทับตารางปกติของวันนั้น' : 'กำหนดว่าห้องและเขตพื้นที่ของแต่ละห้อง ใครเป็นคนตรวจ (เลือกได้หลายคนต่อหนึ่งเวร) แยกตามวัน'}</p>
+                                        {tab === 'date' ? (
+                                            <div className="mt-2 space-y-2">
+                                                <input type="date" value={date} onChange={e => setDutyEdit(p => ({ ...p, date: e.target.value || p.date }))} className="w-full p-2.5 rounded-xl border border-gray-200 text-sm font-bold" />
+                                                <div className="flex flex-wrap gap-1.5 items-center">
+                                                    {overrideDates.map(d => <button key={d} onClick={() => setDutyEdit(p => ({ ...p, date: d }))} className={'px-2.5 py-1 rounded-lg text-[11px] font-bold border ' + (d === date ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-gray-500 border-gray-200')}>{dutyLabel(d).replace('วัน', '').replace(/ที่ /, ' ')}</button>)}
+                                                    {Object.keys(bucket).length > 0 && <button onClick={() => showConfirm('ล้างเวรพิเศษของวันที่เลือกทั้งหมด ใช่หรือไม่?', () => mut((dr, prev) => { delete dr.overrides[prev.date]; }))} className="px-2.5 py-1 rounded-lg text-[11px] font-bold border border-red-200 text-red-600 bg-red-50">ล้างเวรพิเศษวันนี้</button>}
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <button onClick={() => showConfirm('คัดลอกเวรของวันนี้ไปทุกวัน จันทร์–ศุกร์ (จะทับที่ตั้งไว้เดิม) ใช่หรือไม่?', () => mut((dr, prev) => { const src = dr.week[prev.tab] || {}; DUTY_DAYS.forEach(([d]) => { if (d !== prev.tab) dr.week[d] = { ...src }; }); }))} className="mt-2 px-3 py-2 rounded-xl border border-indigo-200 text-indigo-700 bg-indigo-50 text-[11px] font-black flex items-center gap-1.5"><i className="ph ph-copy text-sm"></i> คัดลอกเวรวันนี้ไปทุกวัน</button>
+                                        )}
+                                    </div>
+                                    <div className="flex-1 overflow-y-auto custom-scrollbar px-5 py-3">
+                                        {insp.length === 0 || dutyItems.length === 0 ? <p className="text-center text-sm font-bold text-gray-400 py-8">ต้องมีรายชื่อผู้ตรวจและห้องเรียนก่อน</p> : grades.map(g => (
+                                            <div key={g} className="mb-5">
+                                                <div className="bg-gray-100 rounded-xl px-3 py-2 mb-2">
+                                                    <p className="text-xs font-black text-gray-700 mb-1.5">ชั้น ม.{g}</p>
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        {gradeBtn(g, 'room')}
+                                                        {gradeBtn(g, 'zone')}
+                                                    </div>
+                                                </div>
+                                                <div className="grid grid-cols-[3.4rem_1fr_1fr] gap-2 px-1 pb-1 text-[10px] font-black text-gray-400 uppercase"><span></span><span>ตรวจห้อง</span><span>ตรวจเขต</span></div>
+                                                {dutyItems.filter(it => gradeOf(it) === g && it.type === 'room').map(it => (
+                                                    <div key={it.roomId} className="grid grid-cols-[3.4rem_1fr_1fr] gap-2 items-center py-1.5 border-b border-gray-50">
+                                                        <span className="text-xs font-black text-gray-700">{it.room.name}</span>
+                                                        {pickBtn(`room:${it.roomId}`, `ตรวจห้อง ${it.room.name}`)}
+                                                        {it.room.hasZone !== false ? pickBtn(`zone:${it.roomId}`, `ตรวจเขต ${it.room.name}`) : <span className="text-[10px] text-gray-300 text-center">ไม่มีเขต</span>}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="px-5 pt-3 border-t border-gray-100 shrink-0 flex gap-2" style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}>
+                                        <button onClick={() => setDutyEdit(null)} className="flex-1 py-3 rounded-xl border-2 border-gray-200 text-gray-600 font-black text-sm active:scale-95">ยกเลิก</button>
+                                        <button onClick={saveDutyDraft} disabled={dutyEdit.saving} className={'flex-1 py-3 rounded-xl text-white font-black text-sm active:scale-95 ' + (dutyEdit.saving ? 'bg-gray-300' : 'bg-indigo-600 shadow-lg shadow-indigo-200')}>{dutyEdit.saving ? 'กำลังบันทึก...' : 'บันทึกตารางเวร'}</button>
+                                    </div>
+                                </div>
+                                {dutyPick && (() => {
+                                    const isCell = dutyPick.kind === 'cell';
+                                    const cur = isCell ? idsOf(dutyPick.key) : (dutyPick.sel || []);
+                                    const toggle = (id) => { const next = cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id]; if (isCell) setCell(dutyPick.key, next); else setDutyPick(p => ({ ...p, sel: next })); };
+                                    return (
+                                        <div className="fixed inset-0 z-[9998] bg-black/60 flex items-end sm:items-center justify-center sm:p-4" onClick={() => setDutyPick(null)}>
+                                            <div className="bg-white w-full max-w-sm rounded-t-[2rem] sm:rounded-[2rem] shadow-2xl flex flex-col max-h-[80vh]" onClick={e => e.stopPropagation()}>
+                                                <div className="px-5 pt-5 pb-3 border-b border-gray-100 shrink-0">
+                                                    <h3 className="text-base font-black text-gray-800">{dutyPick.title}</h3>
+                                                    <p className="text-[11px] text-gray-500 font-medium mt-0.5">แตะเพื่อเลือกหรือยกเลิก เลือกได้หลายคน • เลือกแล้ว {cur.length} คน</p>
+                                                </div>
+                                                <div className="flex-1 overflow-y-auto custom-scrollbar px-3 py-2">
+                                                    {insp.map(u => { const on = cur.includes(String(u.id)); return (
+                                                        <button key={u.id} onClick={() => toggle(String(u.id))} className={'w-full flex items-center gap-3 px-2 py-2.5 rounded-xl text-left active:scale-[0.99] ' + (on ? 'bg-indigo-50' : '')}>
+                                                            <img src={getInspectorAvatar(u.name)} alt="" className="w-9 h-9 rounded-full object-cover border border-gray-200 bg-white shrink-0" />
+                                                            <span className="flex-1 min-w-0 text-sm font-bold text-gray-800 truncate">{u.name}</span>
+                                                            <span className={'w-6 h-6 rounded-lg border-2 flex items-center justify-center shrink-0 ' + (on ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-gray-300 text-transparent')}><i className="ph ph-check text-sm"></i></span>
+                                                        </button>
+                                                    ); })}
+                                                </div>
+                                                <div className="px-5 pt-3 border-t border-gray-100 shrink-0 flex gap-2" style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}>
+                                                    {isCell && cur.length > 0 && <button onClick={() => setCell(dutyPick.key, [])} className="px-4 py-3 rounded-xl border-2 border-gray-200 text-gray-600 font-black text-sm active:scale-95">ล้าง</button>}
+                                                    <button onClick={() => { if (!isCell && cur.length) setGradeAll(dutyPick.g, dutyPick.type, cur); setDutyPick(null); }} className="flex-1 py-3 rounded-xl bg-indigo-600 text-white font-black text-sm active:scale-95 shadow-lg shadow-indigo-200">{isCell ? 'เสร็จ' : (cur.length ? `ตั้งให้ทุกห้องในชั้น (${cur.length} คน)` : 'ปิด')}</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+                        );
+                    })()}
                     {inspectModal.isOpen && inspectModal.room && (
                         <div className="fixed inset-0 z-[9995] bg-gray-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
                             <div className="bg-white rounded-[1.5rem] w-full max-w-md p-5 relative shadow-2xl animate-in zoom-in-95 flex flex-col max-h-[95vh]">
@@ -7355,6 +7657,31 @@ ${roomSummaryLines}`;
                                 </div>
 
                                 <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 pb-4">
+                                    {(() => {
+                                        const dutyOwners = getDutyOwners(String(inspectModal.date || '').slice(0, 10), inspectModal.type, inspectModal.room.id);
+                                        if (!dutyOwners.length || dutyOwners.some(o => isMyName(o.name))) return null;
+                                        const ownerNames = dutyOwners.map(o => o.name);
+                                        const others = (Array.isArray(inspectors) ? inspectors : []).filter(u => !ownerNames.includes(u.name) && !isMyName(u.name));
+                                        return (
+                                            <div className="mb-4 rounded-2xl border-2 border-amber-200 bg-amber-50 p-3">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="flex -space-x-3 shrink-0">{dutyOwners.slice(0, 3).map(o => <img key={o.id} src={getInspectorAvatar(o.name)} alt="" className="w-11 h-11 rounded-full object-cover border-2 border-white shadow bg-white" />)}</div>
+                                                    <div className="min-w-0">
+                                                        <p className="text-[11px] font-bold text-amber-700 leading-tight">{inspectModal.type === 'room' ? 'ห้องนี้' : 'เขตนี้'}เป็นเวรของ</p>
+                                                        <p className="text-sm font-black text-gray-800 leading-tight">{ownerNames.join(', ')}</p>
+                                                    </div>
+                                                    <span className="ml-auto text-[10px] font-black text-amber-800 bg-amber-200/70 px-2 py-1 rounded-full shrink-0">ตรวจแทน</span>
+                                                </div>
+                                                <label className="block mt-2.5 mb-1 text-[10px] font-bold text-gray-500 uppercase">ตรวจแทนใคร</label>
+                                                <select value={subFor} onChange={e => setSubFor(e.target.value)} className="w-full bg-white border border-amber-200 rounded-xl px-3 py-2.5 text-sm font-bold text-gray-800 outline-none focus:border-amber-500">
+                                                    {ownerNames.length > 1 && <option value={ownerNames.join(', ')}>ทุกคนที่มีเวร ({ownerNames.join(', ')})</option>}
+                                                    {ownerNames.map(n => <option key={n} value={n}>{n} (เจ้าของเวร)</option>)}
+                                                    {others.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
+                                                    <option value="">ไม่ได้ตรวจแทนใคร (ช่วยตรวจเพิ่ม)</option>
+                                                </select>
+                                            </div>
+                                        );
+                                    })()}
                                     <div onClick={handleToggleSkip} className={`flex items-center justify-between p-3.5 rounded-xl border-2 transition-all cursor-pointer select-none mb-4 ${isSkipped ? 'border-gray-400 bg-gray-100 shadow-sm' : 'border-gray-100 bg-white hover:bg-gray-50'}`}>
                                         <div className="flex flex-col">
                                             <span className={`font-bold text-sm ${isSkipped ? 'text-gray-700' : 'text-gray-500'}`}>ข้ามการตรวจ</span>
