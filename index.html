@@ -7443,7 +7443,14 @@ ${roomSummaryLines}`;
                         const insp = Array.isArray(inspectors) ? inspectors : [];
                         const duties = getDutyForDate(vd);
                         const mine = duties.filter(d => d.ownerIds.some(id => { const u = insp.find(x => String(x.id) === id); return u && isMyName(u.name); }));
-                        const groupBy = (list) => { const m = {}; list.forEach(d => d.ownerIds.forEach(id => { (m[id] = m[id] || []).push(d); })); return Object.keys(m).map(id => ({ u: insp.find(x => String(x.id) === id), items: m[id] })).filter(g => g.u); };
+                        // รวมเวรที่มีทีมผู้ตรวจชุดเดียวกันไว้ในการ์ดเดียว (ตรวจด้วยกัน ไม่แยกซ้ำทีละคน)
+                        const groupBy = (list) => { const m = {}; list.forEach(d => { const ids = [...d.ownerIds].sort(); const k = ids.join('|'); (m[k] = m[k] || { ids, items: [] }).items.push(d); }); return Object.keys(m).map(k => ({ key: k, users: m[k].ids.map(id => insp.find(x => String(x.id) === id)).filter(Boolean), items: m[k].items })).filter(g => g.users.length); };
+                        const avatarStack = (users, size) => (
+                            <div className="flex -space-x-3 shrink-0">
+                                {users.slice(0, 4).map(u => <img key={u.id} src={getInspectorAvatar(u.name)} alt="" className={size + ' rounded-full object-cover border-2 border-white shadow bg-white'} />)}
+                                {users.length > 4 && <span className={size + ' rounded-full bg-gray-200 text-gray-600 text-xs font-black flex items-center justify-center border-2 border-white'}>+{users.length - 4}</span>}
+                            </div>
+                        );
                         const owners = groupBy(duties);
                         const missed = isToday ? getMissedDuty() : null;
                         const missedGroups = missed ? groupBy(missed.items) : [];
@@ -7473,12 +7480,12 @@ ${roomSummaryLines}`;
                                                 <p className="text-sm font-black text-red-700 flex items-center gap-1.5"><i className="ph ph-warning-circle text-lg"></i> {missedLabel}ยังไม่ได้ตรวจ</p>
                                                 <div className="mt-3 space-y-3">
                                                     {missedGroups.map(g => (
-                                                        <div key={g.u.id} className="flex items-start gap-3">
-                                                            <img src={getInspectorAvatar(g.u.name)} alt="" className="w-11 h-11 rounded-full object-cover border-2 border-white shadow shrink-0 bg-white" />
-                                                            <div className="min-w-0">
-                                                                <p className="text-sm font-black text-gray-800 leading-tight">{g.u.name}</p>
-                                                                <div className="flex flex-wrap gap-1.5 mt-1.5">{g.items.map(d => chip(d, false))}</div>
+                                                        <div key={g.key} className="bg-white/70 rounded-xl p-2.5">
+                                                            <div className="flex items-center gap-3">
+                                                                {avatarStack(g.users, 'w-11 h-11')}
+                                                                <p className="text-sm font-black text-gray-800 leading-tight min-w-0 flex-1">{g.users.map(u => u.name).join(', ')}</p>
                                                             </div>
+                                                            <div className="flex flex-wrap gap-1.5 mt-2.5">{g.items.map(d => chip(d, false))}</div>
                                                         </div>
                                                     ))}
                                                 </div>
@@ -7501,15 +7508,13 @@ ${roomSummaryLines}`;
                                                         {owners.map(g => {
                                                             const doneN = g.items.filter(d => isDutyDone(vd, d)).length;
                                                             return (
-                                                                <div key={g.u.id} className="flex items-start gap-3 bg-gray-50 border border-gray-100 rounded-2xl p-3">
-                                                                    <img src={getInspectorAvatar(g.u.name)} alt="" className="w-10 h-10 rounded-full object-cover border-2 border-white shadow shrink-0 bg-white" />
-                                                                    <div className="min-w-0 flex-1">
-                                                                        <div className="flex items-center justify-between gap-2">
-                                                                            <p className="text-sm font-black text-gray-800 leading-tight truncate">{g.u.name}</p>
-                                                                            <span className={'text-[10px] font-black px-2 py-0.5 rounded-full shrink-0 ' + (doneN === g.items.length ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600')}>{doneN}/{g.items.length}</span>
-                                                                        </div>
-                                                                        <div className="flex flex-wrap gap-1.5 mt-1.5">{g.items.map(d => chip(d, isDutyDone(vd, d)))}</div>
+                                                                <div key={g.key} className="bg-gray-50 border border-gray-100 rounded-2xl p-3">
+                                                                    <div className="flex items-center gap-3">
+                                                                        {avatarStack(g.users, 'w-10 h-10')}
+                                                                        <p className="text-sm font-black text-gray-800 leading-tight min-w-0 flex-1">{g.users.map(u => u.name).join(', ')}</p>
+                                                                        <span className={'text-[10px] font-black px-2 py-0.5 rounded-full shrink-0 ' + (doneN === g.items.length ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600')}>{doneN}/{g.items.length}</span>
                                                                     </div>
+                                                                    <div className="flex flex-wrap gap-1.5 mt-2.5">{g.items.map(d => chip(d, isDutyDone(vd, d)))}</div>
                                                                 </div>
                                                             );
                                                         })}
