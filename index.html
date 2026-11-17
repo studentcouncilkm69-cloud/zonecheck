@@ -7454,11 +7454,30 @@ ${roomSummaryLines}`;
                         const owners = groupBy(duties);
                         const missed = isToday ? getMissedDuty() : null;
                         const missedGroups = missed ? groupBy(missed.items) : [];
-                        const chip = (d, done) => (
-                            <span key={d.key} className={'inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold border ' + (done ? 'bg-green-50 text-green-700 border-green-200' : d.type === 'room' ? 'bg-blue-50 text-blue-700 border-blue-100' : 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-100')}>
-                                <i className={'ph ' + (done ? 'ph-check-circle' : d.type === 'room' ? 'ph-buildings' : 'ph-map-pin') + ' text-sm'}></i>{d.type === 'room' ? 'ห้อง' : 'เขต'} {d.room.name}
+                        const gradeOfRoom = (room) => (String((room && room.name) || '').match(/^ม\.(\d)/) || [])[1] || '';
+                        const chipEl = (c) => (
+                            <span key={c.key} className={'inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold border ' + (c.done ? 'bg-green-50 text-green-700 border-green-200' : c.type === 'room' ? 'bg-blue-50 text-blue-700 border-blue-100' : c.type === 'zone' ? 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-100' : 'bg-indigo-50 text-indigo-700 border-indigo-100')}>
+                                <i className={'ph ' + (c.done ? 'ph-check-circle' : c.type === 'room' ? 'ph-buildings' : c.type === 'zone' ? 'ph-map-pin' : 'ph-stack') + ' text-sm'}></i>{c.text}{c.sub ? <span className="opacity-70 font-black"> {c.sub}</span> : null}
                             </span>
                         );
+                        // ถ้าทีมนี้ได้ครบทุกห้อง/ทุกเขตของระดับชั้นนั้น ให้โชว์เป็น "ม.3 ทั้งชั้น" แทนการไล่ทีละห้อง
+                        const renderChips = (items, useDone) => {
+                            const isDone = (d) => useDone && isDutyDone(vd, d);
+                            const totals = {}; dutyItems.forEach(it => { const g = gradeOfRoom(it.room); if (g) { const k = it.type + g; totals[k] = (totals[k] || 0) + 1; } });
+                            const buckets = {}; const order = [];
+                            items.forEach(d => { const g = gradeOfRoom(d.room); if (!g) { order.push({ single: d }); return; } const k = d.type + g; if (!buckets[k]) { buckets[k] = []; order.push({ k, g }); } buckets[k].push(d); });
+                            const full = (k) => buckets[k] && buckets[k].length === totals[k];
+                            const mk = (key, type, text, list) => { const dn = list.filter(isDone).length; return { key, type, text, done: useDone && dn === list.length, sub: (useDone && dn > 0 && dn < list.length) ? `${dn}/${list.length}` : '' }; };
+                            const out = []; const emitted = {};
+                            order.forEach(o => {
+                                if (o.single) { const d = o.single; out.push(mk(d.key, d.type, `${d.type === 'room' ? 'ห้อง' : 'เขต'} ${d.room.name}`, [d])); return; }
+                                const { k, g } = o;
+                                if (full('room' + g) && full('zone' + g)) { if (!emitted['m' + g]) { emitted['m' + g] = 1; out.push(mk('all' + g, 'all', `ม.${g} ทั้งชั้น (ห้อง + เขต)`, [...buckets['room' + g], ...buckets['zone' + g]])); } return; }
+                                if (full(k)) { out.push(mk('full' + k, buckets[k][0].type, `${buckets[k][0].type === 'room' ? 'ห้อง' : 'เขต'} ม.${g} ทั้งชั้น`, buckets[k])); return; }
+                                buckets[k].forEach(d => out.push(mk(d.key, d.type, `${d.type === 'room' ? 'ห้อง' : 'เขต'} ${d.room.name}`, [d])));
+                            });
+                            return out.map(chipEl);
+                        };
                         const missedLabel = missed ? (missed.date === dutyShift(today, -1) ? 'เมื่อวาน' : dutyLabel(missed.date)) : '';
                         return (
                             <div className="fixed inset-0 z-[9996] bg-gray-900/80 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4 animate-in fade-in">
@@ -7485,7 +7504,7 @@ ${roomSummaryLines}`;
                                                                 {avatarStack(g.users, 'w-11 h-11')}
                                                                 <p className="text-sm font-black text-gray-800 leading-tight min-w-0 flex-1">{g.users.map(u => u.name).join(', ')}</p>
                                                             </div>
-                                                            <div className="flex flex-wrap gap-1.5 mt-2.5">{g.items.map(d => chip(d, false))}</div>
+                                                            <div className="flex flex-wrap gap-1.5 mt-2.5">{renderChips(g.items, false)}</div>
                                                         </div>
                                                     ))}
                                                 </div>
@@ -7500,7 +7519,7 @@ ${roomSummaryLines}`;
                                             <>
                                                 <div>
                                                     <p className="text-[11px] font-black text-gray-500 uppercase mb-2">เวรของคุณ</p>
-                                                    {mine.length > 0 ? <div className="flex flex-wrap gap-1.5">{mine.map(d => chip(d, isDutyDone(vd, d)))}</div> : <p className="text-sm font-bold text-gray-400">วันนี้คุณไม่มีเวร</p>}
+                                                    {mine.length > 0 ? <div className="flex flex-wrap gap-1.5">{renderChips(mine, true)}</div> : <p className="text-sm font-bold text-gray-400">วันนี้คุณไม่มีเวร</p>}
                                                 </div>
                                                 <div>
                                                     <p className="text-[11px] font-black text-gray-500 uppercase mb-2">ตารางเวรทุกคน</p>
@@ -7514,7 +7533,7 @@ ${roomSummaryLines}`;
                                                                         <p className="text-sm font-black text-gray-800 leading-tight min-w-0 flex-1">{g.users.map(u => u.name).join(', ')}</p>
                                                                         <span className={'text-[10px] font-black px-2 py-0.5 rounded-full shrink-0 ' + (doneN === g.items.length ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600')}>{doneN}/{g.items.length}</span>
                                                                     </div>
-                                                                    <div className="flex flex-wrap gap-1.5 mt-2.5">{g.items.map(d => chip(d, isDutyDone(vd, d)))}</div>
+                                                                    <div className="flex flex-wrap gap-1.5 mt-2.5">{renderChips(g.items, true)}</div>
                                                                 </div>
                                                             );
                                                         })}
