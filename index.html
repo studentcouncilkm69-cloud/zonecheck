@@ -2453,6 +2453,18 @@ ${roomSummaryLines}`;
                 catch (e) { return { week: {}, overrides: {} }; }
             }, [settings?.duty_roster_json]);
             const dutyHasData = Object.keys(dutyData.week).length > 0 || Object.keys(dutyData.overrides).length > 0;
+            // วันหยุด: เสาร์-อาทิตย์ปิดอัตโนมัติ (เว้นแต่แอดมินตั้งเวรพิเศษเฉพาะวันนั้น) + วันหยุดที่แอดมินเพิ่มเอง (settings.holidays_json)
+            const holidayList = useMemo(() => {
+                try { const j = JSON.parse(settings?.holidays_json || ''); return Array.isArray(j) ? j.map(String) : []; }
+                catch (e) { return []; }
+            }, [settings?.holidays_json]);
+            const getOffReason = (dateStr) => {
+                if (holidayList.includes(dateStr)) return 'holiday';
+                const dow = dutyDow(dateStr);
+                const hasSpecial = dutyData.overrides && dutyData.overrides[dateStr] && Object.keys(dutyData.overrides[dateStr]).length > 0;
+                return ((dow === 0 || dow === 6) && !hasSpecial) ? 'weekend' : '';
+            };
+            const isOffDay = (dateStr) => !!getOffReason(dateStr);
             const dutyItems = useMemo(() => {
                 const out = [];
                 (Array.isArray(rooms) ? rooms : []).forEach(r => {
@@ -2477,7 +2489,7 @@ ${roomSummaryLines}`;
                 return n === String(currentUser?.name || '').trim() || (coInspectors || []).some(c => String(c).trim() === n);
             };
             const getDefaultSubFor = (dateStr, type, roomId) => { const os = getDutyOwners(dateStr, type, roomId); return (!os.length || os.some(o => isMyName(o.name))) ? '' : os.map(o => o.name).join(', '); };
-            const getDutyForDate = (dateStr) => dutyItems.map(it => ({ ...it, ownerIds: getDutyOwnerIds(dateStr, it.type, it.roomId) })).filter(x => x.ownerIds.length);
+            const getDutyForDate = (dateStr) => isOffDay(dateStr) ? [] : dutyItems.map(it => ({ ...it, ownerIds: getDutyOwnerIds(dateStr, it.type, it.roomId) })).filter(x => x.ownerIds.length);
             const isDutyDone = (dateStr, it) => (Array.isArray(inspections) ? inspections : []).some(i => i && i.roomId === it.roomId && i.type === it.type && String(i.date || '').slice(0, 10) === dateStr);
             // วันทำงานล่าสุดก่อนวันนี้ (ย้อนไม่เกิน 7 วัน, ข้ามวันที่ไม่มีใครตรวจเลย เช่น เสาร์-อาทิตย์/วันหยุด) แล้วหาเวรที่ไม่มีผลตรวจ
             const getMissedDuty = () => {
@@ -2485,6 +2497,7 @@ ${roomSummaryLines}`;
                 const all = Array.isArray(inspections) ? inspections : [];
                 for (let back = 1; back <= 7; back++) {
                     const d = dutyShift(today, -back);
+                    if (isOffDay(d)) continue;
                     const dayInsps = all.filter(i => i && String(i.date || '').slice(0, 10) === d);
                     if (!dayInsps.length) continue;
                     const missed = getDutyForDate(d).filter(x => !dayInsps.some(i => i.roomId === x.roomId && i.type === x.type));
@@ -2496,6 +2509,7 @@ ${roomSummaryLines}`;
             useEffect(() => {
                 if ((appMode !== 'inspector' && appMode !== 'admin') || !currentUser) { dutyShownRef.current = ''; return; }
                 if (!dutyHasData) return;
+                if (isOffDay(getThaiDateStr())) return;
                 const k = appMode + ':' + String(currentUser.name || '');
                 if (dutyShownRef.current === k) return;
                 dutyShownRef.current = k;
@@ -2504,7 +2518,7 @@ ${roomSummaryLines}`;
             }, [appMode, currentUser?.name, dutyHasData]);
             const openDutyEditor = () => {
                 const today = getThaiDateStr(); const dow = dutyDow(today);
-                setDutyEdit({ tab: (dow >= 1 && dow <= 5) ? String(dow) : '1', date: today, draft: JSON.parse(JSON.stringify(dutyData)), saving: false });
+                setDutyEdit({ tab: (dow >= 1 && dow <= 5) ? String(dow) : '1', date: today, draft: { ...JSON.parse(JSON.stringify(dutyData)), holidays: [...holidayList] }, hFrom: '', hTo: '', saving: false });
             };
             const saveDutyDraft = async () => {
                 if (!dutyEdit) return;
@@ -2513,9 +2527,14 @@ ${roomSummaryLines}`;
                 const empty = !Object.keys(clean.week).length && !Object.keys(clean.overrides).length;
                 const json = JSON.stringify(clean);
                 setDutyEdit(p => ({ ...p, saving: true }));
-                setSettings(prev => ({ ...prev, duty_roster_json: empty ? '' : json }));
+                const hol = Array.from(new Set((dutyEdit.draft.holidays || []).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)))).sort();
+                const holJson = JSON.stringify(hol);
+                setSettings(prev => ({ ...prev, duty_roster_json: empty ? '' : json, holidays_json: hol.length ? holJson : '' }));
                 try {
-                    await syncToGASAsync('updateMultipleSettings', [{ key: 'duty_roster_json', val: empty ? EMPTY_SETTING_SENTINEL : json }]);
+                    await syncToGASAsync('updateMultipleSettings', [
+                        { key: 'duty_roster_json', val: empty ? EMPTY_SETTING_SENTINEL : json },
+                        { key: 'holidays_json', val: hol.length ? holJson : EMPTY_SETTING_SENTINEL }
+                    ]);
                     showToast('บันทึกตารางเวรแล้ว', 'success');
                     setDutyEdit(null);
                 } catch (e) {
@@ -7440,6 +7459,7 @@ ${roomSummaryLines}`;
                         const today = getThaiDateStr();
                         const vd = dutyViewDate || today;
                         const isToday = vd === today;
+                        const offR = getOffReason(vd);
                         const insp = Array.isArray(inspectors) ? inspectors : [];
                         const duties = getDutyForDate(vd);
                         const mine = duties.filter(d => d.ownerIds.some(id => { const u = insp.find(x => String(x.id) === id); return u && isMyName(u.name); }));
@@ -7494,6 +7514,9 @@ ${roomSummaryLines}`;
                                         </div>
                                     </div>
                                     <div className="flex-1 overflow-y-auto custom-scrollbar px-5 py-4 space-y-4">
+                                        {offR && (
+                                            <div className="rounded-2xl border border-sky-200 bg-sky-50 px-3.5 py-3 text-sm font-bold text-sky-700 flex items-center gap-2"><i className="ph ph-calendar-x text-lg shrink-0"></i> {offR === 'weekend' ? 'วันหยุดสุดสัปดาห์ ไม่มีการตรวจ' : 'วันหยุดของโรงเรียน ไม่มีการตรวจ'}</div>
+                                        )}
                                         {isToday && missed && missed.items.length > 0 && (
                                             <div className="rounded-2xl border-2 border-red-200 bg-red-50 p-3.5">
                                                 <p className="text-sm font-black text-red-700 flex items-center gap-1.5"><i className="ph ph-warning-circle text-lg"></i> {missedLabel}ยังไม่ได้ตรวจ</p>
@@ -7514,7 +7537,7 @@ ${roomSummaryLines}`;
                                             <div className="rounded-2xl border border-green-200 bg-green-50 px-3.5 py-3 text-sm font-bold text-green-700 flex items-center gap-2"><i className="ph ph-check-circle text-lg"></i> {missedLabel}ตรวจครบทุกเวร</div>
                                         )}
                                         {duties.length === 0 ? (
-                                            <div className="text-center text-sm font-bold text-gray-400 py-8"><i className="ph ph-calendar-blank text-4xl block mb-2"></i>ยังไม่ได้ตั้งเวรสำหรับวันนี้</div>
+                                            (offR ? null : <div className="text-center text-sm font-bold text-gray-400 py-8"><i className="ph ph-calendar-blank text-4xl block mb-2"></i>ยังไม่ได้ตั้งเวรสำหรับวันนี้</div>)
                                         ) : (
                                             <>
                                                 <div>
@@ -7571,6 +7594,17 @@ ${roomSummaryLines}`;
                         const gradeBtn = (g, type) => (
                             <button onClick={() => setDutyPick({ kind: 'grade', g, type, sel: [], title: `ตั้ง${type === 'room' ? 'ห้อง' : 'เขต'}ทั้งชั้น ม.${g}` })} className="w-full text-left bg-white border border-gray-200 rounded-xl px-2 py-2 text-xs font-bold text-indigo-700 truncate">ตั้ง{type === 'room' ? 'ห้อง' : 'เขต'}ทั้งชั้น…</button>
                         );
+                        const hol = (draft.holidays || []).slice().sort();
+                        const addHolidays = () => {
+                            const from = dutyEdit.hFrom, to = dutyEdit.hTo || dutyEdit.hFrom;
+                            const okD = (x) => /^\d{4}-\d{2}-\d{2}$/.test(x || '');
+                            if (!okD(from) || !okD(to) || to < from) { showToast('เลือกวันที่ให้ถูกต้อง (วันสิ้นสุดต้องไม่ก่อนวันเริ่ม)', 'warning'); return; }
+                            const days = []; let cur = from; let guard = 0;
+                            while (cur <= to && guard < 120) { days.push(cur); cur = dutyShift(cur, 1); guard++; }
+                            mut((dr) => { dr.holidays = Array.from(new Set([...(dr.holidays || []), ...days])).sort(); });
+                            setDutyEdit(p => ({ ...p, hFrom: '', hTo: '' }));
+                        };
+                        const removeHoliday = (d) => mut((dr) => { dr.holidays = (dr.holidays || []).filter(x => x !== d); });
                         const overrideDates = Object.keys(draft.overrides || {}).filter(d => Object.keys(draft.overrides[d] || {}).length).sort();
                         const tabBtn = (id, label) => <button key={id} onClick={() => setDutyEdit(p => ({ ...p, tab: id }))} className={'px-3 py-2 rounded-xl text-xs font-black whitespace-nowrap border ' + (tab === id ? 'bg-indigo-600 text-white border-indigo-600 shadow' : 'bg-white text-gray-600 border-gray-200')}>{label}</button>;
                         return (
@@ -7584,8 +7618,9 @@ ${roomSummaryLines}`;
                                         <div className="flex gap-1.5 mt-3 overflow-x-auto pb-1">
                                             {DUTY_DAYS.map(([id, label]) => tabBtn(id, label))}
                                             {tabBtn('date', 'เฉพาะวัน')}
+                            {tabBtn('off', 'วันหยุด')}
                                         </div>
-                                        <p className="text-[11px] text-gray-500 font-medium mt-2 leading-relaxed">{tab === 'date' ? 'เวรพิเศษเฉพาะวันที่เลือก (เช่น ฝากตรวจแทน) จะทับตารางปกติของวันนั้น' : 'กำหนดว่าห้องและเขตพื้นที่ของแต่ละห้อง ใครเป็นคนตรวจ (เลือกได้หลายคนต่อหนึ่งเวร) แยกตามวัน'}</p>
+                                        <p className="text-[11px] text-gray-500 font-medium mt-2 leading-relaxed">{tab === 'off' ? 'เพิ่มวันหยุดที่ไม่มีการตรวจ เสาร์-อาทิตย์ปิดอัตโนมัติอยู่แล้ว' : tab === 'date' ? 'เวรพิเศษเฉพาะวันที่เลือก (เช่น ฝากตรวจแทน หรือเปิดตรวจวันเสาร์-อาทิตย์) จะทับตารางปกติของวันนั้น' : 'กำหนดว่าห้องและเขตพื้นที่ของแต่ละห้อง ใครเป็นคนตรวจ (เลือกได้หลายคนต่อหนึ่งเวร) แยกตามวัน'}</p>
                                         {tab === 'date' ? (
                                             <div className="mt-2 space-y-2">
                                                 <input type="date" value={date} onChange={e => setDutyEdit(p => ({ ...p, date: e.target.value || p.date }))} className="w-full p-2.5 rounded-xl border border-gray-200 text-sm font-bold" />
@@ -7594,12 +7629,31 @@ ${roomSummaryLines}`;
                                                     {Object.keys(bucket).length > 0 && <button onClick={() => showConfirm('ล้างเวรพิเศษของวันที่เลือกทั้งหมด ใช่หรือไม่?', () => mut((dr, prev) => { delete dr.overrides[prev.date]; }))} className="px-2.5 py-1 rounded-lg text-[11px] font-bold border border-red-200 text-red-600 bg-red-50">ล้างเวรพิเศษวันนี้</button>}
                                                 </div>
                                             </div>
+                                        ) : tab === 'off' ? (
+                                            <div className="mt-2 space-y-2">
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <div><label className="block mb-1 text-[10px] font-bold text-gray-500">จากวันที่</label><input type="date" value={dutyEdit.hFrom || ''} onChange={e => setDutyEdit(p => ({ ...p, hFrom: e.target.value }))} className="w-full p-2.5 rounded-xl border border-gray-200 text-sm font-bold" /></div>
+                                                    <div><label className="block mb-1 text-[10px] font-bold text-gray-500">ถึงวันที่ (วันเดียวไม่ต้องใส่)</label><input type="date" value={dutyEdit.hTo || ''} onChange={e => setDutyEdit(p => ({ ...p, hTo: e.target.value }))} className="w-full p-2.5 rounded-xl border border-gray-200 text-sm font-bold" /></div>
+                                                </div>
+                                                <button onClick={addHolidays} className="w-full py-2.5 rounded-xl bg-indigo-600 text-white text-xs font-black flex items-center justify-center gap-1.5 active:scale-95"><i className="ph ph-plus text-sm"></i> เพิ่มวันหยุด</button>
+                                            </div>
                                         ) : (
                                             <button onClick={() => showConfirm('คัดลอกเวรของวันนี้ไปทุกวัน จันทร์–ศุกร์ (จะทับที่ตั้งไว้เดิม) ใช่หรือไม่?', () => mut((dr, prev) => { const src = dr.week[prev.tab] || {}; DUTY_DAYS.forEach(([d]) => { if (d !== prev.tab) dr.week[d] = { ...src }; }); }))} className="mt-2 px-3 py-2 rounded-xl border border-indigo-200 text-indigo-700 bg-indigo-50 text-[11px] font-black flex items-center gap-1.5"><i className="ph ph-copy text-sm"></i> คัดลอกเวรวันนี้ไปทุกวัน</button>
                                         )}
                                     </div>
                                     <div className="flex-1 overflow-y-auto custom-scrollbar px-5 py-3">
-                                        {insp.length === 0 || dutyItems.length === 0 ? <p className="text-center text-sm font-bold text-gray-400 py-8">ต้องมีรายชื่อผู้ตรวจและห้องเรียนก่อน</p> : grades.map(g => (
+                                        {tab === 'off' ? (
+                                            <div>
+                                                <p className="text-xs text-gray-500 font-medium leading-relaxed mb-3">วันที่เพิ่มไว้จะไม่มีการตรวจ: ไม่ส่งรายงานเข้า LINE, นักเรียนส่งรูปไม่ได้ และไม่นับว่าลืมตรวจ ถ้าต้องการตรวจวันเสาร์-อาทิตย์เป็นพิเศษ ให้ตั้งเวรในแท็บ "เฉพาะวัน" ของวันนั้น ระบบจะเปิดวันนั้นให้เอง</p>
+                                                {hol.length === 0 ? <p className="text-center text-sm font-bold text-gray-400 py-8">ยังไม่มีวันหยุดที่เพิ่มไว้</p> : (
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {hol.map(d => (
+                                                            <span key={d} className="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 rounded-xl bg-sky-50 border border-sky-100 text-sky-800 text-xs font-bold">{dutyLabel(d)}<button onClick={() => removeHoliday(d)} className="w-5 h-5 rounded-full bg-sky-200 text-sky-800 flex items-center justify-center"><i className="ph ph-x text-[10px]"></i></button></span>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ) : insp.length === 0 || dutyItems.length === 0 ? <p className="text-center text-sm font-bold text-gray-400 py-8">ต้องมีรายชื่อผู้ตรวจและห้องเรียนก่อน</p> : grades.map(g => (
                                             <div key={g} className="mb-5">
                                                 <div className="bg-gray-100 rounded-xl px-3 py-2 mb-2">
                                                     <p className="text-xs font-black text-gray-700 mb-1.5">ชั้น ม.{g}</p>
@@ -9466,6 +9520,7 @@ ${roomSummaryLines}`;
             const [checking, setChecking] = useState(false);
             const [preview, setPreview] = useState('');
             const [adding, setAdding] = useState(false);
+            const [serverOff, setServerOff] = useState(null); // null = ยังไม่รู้จากเซิร์ฟเวอร์, '' = เปิด, 'weekend'/'holiday' = วันหยุด
             const [sentPhotos, setSentPhotos] = useState([]); // id ไฟล์รูปที่ห้องนี้ส่งแล้ววันนี้ (จาก Drive)
             const [checkedRoom, setCheckedRoom] = useState('');
             const [meta, setMeta] = useState({ title: 'ZoneCheck', version: 'V3.0' });
@@ -9487,6 +9542,9 @@ ${roomSummaryLines}`;
             const closed = secLeft <= 0;
             const minLeft = Math.ceil(secLeft / 60);
             const soon = !closed && minLeft <= 15;
+            const todayDow = new Date(`${today}T00:00:00Z`).getUTCDay();
+            const offReason = STUDENT_QS.get('off') === '1' ? 'holiday' : (serverOff !== null ? serverOff : ((todayDow === 0 || todayDow === 6) ? 'weekend' : ''));
+            const dayOff = !!offReason; // วันหยุด: ไม่มีการตรวจ ไม่ต้องส่งรูป
 
             useEffect(() => {
                 const t = setInterval(() => setNowMs(Date.now() + offsetRef.current), 1000);
@@ -9502,6 +9560,7 @@ ${roomSummaryLines}`;
                     if (j.now) { offsetRef.current = Number(j.now) - Date.now(); setNowMs(Date.now() + offsetRef.current); }
                     setCounts(c => ({ ...(c || {}), ...(j.counts || {}) }));
                     if (roomArg) setSentPhotos(Array.isArray(j.photos) ? j.photos : []);
+                    if (j.offDay !== undefined) setServerOff(j.offDay ? (j.offReason || 'holiday') : '');
                     if (roomArg) setCheckedRoom(roomArg);
                     setMeta(m => ({ title: (j.title || m.title), version: ('version' in j) ? String(j.version || '') : m.version }));
                 } catch (e) { /* เช็กไม่ได้: ให้ฝั่งเซิร์ฟเวอร์คุมจำนวนและเวลาให้แทน */ }
@@ -9607,14 +9666,14 @@ ${roomSummaryLines}`;
                             <p className="text-[12px] font-bold opacity-90">{bkkDateLabel(nowMs)}</p>
                             <div className="flex items-center justify-between gap-2 mt-1.5 mb-3">
                                 <div className="flex items-center gap-2 text-3xl font-black tabular-nums leading-none"><i className="ph ph-clock text-2xl opacity-90"></i>{pad2(clk.h)}:{pad2(clk.m)}<span className="text-xl opacity-80">:{pad2(clk.s)}</span><span className="text-sm font-bold opacity-90 self-end pb-0.5">น.</span></div>
-                                <span className={'px-3 py-1.5 rounded-full text-[11px] font-black shrink-0 ' + (closed ? 'bg-black/30 text-white' : soon ? 'bg-yellow-300 text-red-800' : 'bg-white/20 text-white')}>
-                                    {closed ? 'ปิดรับรูปแล้ว' : soon ? `เหลืออีก ${minLeft} นาที` : `รับรูปถึง ${cutoffText} น.`}
+                                <span className={'px-3 py-1.5 rounded-full text-[11px] font-black shrink-0 ' + ((closed || dayOff) ? 'bg-black/30 text-white' : soon ? 'bg-yellow-300 text-red-800' : 'bg-white/20 text-white')}>
+                                    {dayOff ? 'วันนี้ไม่มีการตรวจ' : closed ? 'ปิดรับรูปแล้ว' : soon ? `เหลืออีก ${minLeft} นาที` : `รับรูปถึง ${cutoffText} น.`}
                                 </span>
                             </div>
                             <h2 className="text-lg font-black">ส่งรูปรายงานเขตพื้นที่</h2>
                             <p className="text-xs font-medium opacity-90 mt-1.5 leading-relaxed">ระบบรับรูปถึงเวลา {cutoffText} น. ของทุกวัน ส่งได้ไม่เกิน {MAX_PHOTOS} รูปต่อห้อง</p>
                         </div>
-                        {(!done && room && !known && checking) ? (
+                        {(!done && !dayOff && room && !known && checking) ? (
                             <div className={card + ' text-center py-12'}><i className="ph ph-spinner animate-spin text-3xl text-[#C8102E]"></i><p className="text-sm font-bold text-gray-400 mt-3">กำลังตรวจสอบรูปของห้อง {room}...</p></div>
                         ) : (done || alreadySent) ? (
                             <div className={card + ' text-center'} style={{ animation: 'zcUp .45s ease-out' }}>
@@ -9641,6 +9700,13 @@ ${roomSummaryLines}`;
                                 ) : (
                                     <p className="mt-6 text-sm font-bold text-gray-500 bg-gray-50 border border-gray-100 rounded-2xl px-4 py-3">{remaining === 0 ? `ห้อง ${sv.room} ส่งรูปครบ ${MAX_PHOTOS} รูปแล้ววันนี้` : `ปิดรับรูปแล้ว (รับถึง ${cutoffText} น.)`}</p>
                                 )}
+                            </div>
+                        ) : dayOff ? (
+                            <div className={card + ' text-center'} style={{ animation: 'zcUp .45s ease-out' }}>
+                                <div className="w-20 h-20 mx-auto rounded-full bg-sky-50 text-sky-600 flex items-center justify-center mb-4"><i className="ph ph-calendar-x text-4xl"></i></div>
+                                <p className="font-black text-xl text-gray-800">วันนี้ไม่มีการตรวจ</p>
+                                <p className="text-sm text-gray-500 mt-2 leading-relaxed">{offReason === 'weekend' ? 'วันเสาร์-อาทิตย์ไม่มีการตรวจเขตพื้นที่ จึงไม่ต้องส่งรูป' : 'วันนี้เป็นวันหยุดของโรงเรียน ไม่มีการตรวจเขตพื้นที่ จึงไม่ต้องส่งรูป'}</p>
+                                <div className="mt-4 bg-sky-50 border border-sky-100 rounded-2xl px-4 py-3 text-xs font-bold text-sky-700 leading-relaxed">เปิดรับรูปอีกครั้งในวันทำการถัดไป หากมีข้อสงสัยกรุณาติดต่อสภานักเรียน</div>
                             </div>
                         ) : closed ? (
                             <div className={card + ' text-center'} style={{ animation: 'zcUp .45s ease-out' }}>
@@ -9691,7 +9757,7 @@ ${roomSummaryLines}`;
                                 {err && !photos.length && <p className="text-sm text-red-600 font-bold">{err}</p>}
                             </div>
                         )}
-                        <p className="text-center text-[10px] font-bold text-gray-300 pt-2">ZoneCheck build 2026-11-18</p>
+                        <p className="text-center text-[10px] font-bold text-gray-300 pt-2">ZoneCheck build 2026-11-18b</p>
                     </div>
                     {!done && !closed && photos.length > 0 && (
                         <div className="fixed bottom-0 inset-x-0 z-20 pointer-events-none px-4 pt-12 bg-gradient-to-t from-gray-50 via-gray-50/80 to-transparent" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
