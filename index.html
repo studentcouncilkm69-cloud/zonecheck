@@ -6283,7 +6283,7 @@ ${roomSummaryLines}`;
                                     <div className="bg-white text-indigo-700 px-3 py-1.5 rounded-xl font-bold text-xs shrink-0 shadow-sm">ดูเวร</div>
                                 </button>
 
-                                <StudentPhotoReport bar showToast={showToast} triggerSafeLocalDownload={triggerSafeLocalDownload} settings={settings} />
+                                <StudentPhotoReport bar showToast={showToast} triggerSafeLocalDownload={triggerSafeLocalDownload} settings={settings} rooms={rooms} />
 
                                 <button onClick={() => setBatchModal({ isOpen: true, type: 'room', isSkipped: false, roomScores: { c1: 2, c2: 2, c3: 2, c4: 2, c5: 2, noDuty: false }, zoneScore: 10, gradeFilter: 'all', comment: '' })} className="w-full bg-gradient-to-r from-[#C8102E] via-rose-600 to-amber-600 text-white p-4 rounded-2xl shadow-lg shadow-red-500/20 flex items-center justify-between hover:opacity-95 active:scale-[0.99] transition-all">
                                     <div className="flex items-center gap-3 text-left">
@@ -6387,7 +6387,7 @@ ${roomSummaryLines}`;
                                        if (ok) showToast('คัดลอกลิงก์ส่งรูปแล้ว', 'success'); else window.prompt('คัดลอกลิงก์นี้ไปส่งให้นักเรียน', url);
                                    }} className="w-full bg-[#C8102E] hover:bg-red-700 text-white py-3 rounded-xl font-black text-sm flex items-center justify-center gap-2"><i className="ph ph-copy text-lg"></i> คัดลอกลิงก์ส่งรูป</button>
                                    <StudentFolderLinkRow settings={settings} showToast={showToast} />
-                                   <StudentPhotoReport showToast={showToast} triggerSafeLocalDownload={triggerSafeLocalDownload} settings={settings} />
+                                   <StudentPhotoReport showToast={showToast} triggerSafeLocalDownload={triggerSafeLocalDownload} settings={settings} rooms={rooms} />
                                 </div>
 
                                 <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 col-span-full">
@@ -9757,7 +9757,7 @@ ${roomSummaryLines}`;
                                 {err && !photos.length && <p className="text-sm text-red-600 font-bold">{err}</p>}
                             </div>
                         )}
-                        <p className="text-center text-[10px] font-bold text-gray-300 pt-2">ZoneCheck build 2026-11-18b</p>
+                        <p className="text-center text-[10px] font-bold text-gray-300 pt-2">ZoneCheck build 2026-11-18c</p>
                     </div>
                     {!done && !closed && photos.length > 0 && (
                         <div className="fixed bottom-0 inset-x-0 z-20 pointer-events-none px-4 pt-12 bg-gradient-to-t from-gray-50 via-gray-50/80 to-transparent" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
@@ -9792,7 +9792,7 @@ ${roomSummaryLines}`;
         };
 
         // ===== แอดมิน: ดูว่าห้องไหนส่งรูปแล้ว/ยังไม่ส่ง พร้อมส่งออก PDF / Excel =====
-        const StudentPhotoReport = ({ showToast, triggerSafeLocalDownload, settings, bar }) => {
+        const StudentPhotoReport = ({ showToast, triggerSafeLocalDownload, settings, bar, rooms }) => {
             const [open, setOpen] = useState(false);
             const [day, setDay] = useState(getThaiDateStr());
             const [loading, setLoading] = useState(false);
@@ -9805,7 +9805,9 @@ ${roomSummaryLines}`;
                 finally { setLoading(false); }
             };
             useEffect(() => { if (open && day) load(day); }, [open, day]);
-            const rows = STUDENT_ROOMS.map((r, i) => ({ no: i + 1, room: r, n: counts ? (counts[studentRoomKey(r)] || 0) : 0 }));
+            // ห้องที่ไม่มีเขตพื้นที่ (ตั้งค่าที่ชีต ห้องเรียน) ไม่ต้องส่งรูป จึงไม่นับเป็น "ยังไม่ส่ง" (ถ้าส่งมาแล้วก็ยังแสดงตามจริง)
+            const noZoneNames = new Set((Array.isArray(rooms) ? rooms : []).filter(r => r.hasZone === false).map(r => String(r.name).trim()));
+            const rows = STUDENT_ROOMS.map(r => ({ room: r, n: counts ? (counts[studentRoomKey(r)] || 0) : 0 })).filter(r => !(noZoneNames.has(r.room) && r.n === 0)).map((r, i) => ({ ...r, no: i + 1 }));
             const sentRooms = rows.filter(r => r.n > 0).length;
             const totalPhotos = rows.reduce((a, r) => a + r.n, 0);
             const thaiDay = (() => { const m = String(day).match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? `${Number(m[3])}/${Number(m[2])}/${Number(m[1]) + 543}` : day; })();
