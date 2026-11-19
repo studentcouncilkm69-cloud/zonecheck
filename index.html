@@ -7524,8 +7524,7 @@ ${roomSummaryLines}`;
                                                     {missedGroups.map(g => (
                                                         <div key={g.key} className="bg-white/70 rounded-xl p-2.5">
                                                             <div className="flex items-center gap-3">
-                                                                {avatarStack(g.users, 'w-11 h-11')}
-                                                                <p className="text-sm font-black text-gray-800 leading-tight min-w-0 flex-1">{g.users.map(u => u.name).join(', ')}</p>
+                                                                {avatarStack(g.users, 'w-12 h-12')}
                                                             </div>
                                                             <div className="flex flex-wrap gap-1.5 mt-2.5">{renderChips(g.items, false)}</div>
                                                         </div>
@@ -9757,7 +9756,7 @@ ${roomSummaryLines}`;
                                 {err && !photos.length && <p className="text-sm text-red-600 font-bold">{err}</p>}
                             </div>
                         )}
-                        <p className="text-center text-[10px] font-bold text-gray-300 pt-2">ZoneCheck build 2026-11-18c</p>
+                        <p className="text-center text-[10px] font-bold text-gray-300 pt-2">ZoneCheck build 2026-11-18d</p>
                     </div>
                     {!done && !closed && photos.length > 0 && (
                         <div className="fixed bottom-0 inset-x-0 z-20 pointer-events-none px-4 pt-12 bg-gradient-to-t from-gray-50 via-gray-50/80 to-transparent" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
